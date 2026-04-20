@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { useAction } from 'convex/react'
+import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import toast from 'react-hot-toast'
+import { useConvex } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 
@@ -322,16 +322,46 @@ function GenerateWizard({
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const matchTemplates = useAction(api.products.matchTemplatesForProduct)
+  const convex = useConvex()
   const generateFromProduct = useConvexMutation(api.products.generateFromProduct)
   const generateMutation = useMutation({ mutationFn: generateFromProduct })
 
-  const { data: templatesData, isLoading: templatesLoading, refetch } = useQuery({
-    queryKey: ['matchTemplates', productId, aspectRatio],
-    queryFn: () => matchTemplates({ productId, aspectRatio, limit: 24, shuffle: false }),
+  // Infinite scroll for templates
+  const {
+    data: templatesData,
+    isLoading: templatesLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['listTemplates'],
+    queryFn: async ({ pageParam }) => {
+      return convex.query(api.products.listTemplates, {
+        cursor: pageParam,
+        limit: 24,
+      })
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: undefined as string | undefined,
   })
 
-  const templates = templatesData?.rows || []
+  const templates = templatesData?.pages.flatMap((page) => page.items) || []
+
+  // Infinite scroll observer
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const loadMoreRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (isFetchingNextPage) return
+      if (observerRef.current) observerRef.current.disconnect()
+      observerRef.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasNextPage) {
+          fetchNextPage()
+        }
+      })
+      if (node) observerRef.current.observe(node)
+    },
+    [isFetchingNextPage, hasNextPage, fetchNextPage],
+  )
 
   function toggleTemplate(id: Id<'adTemplates'>) {
     setPickedIds((prev) => {
@@ -389,62 +419,58 @@ function GenerateWizard({
 
       <div className="grid lg:grid-cols-[1fr_320px] gap-8">
         {/* Template Grid */}
-        <div>
-          {/* Aspect Ratio Tabs */}
-          <div className="flex gap-2 mb-6">
-            {(['1:1', '4:5', '9:16'] as AspectRatio[]).map((ar) => (
-              <button
-                key={ar}
-                onClick={() => {
-                  setAspectRatio(ar)
-                  setPickedIds([])
-                }}
-                className={`px-4 py-2 rounded-lg border font-medium transition ${
-                  aspectRatio === ar
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                }`}
-              >
-                {ar}
-              </button>
-            ))}
-            <button
-              onClick={() => refetch()}
-              className="ml-auto px-3 py-2 text-slate-500 hover:text-slate-700 text-sm"
-            >
-              Shuffle
-            </button>
-          </div>
+        <div className="max-h-[70vh] overflow-y-auto pr-2">
+          <p className="text-sm text-slate-500 mb-4">
+            {templates.length} templates · Pick up to 3
+          </p>
 
           {/* Templates */}
-          {templatesLoading ? (
+          {templatesLoading && templates.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-900 border-t-transparent" />
             </div>
           ) : templates.length === 0 ? (
-            <p className="text-slate-500 text-center py-12">No templates available for this aspect ratio.</p>
+            <p className="text-slate-500 text-center py-12">No templates available.</p>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-              {templates.map((tpl) => {
-                const picked = pickedIds.includes(tpl._id)
-                return (
-                  <button
-                    key={tpl._id}
-                    onClick={() => toggleTemplate(tpl._id)}
-                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition ${
-                      picked ? 'border-slate-900 ring-2 ring-slate-200' : 'border-transparent hover:border-slate-300'
-                    }`}
-                  >
-                    <img src={tpl.thumbnailUrl} alt="" className="w-full h-full object-cover" />
-                    {picked && (
-                      <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-slate-900 rounded-full flex items-center justify-center">
-                        <CheckIcon className="w-3 h-3 text-white" />
+            <>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                {templates.map((tpl) => {
+                  const picked = pickedIds.includes(tpl._id)
+                  return (
+                    <button
+                      key={tpl._id}
+                      onClick={() => toggleTemplate(tpl._id)}
+                      className={`relative rounded-lg overflow-hidden border-2 transition ${
+                        picked ? 'border-slate-900 ring-2 ring-slate-200' : 'border-transparent hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="aspect-square">
+                        <img src={tpl.thumbnailUrl} alt="" className="w-full h-full object-cover" />
                       </div>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
+                      {/* Aspect ratio badge */}
+                      <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-black/60 text-white text-[10px] font-medium rounded">
+                        {tpl.aspectRatio}
+                      </div>
+                      {picked && (
+                        <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-slate-900 rounded-full flex items-center justify-center">
+                          <CheckIcon className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {/* Infinite scroll trigger */}
+              {hasNextPage && (
+                <div ref={loadMoreRef} className="flex justify-center py-6">
+                  {isFetchingNextPage ? (
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-slate-900 border-t-transparent" />
+                  ) : (
+                    <span className="text-sm text-slate-400">Scroll for more</span>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -458,6 +484,26 @@ function GenerateWizard({
                 <div className="text-sm font-medium text-slate-900">{product.name}</div>
                 <div className="text-xs text-slate-500">Your product</div>
               </div>
+            </div>
+          </div>
+
+          {/* Output Aspect Ratio */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Output size</label>
+            <div className="flex gap-2">
+              {(['1:1', '4:5', '9:16'] as AspectRatio[]).map((ar) => (
+                <button
+                  key={ar}
+                  onClick={() => setAspectRatio(ar)}
+                  className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition ${
+                    aspectRatio === ar
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  {ar}
+                </button>
+              ))}
             </div>
           </div>
 

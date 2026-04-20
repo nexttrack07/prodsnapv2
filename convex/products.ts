@@ -338,74 +338,41 @@ export const generateFromProduct = mutation({
 })
 
 /**
- * Template matching for products - uses CLIP embedding for similarity search.
+ * List all published templates with cursor-based pagination for infinite scroll.
+ * Shows all templates regardless of aspect ratio.
  */
-export const matchTemplatesForProduct = action({
+export const listTemplates = query({
   args: {
-    productId: v.id('products'),
-    aspectRatio: aspectRatioValidator,
+    cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
-    offset: v.optional(v.number()),
-    shuffle: v.optional(v.boolean()),
   },
-  handler: async (
-    ctx,
-    { productId, aspectRatio, limit, offset, shuffle },
-  ): Promise<{
-    rows: Array<{
-      _id: Id<'adTemplates'>
-      _score: number
-      imageUrl: string
-      thumbnailUrl: string
-      aspectRatio: string
-      category?: string
-      subcategory?: string
-    }>
-    hasMore: boolean
-    nextOffset: number
-  }> => {
-    const product = await ctx.runQuery(internal.products.getProductInternal, {
-      productId,
-    })
-    if (!product?.embedding) throw new Error('Product has no embedding yet')
+  handler: async (ctx, { cursor, limit = 24 }) => {
+    let q = ctx.db
+      .query('adTemplates')
+      .withIndex('by_status', (q) => q.eq('status', 'published'))
+      .order('desc')
 
-    const pageSize = limit ?? 24
-    const startOffset = offset ?? 0
-    const overfetch = Math.max(pageSize * 6, 120) + startOffset
-
-    const results = await ctx.vectorSearch('adTemplates', 'by_embedding', {
-      vector: product.embedding,
-      limit: overfetch,
-      filter: (q) => q.eq('status', 'published'),
-    })
-
-    const all = await Promise.all(
-      results.map(async ({ _id, _score }) => {
-        const tpl = await ctx.runQuery(internal.studio.getTemplateInternal, {
-          id: _id,
-        })
-        return tpl ? { ...tpl, _id, _score } : null
-      }),
-    )
-
-    let filtered = all
-      .filter((r): r is NonNullable<typeof r> => r !== null)
-      .filter((r) => r.aspectRatio === aspectRatio)
-
-    if (shuffle) {
-      for (let i = filtered.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[filtered[i], filtered[j]] = [filtered[j], filtered[i]]
+    if (cursor) {
+      // Cursor is the _id of the last item from previous page
+      const cursorDoc = await ctx.db.get(cursor as Id<'adTemplates'>)
+      if (cursorDoc) {
+        q = ctx.db
+          .query('adTemplates')
+          .withIndex('by_status', (q) => q.eq('status', 'published'))
+          .order('desc')
+          .filter((q) => q.lt(q.field('_creationTime'), cursorDoc._creationTime))
       }
     }
 
-    const page = filtered.slice(startOffset, startOffset + pageSize)
-    const hasMore = !shuffle && filtered.length > startOffset + pageSize
+    const results = await q.take(limit + 1)
+    const hasMore = results.length > limit
+    const items = hasMore ? results.slice(0, limit) : results
+    const nextCursor = hasMore ? items[items.length - 1]._id : null
 
     return {
-      rows: page,
+      items,
+      nextCursor,
       hasMore,
-      nextOffset: startOffset + page.length,
     }
   },
 })
