@@ -266,6 +266,18 @@ export const getProductGenerations = query({
   },
 })
 
+/**
+ * Deletes a generation.
+ */
+export const deleteGeneration = mutation({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }) => {
+    const generation = await ctx.db.get(generationId)
+    if (!generation) throw new Error('Generation not found')
+    await ctx.db.delete(generationId)
+  },
+})
+
 // ─── Generation from product ──────────────────────────────────────────────
 
 /**

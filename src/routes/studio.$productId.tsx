@@ -200,7 +200,21 @@ function GalleryView({
   }>
   onGenerateMore: () => void
 }) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const hasAny = completedGenerations.length > 0 || pendingGenerations.length > 0
+
+  const deleteGeneration = useConvexMutation(api.products.deleteGeneration)
+  const deleteMutation = useMutation({ mutationFn: deleteGeneration })
+
+  async function handleDelete(id: Id<'templateGenerations'>) {
+    if (!confirm('Delete this generation?')) return
+    try {
+      await deleteMutation.mutateAsync({ generationId: id })
+      toast.success('Deleted')
+    } catch {
+      toast.error('Failed to delete')
+    }
+  }
 
   return (
     <div>
@@ -223,7 +237,12 @@ function GalleryView({
           <h3 className="text-sm font-medium text-slate-500 mb-3">In Progress</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {pendingGenerations.map((gen) => (
-              <GenerationCard key={gen._id} generation={gen} />
+              <GenerationCard
+                key={gen._id}
+                generation={gen}
+                onExpand={setLightboxUrl}
+                onDelete={handleDelete}
+              />
             ))}
           </div>
         </div>
@@ -245,16 +264,52 @@ function GalleryView({
       ) : completedGenerations.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {completedGenerations.map((gen) => (
-            <GenerationCard key={gen._id} generation={gen} />
+            <GenerationCard
+              key={gen._id}
+              generation={gen}
+              onExpand={setLightboxUrl}
+              onDelete={handleDelete}
+            />
           ))}
         </div>
       ) : null}
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <XIcon />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Full size"
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <a
+            href={lightboxUrl}
+            download
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-slate-900 rounded-lg font-medium hover:bg-slate-100 transition"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Download
+          </a>
+        </div>
+      )}
     </div>
   )
 }
 
 function GenerationCard({
   generation,
+  onExpand,
+  onDelete,
 }: {
   generation: {
     _id: Id<'templateGenerations'>
@@ -263,16 +318,45 @@ function GenerationCard({
     currentStep?: string
     error?: string
   }
+  onExpand: (url: string) => void
+  onDelete: (id: Id<'templateGenerations'>) => void
 }) {
   const isComplete = generation.status === 'complete' && generation.outputUrl
   const isFailed = generation.status === 'failed'
   const isPending = !isComplete && !isFailed
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+    <div className="group bg-white border border-slate-200 rounded-lg overflow-hidden">
       <div className="aspect-square bg-slate-50 relative">
         {isComplete && generation.outputUrl && (
-          <img src={generation.outputUrl} alt="Generated ad" className="w-full h-full object-cover" />
+          <>
+            <img src={generation.outputUrl} alt="Generated ad" className="w-full h-full object-cover" />
+            {/* Hover overlay with action icons */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+              <button
+                onClick={() => onExpand(generation.outputUrl!)}
+                className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 transition shadow-sm"
+                title="View full size"
+              >
+                <ExpandIcon />
+              </button>
+              <a
+                href={generation.outputUrl}
+                download
+                className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 transition shadow-sm"
+                title="Download"
+              >
+                <DownloadIcon />
+              </a>
+              <button
+                onClick={() => onDelete(generation._id)}
+                className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-red-600 transition shadow-sm"
+                title="Delete"
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          </>
         )}
         {isPending && (
           <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -289,17 +373,6 @@ function GenerationCard({
           </div>
         )}
       </div>
-      {isComplete && generation.outputUrl && (
-        <div className="p-2 flex justify-end border-t border-slate-100">
-          <a
-            href={generation.outputUrl}
-            download
-            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Download
-          </a>
-        </div>
-      )}
     </div>
   )
 }
@@ -636,6 +709,38 @@ function CheckIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
+
+function ExpandIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  )
+}
+
+function XIcon() {
+  return (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
 }
