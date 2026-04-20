@@ -1,0 +1,440 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1776698377066,
+  "projectRoot": "/Users/nexttrack/prodsnap",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "19.0.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.0.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "8.0.0",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "npx convex dev --once && concurrently -r npm:dev:web npm:dev:db",
+      "dev:web": "vite dev",
+      "dev:db": "convex dev --run board:seed",
+      "build": "vite build && tsc --noEmit",
+      "preview": "vite preview",
+      "start": "pnpx srvx --prod -s ../client dist/server/server.js"
+    }
+  },
+  "conventions": {
+    "namingStyle": "camelCase",
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "public",
+      "src"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "convex": {
+      "path": "convex",
+      "purpose": null,
+      "fileCount": 6,
+      "lastAccessed": 1776698377061,
+      "keyFiles": [
+        "README.md",
+        "board.ts",
+        "crons.ts",
+        "invariant.ts",
+        "schema.ts"
+      ]
+    },
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 10,
+      "lastAccessed": 1776698377061,
+      "keyFiles": [
+        "android-chrome-192x192.png",
+        "android-chrome-512x512.png",
+        "apple-touch-icon.png",
+        "favicon-16x16.png",
+        "favicon-32x32.png"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 5,
+      "lastAccessed": 1776698377063,
+      "keyFiles": [
+        "invariant.ts",
+        "queries.ts",
+        "routeTree.gen.ts",
+        "router.tsx",
+        "types.ts"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 12,
+      "lastAccessed": 1776698377063,
+      "keyFiles": [
+        "Board.tsx",
+        "CancelButton.tsx",
+        "Card.tsx"
+      ]
+    },
+    "src/routes": {
+      "path": "src/routes",
+      "purpose": "Route handlers",
+      "fileCount": 3,
+      "lastAccessed": 1776698377064,
+      "keyFiles": [
+        "__root.tsx",
+        "boards.$boardId.tsx",
+        "index.tsx"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "convex/studio.ts",
+      "accessCount": 22,
+      "lastAccessed": 1776722769316,
+      "type": "file"
+    },
+    {
+      "path": "convex/ai.ts",
+      "accessCount": 19,
+      "lastAccessed": 1776722577554,
+      "type": "file"
+    },
+    {
+      "path": "convex/schema.ts",
+      "accessCount": 13,
+      "lastAccessed": 1776722479544,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/studio.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1776722872872,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/admin.templates.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1776722347173,
+      "type": "file"
+    },
+    {
+      "path": "convex/templates.ts",
+      "accessCount": 5,
+      "lastAccessed": 1776722335876,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 4,
+      "lastAccessed": 1776698507463,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/admin.prompts.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1776707020827,
+      "type": "file"
+    },
+    {
+      "path": "ROADMAP.md",
+      "accessCount": 4,
+      "lastAccessed": 1776722314939,
+      "type": "file"
+    },
+    {
+      "path": "convex/r2.ts",
+      "accessCount": 4,
+      "lastAccessed": 1776722340233,
+      "type": "file"
+    },
+    {
+      "path": "convex/prompts.ts",
+      "accessCount": 4,
+      "lastAccessed": 1776722340265,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/admin.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1776722865008,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/__root.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1776704895183,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/index.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1776725440672,
+      "type": "file"
+    },
+    {
+      "path": "convex/tsconfig.json",
+      "accessCount": 2,
+      "lastAccessed": 1776701011552,
+      "type": "file"
+    },
+    {
+      "path": "src/styles/app.css",
+      "accessCount": 2,
+      "lastAccessed": 1776703591302,
+      "type": "file"
+    },
+    {
+      "path": "convex/board.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776698840085,
+      "type": "file"
+    },
+    {
+      "path": "convex/crons.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776698840453,
+      "type": "file"
+    },
+    {
+      "path": "convex/invariant.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776698840862,
+      "type": "file"
+    },
+    {
+      "path": "src/queries.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776698841217,
+      "type": "file"
+    },
+    {
+      "path": "src/router.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698841589,
+      "type": "file"
+    },
+    {
+      "path": "src/types.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776698842043,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/boards.$boardId.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698847052,
+      "type": "file"
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698847445,
+      "type": "file"
+    },
+    {
+      "path": "src/components/Column.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698848114,
+      "type": "file"
+    },
+    {
+      "path": "src/components/Card.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698848583,
+      "type": "file"
+    },
+    {
+      "path": "src/components/NewCard.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698848950,
+      "type": "file"
+    },
+    {
+      "path": "src/components/NewColumn.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698849343,
+      "type": "file"
+    },
+    {
+      "path": "src/components/EditableText.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698849743,
+      "type": "file"
+    },
+    {
+      "path": "src/components/DefaultCatchBoundary.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698850575,
+      "type": "file"
+    },
+    {
+      "path": "src/db/schema.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776698850611,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/useOfflineIndicator.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698851218,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/seo.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776698851607,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/posts.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776698852074,
+      "type": "file"
+    },
+    {
+      "path": "vite.config.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776698852438,
+      "type": "file"
+    },
+    {
+      "path": "convex/README.md",
+      "accessCount": 1,
+      "lastAccessed": 1776698852772,
+      "type": "file"
+    },
+    {
+      "path": "PATTERNS.md",
+      "accessCount": 1,
+      "lastAccessed": 1776698957440,
+      "type": "file"
+    },
+    {
+      "path": "CONVEX_JOBS_PATTERNS.md",
+      "accessCount": 1,
+      "lastAccessed": 1776699841679,
+      "type": "file"
+    },
+    {
+      "path": ".env.local",
+      "accessCount": 1,
+      "lastAccessed": 1776700689441,
+      "type": "file"
+    },
+    {
+      "path": ".env.local.example",
+      "accessCount": 1,
+      "lastAccessed": 1776700689493,
+      "type": "file"
+    },
+    {
+      "path": "convex/convex.config.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776700747004,
+      "type": "file"
+    },
+    {
+      "path": "src/components/Logo.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776703585608,
+      "type": "file"
+    },
+    {
+      "path": "src/routeTree.gen.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776704978076,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/admin.index.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776705000566,
+      "type": "file"
+    },
+    {
+      "path": ".firecrawl/magritte.co.md",
+      "accessCount": 1,
+      "lastAccessed": 1776711243328,
+      "type": "file"
+    },
+    {
+      "path": ".firecrawl/magritte.co-pricing.md",
+      "accessCount": 1,
+      "lastAccessed": 1776711244143,
+      "type": "file"
+    },
+    {
+      "path": ".firecrawl/cake.ad.md",
+      "accessCount": 1,
+      "lastAccessed": 1776711257779,
+      "type": "file"
+    },
+    {
+      "path": ".firecrawl/looka.com.md",
+      "accessCount": 1,
+      "lastAccessed": 1776711751499,
+      "type": "file"
+    },
+    {
+      "path": ".firecrawl/looka.com-logo-maker.md",
+      "accessCount": 1,
+      "lastAccessed": 1776711751874,
+      "type": "file"
+    },
+    {
+      "path": ".firecrawl/looka.com-pricing.md",
+      "accessCount": 1,
+      "lastAccessed": 1776711752292,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
