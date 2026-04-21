@@ -14,3 +14,10 @@ yarn.lock
 .env.sentry-build-plugin
 
 .env.local
+
+# Build artifacts
+dist/
+
+# Playwright
+playwright-report/
+test-results/

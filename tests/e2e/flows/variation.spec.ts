@@ -4,13 +4,15 @@ test.describe('Variation Flow', () => {
   test.beforeEach(async ({ authenticatedPage }) => {
     // Navigate to a product page with existing generations
     await authenticatedPage.goto('/studio')
-    await authenticatedPage.waitForLoadState('networkidle')
+
+    // Wait for page to fully load
+    await authenticatedPage.getByRole('heading', { name: 'My Products' }).waitFor({ timeout: 30000 })
 
     // Click on the first product card if it exists
     const productCard = authenticatedPage.locator('[data-testid^="product-card"]').first()
-    if (await productCard.isVisible()) {
+    if (await productCard.isVisible({ timeout: 5000 })) {
       await productCard.click()
-      await authenticatedPage.waitForURL(/\/studio\/[a-z0-9]+/)
+      await authenticatedPage.waitForURL(/\/studio\/[a-z0-9]+/, { timeout: 10000 })
     }
   })
 
