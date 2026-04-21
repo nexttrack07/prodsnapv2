@@ -221,6 +221,28 @@ export const retryTemplateIngest = mutation({
 })
 
 /**
+ * Retries ingestion for a batch of templates. Used by the admin UI for
+ * bulk re-tagging selected templates.
+ */
+export const retryTemplatesBatch = mutation({
+  args: { ids: v.array(v.id('adTemplates')) },
+  handler: async (ctx, { ids }) => {
+    let queued = 0
+    for (const id of ids) {
+      const t = await ctx.db.get(id)
+      if (!t) continue
+      await ctx.db.patch(id, { status: 'pending', ingestError: undefined })
+      await workflow.start(ctx, internal.templates.ingestTemplateWorkflow, {
+        templateId: id,
+        imageUrl: t.imageUrl,
+      })
+      queued++
+    }
+    return { queued }
+  },
+})
+
+/**
  * Deletes a template row.  Does NOT delete the R2 object — leave cleanup
  * for an offline sweep.
  */

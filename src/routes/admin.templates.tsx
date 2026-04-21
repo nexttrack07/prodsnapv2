@@ -2,7 +2,7 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAction } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { notifications } from '@mantine/notifications'
 import {
   Container,
@@ -19,12 +19,17 @@ import {
   Breadcrumbs,
   Anchor,
   AspectRatio,
-  Indicator,
+  Checkbox,
+  Tooltip,
   Chip,
 } from '@mantine/core'
-import { IconUpload, IconRefresh, IconTrash } from '@tabler/icons-react'
+import { IconUpload, IconRefresh, IconTrash, IconChecks, IconX } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+
+// Batch upload settings
+const UPLOAD_BATCH_SIZE = 3
+const BATCH_DELAY_MS = 2000
 
 export const Route = createFileRoute('/admin/templates')({
   component: AdminTemplatesPage,
@@ -106,65 +111,122 @@ function UploadArea() {
   const createTemplate = useConvexMutation(api.templates.createTemplate)
   const [inFlight, setInFlight] = useState(0)
   const [dragging, setDragging] = useState(false)
+  const notificationIdRef = useRef<string | null>(null)
 
   async function handleFiles(files: FileList | File[] | null) {
     if (!files) return
     const list = Array.from(files)
     if (list.length === 0) return
 
-    setInFlight((n) => n + list.length)
+    const total = list.length
+    let completed = 0
     let ok = 0
     let failed = 0
 
-    await Promise.all(
-      list.map(async (file) => {
-        try {
-          if (!file.type.startsWith('image/')) throw new Error('Not an image')
-          if (file.size > 20 * 1024 * 1024) throw new Error('Over 20 MB')
-          const { width, height } = await measureImage(file)
-          const base64 = await fileToBase64(file)
-          const upload = await uploadTemplate({
-            name: file.name,
-            contentType: file.type,
-            base64,
-            width,
-            height,
-          })
-          await createTemplate({
-            imageUrl: upload.imageUrl,
-            thumbnailUrl: upload.thumbnailUrl,
-            aspectRatio: upload.aspectRatio,
-            width: upload.width,
-            height: upload.height,
-          })
-          ok++
-        } catch (err) {
-          failed++
-          notifications.show({
-            title: file.name,
-            message: err instanceof Error ? err.message : 'Upload failed',
-            color: 'red',
-          })
-        } finally {
-          setInFlight((n) => n - 1)
-        }
-      }),
-    )
+    setInFlight(total)
 
-    if (ok > 0) {
-      notifications.show({
+    // Show initial progress notification
+    const notifId = `upload-progress-${Date.now()}`
+    notificationIdRef.current = notifId
+    notifications.show({
+      id: notifId,
+      title: 'Uploading templates',
+      message: `Processing 0/${total}...`,
+      loading: true,
+      autoClose: false,
+      withCloseButton: false,
+    })
+
+    // Process files in batches to avoid rate limiting
+    const batches: File[][] = []
+    for (let i = 0; i < list.length; i += UPLOAD_BATCH_SIZE) {
+      batches.push(list.slice(i, i + UPLOAD_BATCH_SIZE))
+    }
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex]
+
+      // Process batch in parallel
+      await Promise.all(
+        batch.map(async (file) => {
+          try {
+            if (!file.type.startsWith('image/')) throw new Error('Not an image')
+            if (file.size > 20 * 1024 * 1024) throw new Error('Over 20 MB')
+            const { width, height } = await measureImage(file)
+            const base64 = await fileToBase64(file)
+            const upload = await uploadTemplate({
+              name: file.name,
+              contentType: file.type,
+              base64,
+              width,
+              height,
+            })
+            await createTemplate({
+              imageUrl: upload.imageUrl,
+              thumbnailUrl: upload.thumbnailUrl,
+              aspectRatio: upload.aspectRatio,
+              width: upload.width,
+              height: upload.height,
+            })
+            ok++
+          } catch (err) {
+            failed++
+            console.error(`Upload failed for ${file.name}:`, err)
+          } finally {
+            completed++
+            setInFlight(total - completed)
+            // Update progress notification
+            notifications.update({
+              id: notifId,
+              title: 'Uploading templates',
+              message: `Processing ${completed}/${total}... (${ok} uploaded, ${failed} failed)`,
+              loading: true,
+              autoClose: false,
+            })
+          }
+        }),
+      )
+
+      // Wait between batches (except for the last one)
+      if (batchIndex < batches.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS))
+      }
+    }
+
+    // Show final notification
+    if (failed === 0 && ok > 0) {
+      notifications.update({
+        id: notifId,
         title: 'Upload complete',
-        message: `Uploaded ${ok} file${ok === 1 ? '' : 's'}`,
+        message: `Successfully uploaded ${ok} template${ok === 1 ? '' : 's'}. Tagging in progress...`,
         color: 'green',
+        loading: false,
+        autoClose: 5000,
+        withCloseButton: true,
       })
-    }
-    if (failed === 0 && ok === 0) {
-      notifications.show({
+    } else if (ok > 0 && failed > 0) {
+      notifications.update({
+        id: notifId,
+        title: 'Upload partially complete',
+        message: `Uploaded ${ok} template${ok === 1 ? '' : 's'}, ${failed} failed. Tagging in progress...`,
+        color: 'yellow',
+        loading: false,
+        autoClose: 5000,
+        withCloseButton: true,
+      })
+    } else {
+      notifications.update({
+        id: notifId,
         title: 'Upload failed',
-        message: 'No files uploaded',
+        message: `All ${total} uploads failed`,
         color: 'red',
+        loading: false,
+        autoClose: 5000,
+        withCloseButton: true,
       })
     }
+
+    notificationIdRef.current = null
   }
 
   return (
@@ -255,8 +317,155 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
+  const [selectedIds, setSelectedIds] = useState<Set<Id<'adTemplates'>>>(new Set())
+  const [isRetagging, setIsRetagging] = useState(false)
+
+  // Track templates being retagged for progress notification
+  const [retaggingIds, setRetaggingIds] = useState<Set<Id<'adTemplates'>>>(new Set())
+  const retagNotifIdRef = useRef<string | null>(null)
+  const retagTotalRef = useRef<number>(0)
+
   const retryMutation = useMutation({ mutationFn: useConvexMutation(api.templates.retryTemplateIngest) })
+  const retryBatchMutation = useMutation({ mutationFn: useConvexMutation(api.templates.retryTemplatesBatch) })
   const deleteMutation = useMutation({ mutationFn: useConvexMutation(api.templates.deleteTemplate) })
+
+  const sortedRows = rows.slice().sort((a, b) => b._creationTime - a._creationTime)
+  const failedCount = rows.filter((r) => r.status === 'failed').length
+
+  // Track retagging progress and update notification
+  useEffect(() => {
+    if (retaggingIds.size === 0 || !retagNotifIdRef.current) return
+
+    // Count how many tracked templates are still processing vs completed
+    const tracked = rows.filter((r) => retaggingIds.has(r._id))
+    const completed = tracked.filter((r) => r.status === 'published' || r.status === 'failed')
+    const succeeded = tracked.filter((r) => r.status === 'published')
+    const failed = tracked.filter((r) => r.status === 'failed')
+    const pending = tracked.filter((r) => r.status === 'pending' || r.status === 'ingesting')
+
+    const total = retagTotalRef.current
+
+    if (pending.length === 0 && completed.length > 0) {
+      // All done
+      if (failed.length === 0) {
+        notifications.update({
+          id: retagNotifIdRef.current,
+          title: 'Re-tagging complete',
+          message: `Successfully tagged ${succeeded.length} template${succeeded.length === 1 ? '' : 's'}`,
+          color: 'green',
+          loading: false,
+          autoClose: 5000,
+          withCloseButton: true,
+        })
+      } else if (succeeded.length > 0) {
+        notifications.update({
+          id: retagNotifIdRef.current,
+          title: 'Re-tagging partially complete',
+          message: `${succeeded.length} succeeded, ${failed.length} failed`,
+          color: 'yellow',
+          loading: false,
+          autoClose: 5000,
+          withCloseButton: true,
+        })
+      } else {
+        notifications.update({
+          id: retagNotifIdRef.current,
+          title: 'Re-tagging failed',
+          message: `All ${failed.length} template${failed.length === 1 ? '' : 's'} failed`,
+          color: 'red',
+          loading: false,
+          autoClose: 5000,
+          withCloseButton: true,
+        })
+      }
+      // Clear tracking
+      setRetaggingIds(new Set())
+      retagNotifIdRef.current = null
+      retagTotalRef.current = 0
+    } else if (completed.length > 0) {
+      // Still in progress, update count
+      notifications.update({
+        id: retagNotifIdRef.current,
+        title: 'Re-tagging templates',
+        message: `${completed.length}/${total} completed (${pending.length} processing...)`,
+        loading: true,
+        autoClose: false,
+      })
+    }
+  }, [rows, retaggingIds])
+
+  function toggleSelect(id: Id<'adTemplates'>) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  function selectAll() {
+    setSelectedIds(new Set(rows.map((r) => r._id)))
+  }
+
+  function deselectAll() {
+    setSelectedIds(new Set())
+  }
+
+  function selectFailed() {
+    setSelectedIds(new Set(rows.filter((r) => r.status === 'failed').map((r) => r._id)))
+  }
+
+  async function retagSelected() {
+    if (selectedIds.size === 0) return
+    setIsRetagging(true)
+
+    const idsToRetag = Array.from(selectedIds)
+    const notifId = `retag-progress-${Date.now()}`
+
+    notifications.show({
+      id: notifId,
+      title: 'Re-tagging templates',
+      message: `Starting ${idsToRetag.length} template${idsToRetag.length === 1 ? '' : 's'}...`,
+      loading: true,
+      autoClose: false,
+      withCloseButton: false,
+    })
+
+    try {
+      await retryBatchMutation.mutateAsync({ ids: idsToRetag })
+
+      // Start tracking these templates for progress updates
+      setRetaggingIds(new Set(idsToRetag))
+      retagNotifIdRef.current = notifId
+      retagTotalRef.current = idsToRetag.length
+
+      // Update notification to show tracking has started
+      notifications.update({
+        id: notifId,
+        title: 'Re-tagging templates',
+        message: `0/${idsToRetag.length} completed (${idsToRetag.length} processing...)`,
+        loading: true,
+        autoClose: false,
+      })
+
+      setSelectedIds(new Set())
+    } catch (err) {
+      notifications.update({
+        id: notifId,
+        title: 'Re-tag failed',
+        message: err instanceof Error ? err.message : 'Failed to start re-tagging',
+        color: 'red',
+        loading: false,
+        autoClose: 5000,
+        withCloseButton: true,
+      })
+    } finally {
+      setIsRetagging(false)
+    }
+  }
 
   if (rows.length === 0) {
     return (
@@ -278,19 +487,60 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
 
   return (
     <Box>
-      <Title order={2} size="lg" fw={600} c="white" mb="md">
-        Library
-      </Title>
+      <Group justify="space-between" mb="md">
+        <Title order={2} size="lg" fw={600} c="white">
+          Library
+        </Title>
+        <Group gap="xs">
+          {selectedIds.size > 0 && (
+            <>
+              <Badge size="md" variant="light" color="brand">
+                {selectedIds.size} selected
+              </Badge>
+              <Button
+                size="xs"
+                variant="light"
+                color="brand"
+                leftSection={<IconRefresh size={14} />}
+                onClick={retagSelected}
+                loading={isRetagging}
+              >
+                Re-tag Selected
+              </Button>
+              <Button
+                size="xs"
+                variant="subtle"
+                color="gray"
+                leftSection={<IconX size={14} />}
+                onClick={deselectAll}
+              >
+                Clear
+              </Button>
+            </>
+          )}
+          {selectedIds.size === 0 && (
+            <>
+              <Button size="xs" variant="subtle" color="gray" onClick={selectAll}>
+                Select All
+              </Button>
+              {failedCount > 0 && (
+                <Button size="xs" variant="light" color="red" onClick={selectFailed}>
+                  Select Failed ({failedCount})
+                </Button>
+              )}
+            </>
+          )}
+        </Group>
+      </Group>
       <Box
         style={{
           columns: '3',
           columnGap: '1rem',
         }}
       >
-        {rows
-          .slice()
-          .sort((a, b) => b._creationTime - a._creationTime)
-          .map((t) => (
+        {sortedRows.map((t) => {
+          const isSelected = selectedIds.has(t._id)
+          return (
             <Paper
               key={t._id}
               radius="lg"
@@ -299,14 +549,14 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
               style={{
                 breakInside: 'avoid',
                 overflow: 'hidden',
-                borderColor: 'var(--mantine-color-dark-5)',
+                borderColor: isSelected ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)',
                 backgroundColor: 'var(--mantine-color-dark-7)',
                 transition: 'border-color 200ms ease, box-shadow 200ms ease',
               }}
               styles={{
                 root: {
                   '&:hover': {
-                    borderColor: 'var(--mantine-color-dark-4)',
+                    borderColor: isSelected ? 'var(--mantine-color-brand-4)' : 'var(--mantine-color-dark-4)',
                     boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
                   },
                 },
@@ -315,7 +565,23 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
               <AspectRatio ratio={getAspectRatioValue(t.aspectRatio)}>
                 <Box pos="relative" bg="dark.6" w="100%" h="100%">
                   <Image src={t.thumbnailUrl} alt="" fit="cover" h="100%" w="100%" loading="lazy" />
-                  <StatusBadge status={t.status} />
+                  <StatusBadge status={t.status} error={t.ingestError} />
+                  {/* Selection checkbox */}
+                  <Checkbox
+                    checked={isSelected}
+                    onChange={() => toggleSelect(t._id)}
+                    pos="absolute"
+                    top={8}
+                    left={8}
+                    size="sm"
+                    styles={{
+                      input: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                        borderColor: 'rgba(255, 255, 255, 0.3)',
+                        cursor: 'pointer',
+                      },
+                    }}
+                  />
                 </Box>
               </AspectRatio>
               <Box p="md">
@@ -376,9 +642,10 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
                     </Group>
                   </Chip.Group>
                 ) : null}
-                {t.status === 'failed' && t.ingestError && (
-                  <Text size="xs" c="red.7" lineClamp={2} mb={8}>
-                    {t.ingestError}
+                {/* Show placeholder text for failed templates without tags */}
+                {t.status === 'failed' && !t.sceneTypes?.length && !t.moods?.length && (
+                  <Text size="xs" c="dark.4" fs="italic" mb={8}>
+                    Tagging failed — click Re-tag to retry
                   </Text>
                 )}
                 <Group justify="flex-end" gap={8} mt={4}>
@@ -407,13 +674,14 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
                 </Group>
               </Box>
             </Paper>
-          ))}
+          )
+        })}
       </Box>
     </Box>
   )
 }
 
-function StatusBadge({ status }: { status: TemplateRow['status'] }) {
+function StatusBadge({ status, error }: { status: TemplateRow['status']; error?: string }) {
   const colorMap: Record<TemplateRow['status'], string> = {
     pending: 'yellow',
     ingesting: 'blue',
@@ -426,7 +694,8 @@ function StatusBadge({ status }: { status: TemplateRow['status'] }) {
     published: 'Published',
     failed: 'Failed',
   }
-  return (
+
+  const badge = (
     <Badge
       pos="absolute"
       top={8}
@@ -435,10 +704,29 @@ function StatusBadge({ status }: { status: TemplateRow['status'] }) {
       variant="filled"
       color={colorMap[status]}
       tt="uppercase"
+      style={{ cursor: status === 'failed' && error ? 'help' : 'default' }}
     >
       {labelMap[status]}
     </Badge>
   )
+
+  // Wrap failed badge with tooltip showing error
+  if (status === 'failed' && error) {
+    return (
+      <Tooltip
+        label={error}
+        multiline
+        w={280}
+        withArrow
+        position="bottom"
+        color="dark"
+      >
+        {badge}
+      </Tooltip>
+    )
+  }
+
+  return badge
 }
 
 function StatPill({

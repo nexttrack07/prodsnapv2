@@ -24,7 +24,7 @@ import {
 import { Notifications } from '@mantine/notifications'
 import type { QueryClient } from '@tanstack/react-query'
 import { SignInButton, UserButton } from '@clerk/react'
-import { Authenticated, Unauthenticated, AuthLoading } from 'convex/react'
+import { Authenticated, Unauthenticated } from 'convex/react'
 import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
 import { NotFound } from '~/components/NotFound'
 import { Logo } from '~/components/Logo'
@@ -144,9 +144,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                   </Group>
                   <Group gap="md">
                     <LoadingIndicator />
-                    <AuthLoading>
-                      <Loader size="xs" color="brand" />
-                    </AuthLoading>
                     <Unauthenticated>
                       <SignInButton mode="modal">
                         <Button size="sm" variant="light" color="brand">
