@@ -1,8 +1,6 @@
 'use node'
 
-import { openai } from '@ai-sdk/openai'
-import { generateObject, generateText } from 'ai'
-import Replicate from 'replicate'
+import { fal } from '@fal-ai/client'
 import { v } from 'convex/values'
 import { z } from 'zod'
 import { action, internalAction } from './_generated/server'
@@ -10,13 +8,14 @@ import { internal } from './_generated/api'
 import { uploadFromUrl } from './r2'
 import { nanoid } from 'nanoid'
 
-const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+// Configure fal client with API key
+fal.config({ credentials: process.env.FAL_KEY })
 
-const CLIP_MODEL =
-  'krthr/clip-embeddings:1c0371070cb827ec3c7f2f28adcdde54b50dcd239aa6faea0bc98b174ef03fb4' as const
+// Model constants
+const VISION_MODEL = 'google/gemini-2.5-flash'
 
-const GENERATION_MODEL = 'google/nano-banana-2' as const
-
+// SAM3 embeddings - dimensions TBD, we'll detect from first response
+// CLIP was 768, SAM3 may differ
 export const CLIP_EMBEDDING_DIMS = 768
 
 // ─── Structured Tag Taxonomy ──────────────────────────────────────────────
@@ -109,17 +108,89 @@ export const TEXT_AMOUNTS = [
 
 // Legacy arrays for backward compatibility
 const AD_CATEGORIES = PRODUCT_CATEGORIES
-const AD_SCENE_TYPES = [
-  'studio', 'lifestyle', 'outdoor', 'flat-lay', 'hand-held',
-  'bathroom-counter', 'kitchen-counter', 'desk-setup', 'text-overlay',
-  'split-screen', 'before-after', 'testimonial',
-] as const
 const AD_MOODS = [
   'minimal', 'luxe', 'playful', 'natural', 'clinical', 'bold', 'cozy',
   'vibrant', 'dark', 'bright', 'retro', 'futuristic',
 ] as const
 
-// ─── Product analysis (vision + CLIP, parallel) ───────────────────────────
+// ─── Helper: Call fal.ai Vision model ──────────────────────────────────────
+async function callVision(opts: {
+  imageUrls: string[]
+  prompt: string
+  systemPrompt?: string
+}): Promise<string> {
+  const result = await fal.subscribe('openrouter/router/vision', {
+    input: {
+      model: VISION_MODEL,
+      image_urls: opts.imageUrls,
+      prompt: opts.prompt,
+      system_prompt: opts.systemPrompt,
+      temperature: 0.3,
+    },
+  })
+  const data = result.data as { output?: string }
+  if (!data.output) throw new Error('Vision model returned no output')
+  return data.output
+}
+
+// ─── Helper: Call fal.ai text model (no images) ────────────────────────────
+async function callText(opts: {
+  prompt: string
+  systemPrompt?: string
+}): Promise<string> {
+  const result = await fal.subscribe('openrouter/router', {
+    input: {
+      model: VISION_MODEL,
+      prompt: opts.prompt,
+      system_prompt: opts.systemPrompt,
+      temperature: 0.3,
+    },
+  })
+  const data = result.data as { output?: string }
+  if (!data.output) throw new Error('Text model returned no output')
+  return data.output
+}
+
+// ─── Helper: Get SAM3 image embedding ──────────────────────────────────────
+async function getImageEmbedding(imageUrl: string): Promise<number[]> {
+  const result = await fal.subscribe('fal-ai/sam-3/image/embed', {
+    input: { image_url: imageUrl },
+  })
+  const data = result.data as { embedding_b64?: string }
+  if (!data.embedding_b64) throw new Error('SAM3 returned no embedding')
+
+  // Decode base64 to float32 array
+  const binaryStr = atob(data.embedding_b64)
+  const bytes = new Uint8Array(binaryStr.length)
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i)
+  }
+  const floats = new Float32Array(bytes.buffer)
+  return Array.from(floats)
+}
+
+// ─── Helper: Parse JSON from LLM response ──────────────────────────────────
+function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
+  // Try to extract JSON from markdown code blocks or raw JSON
+  let jsonStr = response.trim()
+
+  // Remove markdown code block if present
+  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+  if (codeBlockMatch) {
+    jsonStr = codeBlockMatch[1].trim()
+  }
+
+  // Try to find JSON object
+  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
+  if (jsonMatch) {
+    jsonStr = jsonMatch[0]
+  }
+
+  const parsed = JSON.parse(jsonStr)
+  return schema.parse(parsed)
+}
+
+// ─── Product analysis (vision + embedding, parallel) ───────────────────────
 const productAnalysisSchema = z.object({
   category: z.enum(AD_CATEGORIES),
   productDescription: z.string().min(10).max(300),
@@ -129,39 +200,28 @@ const productAnalysisSchema = z.object({
 export const analyzeProduct = internalAction({
   args: { imageUrl: v.string() },
   handler: async (_ctx, { imageUrl }) => {
-    const [analysis, clipOutput] = await Promise.all([
-      generateObject({
-        model: openai('gpt-4o-mini'),
-        schema: productAnalysisSchema,
-        system:
-          'You are a product analyst for marketing use cases. Be factual and concise. Pick the single best category from the provided enum.',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Classify this product. Pick ONE category. Write a 25-30 word description of the product, its key features, and primary use case. Write a comma-separated list of 3-5 target audience segments.',
-              },
-              { type: 'image', image: imageUrl },
-            ],
-          },
-        ],
+    const [analysisText, embedding] = await Promise.all([
+      callVision({
+        imageUrls: [imageUrl],
+        prompt: `Analyze this product image and return a JSON object with these exact fields:
+{
+  "category": "<one of: ${AD_CATEGORIES.join(', ')}>",
+  "productDescription": "<25-30 word description of the product, key features, and use case>",
+  "targetAudience": "<comma-separated list of 3-5 target audience segments>"
+}
+
+Return ONLY the JSON object, no other text.`,
+        systemPrompt: 'You are a product analyst for marketing use cases. Be factual and concise. Return valid JSON only.',
       }),
-      replicate.run(CLIP_MODEL, { input: { image: imageUrl } }),
+      getImageEmbedding(imageUrl),
     ])
 
-    const embedding = extractEmbedding(clipOutput)
-    if (embedding.length !== CLIP_EMBEDDING_DIMS) {
-      throw new Error(
-        `CLIP returned ${embedding.length} dims, expected ${CLIP_EMBEDDING_DIMS}`,
-      )
-    }
+    const analysis = parseJsonFromResponse(analysisText, productAnalysisSchema)
 
     return {
-      category: analysis.object.category,
-      productDescription: analysis.object.productDescription,
-      targetAudience: analysis.object.targetAudience,
+      category: analysis.category,
+      productDescription: analysis.productDescription,
+      targetAudience: analysis.targetAudience,
       embedding,
     }
   },
@@ -171,13 +231,7 @@ export const analyzeProduct = internalAction({
 export const computeClipEmbedding = internalAction({
   args: { imageUrl: v.string() },
   handler: async (_ctx, { imageUrl }) => {
-    const out = await replicate.run(CLIP_MODEL, { input: { image: imageUrl } })
-    const embedding = extractEmbedding(out)
-    if (embedding.length !== CLIP_EMBEDDING_DIMS) {
-      throw new Error(
-        `CLIP returned ${embedding.length} dims, expected ${CLIP_EMBEDDING_DIMS}`,
-      )
-    }
+    const embedding = await getImageEmbedding(imageUrl)
     return { embedding }
   },
 })
@@ -201,67 +255,45 @@ const structuredTagsSchema = z.object({
 export const computeTemplateTags = internalAction({
   args: { imageUrl: v.string() },
   handler: async (_ctx, { imageUrl }) => {
-    const result = await generateObject({
-      model: openai('gpt-4o-mini'),
-      schema: structuredTagsSchema,
-      system: `You are a visual ad classifier for product photography templates. Your job is to categorize ad images with STRUCTURED tags that enable filtering and search.
+    const response = await callVision({
+      imageUrls: [imageUrl],
+      prompt: `Classify this product ad image for a template library.
+
+Return a JSON object with these EXACT fields:
+
+{
+  "productCategory": "<one of: ${PRODUCT_CATEGORIES.join(', ')}>",
+  "primaryColor": "<one of: ${PRIMARY_COLORS.join(', ')}>",
+  "imageStyle": "<one of: ${IMAGE_STYLES.join(', ')}>",
+  "setting": "<one of: ${SETTINGS.join(', ')}>",
+  "composition": "<one of: ${COMPOSITIONS.join(', ')}>",
+  "textAmount": "<one of: ${TEXT_AMOUNTS.join(', ')}>",
+  "subcategory": "<specific product type like 'serum', 'protein powder', or null>",
+  "sceneDescription": "<2-3 sentences describing composition, lighting, props, and framing>",
+  "moods": ["<1-3 moods from: ${AD_MOODS.join(', ')}>"]
+}
+
+CRITICAL: Pick EXACTLY ONE value from each category. Return ONLY the JSON object.`,
+      systemPrompt: `You are a visual ad classifier for product photography templates. Your job is to categorize ad images with STRUCTURED tags that enable filtering and search.
 
 CRITICAL RULES:
 - Pick EXACTLY ONE value from each category - no exceptions
 - Base your choices on what you ACTUALLY SEE in the image
 - For productCategory, identify the PRIMARY product type being advertised
 - For primaryColor, identify the DOMINANT color palette (not every color present)
-- Be consistent: similar images should get similar tags`,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Classify this product ad image for a template library.
-
-REQUIRED - Pick exactly ONE from each:
-
-1. productCategory: What type of physical product is being advertised?
-   Options: beauty, skincare, haircare, supplements, food, beverage, apparel, accessories, electronics, home, fitness, pet, baby, health, cleaning, other
-
-2. primaryColor: What is the DOMINANT color palette?
-   Options: neutral, warm, cool, green, pink, purple, earth, pastel, vibrant, monochrome
-
-3. imageStyle: What type of ad image is this?
-   Options: product-hero, lifestyle, flat-lay, infographic, before-after, testimonial, collage, ugc-style, editorial, minimalist
-
-4. setting: Where was this photographed / what's the backdrop?
-   Options: studio, home, bathroom, kitchen, outdoor, urban, gym, office, abstract, none
-
-5. composition: How are elements arranged in the frame?
-   Options: centered, rule-of-thirds, symmetrical, diagonal, framed, scattered, stacked, close-up, full-frame
-
-6. textAmount: How much text/copy is in the image?
-   Options: no-text, logo-only, minimal-text, moderate-text, text-heavy, price-focused
-
-OPTIONAL:
-- subcategory: A specific product type (e.g., "serum", "protein powder", "sneakers")
-- moods: 1-3 visual moods (minimal, luxe, playful, natural, clinical, bold, cozy, vibrant, dark, bright, retro, futuristic)
-- sceneDescription: 2-3 sentences describing composition, lighting, props, and framing`,
-            },
-            { type: 'image', image: imageUrl },
-          ],
-        },
-      ],
+- Be consistent: similar images should get similar tags
+- Return valid JSON only, no markdown or extra text`,
     })
-    return result.object
+
+    return parseJsonFromResponse(response, structuredTagsSchema)
   },
 })
 
-// ─── Image generation (nano-banana) ───────────────────────────────────────
+// ─── Image generation (nano-banana-2) ───────────────────────────────────────
 /**
  * Composes a per-job prompt by looking at both the template and the
- * user's product image with GPT-4o-mini vision.  Returns the final
+ * user's product image with Gemini vision. Returns the final
  * prompt string ready for nano-banana.
- *
- * Throws if any required context is missing — the workflow catches and
- * marks the generation as failed.
  */
 export const composePrompt = internalAction({
   args: { generationId: v.id('templateGenerations') },
@@ -284,7 +316,7 @@ export const composePrompt = internalAction({
     const addendum =
       generation.mode === 'exact' ? promptCfg.exactAddendum : promptCfg.remixAddendum
     const colorAdaptPart = generation.colorAdapt ? `\n\n${promptCfg.colorAdaptAddendum}` : ''
-    const system = `${promptCfg.coreInstructions}\n\n${addendum}${colorAdaptPart}`
+    const systemPrompt = `${promptCfg.coreInstructions}\n\n${addendum}${colorAdaptPart}`
 
     const productContextStr = [
       prodCtx.category ? `Product category: ${prodCtx.category}` : null,
@@ -315,19 +347,10 @@ export const composePrompt = internalAction({
       'Compose the nano-banana prompt now. Return ONLY the prompt text.',
     ].join('\n')
 
-    const { text } = await generateText({
-      model: openai('gpt-4o-mini'),
-      system,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userText },
-            { type: 'image', image: generation.templateImageUrl },
-            { type: 'image', image: generation.productImageUrl },
-          ],
-        },
-      ],
+    const text = await callVision({
+      imageUrls: [generation.templateImageUrl, generation.productImageUrl],
+      prompt: userText,
+      systemPrompt,
     })
 
     const prompt = text.trim()
@@ -338,7 +361,7 @@ export const composePrompt = internalAction({
 
 /**
  * Calls nano-banana using the dynamic prompt that composePrompt wrote
- * to the generation row.  Uploads the result to R2 and returns the URL.
+ * to the generation row. Uploads the result to R2 and returns the URL.
  */
 export const generateFromTemplate = internalAction({
   args: { generationId: v.id('templateGenerations') },
@@ -355,34 +378,34 @@ export const generateFromTemplate = internalAction({
       throw new Error('Dynamic prompt missing — composer step did not complete')
     }
 
-    // nano-banana 2 supports explicit aspect ratios.  Pass the template's
-    // aspect ratio directly — `match_input_image` is ambiguous when
-    // `image_input` contains more than one reference.
     const aspectRatio = template?.aspectRatio ?? '1:1'
 
-    let output: unknown
+    let result: { data: unknown }
     try {
-      output = await replicate.run(GENERATION_MODEL, {
+      result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
         input: {
           prompt: generation.dynamicPrompt,
-          image_input: [generation.templateImageUrl, generation.productImageUrl],
+          image_urls: [generation.templateImageUrl, generation.productImageUrl],
           aspect_ratio: aspectRatio,
           output_format: 'png',
+          resolution: '1K',
         },
       })
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err)
-      if (/Prediction failed:?\s*$/.test(raw)) {
+      if (/safety|blocked|rejected/i.test(raw)) {
         throw new Error(
           'Image model rejected the request (often a safety-filter block on brand/logo content — try a different template or soften the prompt in admin).',
         )
       }
       throw err
     }
-    const generatedUrl = extractOutputUrl(output)
+
+    const data = result.data as { images?: Array<{ url?: string }> }
+    const generatedUrl = data.images?.[0]?.url
     if (!generatedUrl) throw new Error('Model did not return an image URL')
 
-    const key = `studio/outputs/${generation.runId}/${generation.variationIndex}-${nanoid(6)}.png`
+    const key = `studio/outputs/${generation.runId ?? generation.productId}/${generation.variationIndex}-${nanoid(6)}.png`
     const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
     return { outputUrl }
   },
@@ -411,7 +434,7 @@ export const composeVariationPrompt = internalAction({
 
     const changeDescription = changes.join(', ')
 
-    const system = [
+    const systemPrompt = [
       'You are an expert at writing prompts for image-to-image AI models.',
       'You will be shown an ad creative image. Your job is to write a prompt that will generate a variation of this image.',
       'The variation should maintain the overall composition, layout, and product placement.',
@@ -428,19 +451,10 @@ export const composeVariationPrompt = internalAction({
       'Write a prompt that will generate this variation.',
     ].join('\n')
 
-    const { text } = await generateText({
-      model: openai('gpt-4o-mini'),
-      system,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userText },
-            { type: 'image', image: sourceImageUrl },
-            { type: 'image', image: gen.productImageUrl },
-          ],
-        },
-      ],
+    const text = await callVision({
+      imageUrls: [sourceImageUrl, gen.productImageUrl],
+      prompt: userText,
+      systemPrompt,
     })
 
     const prompt = text.trim()
@@ -462,25 +476,27 @@ export const generateVariation = internalAction({
 
     const aspectRatio = gen.aspectRatio ?? '1:1'
 
-    let output: unknown
+    let result: { data: unknown }
     try {
-      output = await replicate.run(GENERATION_MODEL, {
+      result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
         input: {
           prompt: gen.dynamicPrompt,
-          image_input: [gen.variationSource.sourceImageUrl, gen.productImageUrl],
+          image_urls: [gen.variationSource.sourceImageUrl, gen.productImageUrl],
           aspect_ratio: aspectRatio,
           output_format: 'png',
+          resolution: '1K',
         },
       })
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err)
-      if (/Prediction failed:?\s*$/.test(raw)) {
+      if (/safety|blocked|rejected/i.test(raw)) {
         throw new Error('Image model rejected the request — try different variation options.')
       }
       throw err
     }
 
-    const generatedUrl = extractOutputUrl(output)
+    const data = result.data as { images?: Array<{ url?: string }> }
+    const generatedUrl = data.images?.[0]?.url
     if (!generatedUrl) throw new Error('Model did not return an image URL')
 
     const key = `studio/variations/${gen.productId}/${generationId}-${nanoid(6)}.png`
@@ -500,54 +516,17 @@ export const enhancePrompt = action({
     if (!trimmedInstructions) throw new Error('Describe what to change')
     if (!original.trim()) throw new Error('Original prompt is empty')
 
-    const { text } = await generateText({
-      model: openai('gpt-4o-mini'),
-      system: [
+    const text = await callText({
+      prompt: `ORIGINAL PROMPT:\n${original}\n\nINSTRUCTIONS:\n${trimmedInstructions}\n\nRewrite the prompt incorporating the instructions.`,
+      systemPrompt: [
         'You rewrite image-generation prompts for a product photography app.',
         'The prompt refers to "the first image" (an ad template) and "the second image" (a product).',
         'Return ONLY the rewritten prompt — no preamble, no markdown, no explanation.',
         'Preserve the original structure and concrete references unless the user asks to change them.',
         'Be concise and declarative; do not hedge.',
       ].join(' '),
-      messages: [
-        {
-          role: 'user',
-          content: `ORIGINAL PROMPT:\n${original}\n\nINSTRUCTIONS:\n${trimmedInstructions}\n\nRewrite the prompt incorporating the instructions.`,
-        },
-      ],
     })
+
     return { enhanced: text.trim() }
   },
 })
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-function extractEmbedding(output: unknown): number[] {
-  if (Array.isArray(output) && output.every((v) => typeof v === 'number')) {
-    return output as number[]
-  }
-  if (output && typeof output === 'object' && 'embedding' in output) {
-    const e = (output as { embedding: unknown }).embedding
-    if (Array.isArray(e)) return e as number[]
-  }
-  if (Array.isArray(output) && output.length > 0 && typeof output[0] === 'object') {
-    const first = output[0] as { embedding?: unknown }
-    if (Array.isArray(first.embedding)) return first.embedding as number[]
-  }
-  throw new Error(`Unrecognized CLIP output shape: ${JSON.stringify(output).slice(0, 200)}`)
-}
-
-function extractOutputUrl(output: unknown): string | null {
-  if (Array.isArray(output)) return resolveSingle(output[0])
-  return resolveSingle(output)
-}
-
-function resolveSingle(o: unknown): string | null {
-  if (!o) return null
-  if (typeof o === 'string') return o
-  if (typeof o === 'object' && 'url' in o) {
-    const u = (o as { url: unknown }).url
-    if (typeof u === 'function') return (u as () => string)()
-    if (typeof u === 'string') return u
-  }
-  return null
-}
