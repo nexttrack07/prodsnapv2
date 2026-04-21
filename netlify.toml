@@ -1,21 +1,9 @@
 [build]
-  command = "pnpm install && pnpm build"
+  command = "pnpm build"
   publish = "dist/client"
 
 [build.environment]
   NODE_VERSION = "20"
-
-# SPA fallback - redirect all requests to index.html
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-# Handle API routes if using Netlify Functions
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
 
 # Headers for security and caching
 [[headers]]
