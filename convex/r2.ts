@@ -160,7 +160,6 @@ export const getUploadUrl = action({
     contentType: v.string(),
   },
   handler: async (_ctx, { name, contentType }) => {
-    console.log('getUploadUrl called with:', { name, contentType })
     try {
       // Security: Validate content-type is an allowed image type
       validateContentType(contentType)
@@ -180,7 +179,6 @@ export const getUploadUrl = action({
     // Generate presigned URL valid for 5 minutes
     const uploadUrl = await getSignedUrl(getR2Client(), command, { expiresIn: 300 })
 
-    console.log('Generated presigned URL successfully')
       return {
         uploadUrl,
         key,

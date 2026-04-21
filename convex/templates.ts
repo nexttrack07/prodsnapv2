@@ -3,10 +3,25 @@ import {
   internalMutation,
   mutation,
   query,
+  type MutationCtx,
 } from './_generated/server'
 import { api, components, internal } from './_generated/api'
 import { WorkflowManager } from '@convex-dev/workflow'
 import { Workpool } from '@convex-dev/workpool'
+
+// ─── Auth helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Gets the authenticated user's ID from Clerk JWT.
+ * Throws if user is not authenticated.
+ */
+async function requireAuth(ctx: MutationCtx): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) {
+    throw new Error('Not authenticated')
+  }
+  return identity.tokenIdentifier
+}
 
 export const workflow = new WorkflowManager(components.workflow)
 export const ingestPool = new Workpool(components.ingestPool, {
@@ -130,6 +145,7 @@ export const createTemplate = mutation({
     contentHash: v.optional(v.string()),  // SHA-256 hash for duplicate detection
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx) // Admin action - require authentication
     const id = await ctx.db.insert('adTemplates', { ...args, status: 'pending' })
     await workflow.start(ctx, internal.templates.ingestTemplateWorkflow, {
       templateId: id,
@@ -147,6 +163,7 @@ export const createTemplate = mutation({
 export const seedSampleTemplates = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx) // Admin action - require authentication
     const existing = await ctx.db.query('adTemplates').take(1)
     if (existing.length > 0) return { skipped: true, inserted: 0 }
 
@@ -217,6 +234,7 @@ export const getById = query({
 export const retryFailedIngestions = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx) // Admin action - require authentication
     const all = await ctx.db.query('adTemplates').collect()
     const candidates = all.filter(
       (t) => t.status === 'failed' || t.status === 'pending',
@@ -239,6 +257,7 @@ export const retryFailedIngestions = mutation({
 export const retryTemplateIngest = mutation({
   args: { id: v.id('adTemplates') },
   handler: async (ctx, { id }) => {
+    await requireAuth(ctx) // Admin action - require authentication
     const t = await ctx.db.get(id)
     if (!t) throw new Error('Template not found')
     await ctx.db.patch(id, { status: 'pending', ingestError: undefined })
@@ -256,6 +275,7 @@ export const retryTemplateIngest = mutation({
 export const retryTemplatesBatch = mutation({
   args: { ids: v.array(v.id('adTemplates')) },
   handler: async (ctx, { ids }) => {
+    await requireAuth(ctx) // Admin action - require authentication
     let queued = 0
     for (const id of ids) {
       const t = await ctx.db.get(id)
@@ -278,6 +298,7 @@ export const retryTemplatesBatch = mutation({
 export const deleteTemplate = mutation({
   args: { id: v.id('adTemplates') },
   handler: async (ctx, { id }) => {
+    await requireAuth(ctx) // Admin action - require authentication
     await ctx.db.delete(id)
   },
 })

@@ -1,5 +1,19 @@
 import { v } from 'convex/values'
-import { internalQuery, mutation, query } from './_generated/server'
+import { internalQuery, mutation, query, type MutationCtx } from './_generated/server'
+
+// ─── Auth helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Gets the authenticated user's ID from Clerk JWT.
+ * Throws if user is not authenticated.
+ */
+async function requireAuth(ctx: MutationCtx): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) {
+    throw new Error('Not authenticated')
+  }
+  return identity.tokenIdentifier
+}
 
 const KEY = 'generation'
 
@@ -87,6 +101,7 @@ export const updatePromptConfig = mutation({
     colorAdaptSuffix: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx) // Admin action - require authentication
     const existing = await ctx.db
       .query('promptConfigs')
       .withIndex('by_key', (q) => q.eq('key', KEY))
@@ -103,6 +118,7 @@ export const updatePromptConfig = mutation({
 export const resetPromptConfig = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx) // Admin action - require authentication
     const existing = await ctx.db
       .query('promptConfigs')
       .withIndex('by_key', (q) => q.eq('key', KEY))

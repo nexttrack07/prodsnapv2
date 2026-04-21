@@ -33,6 +33,7 @@ import {
   AspectRatio,
   Tooltip,
   ThemeIcon,
+  Skeleton,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -53,6 +54,8 @@ import {
   IconStar,
   IconStarFilled,
   IconUpload,
+  IconLoader2,
+  IconAlertTriangle,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -103,9 +106,31 @@ function ProductWorkspacePage() {
   if (productLoading) {
     return (
       <Container size="lg" py={40}>
-        <Box py={80} ta="center">
-          <Loader size="lg" color="brand" />
-        </Box>
+        <Group gap="xs" mb="lg">
+          <Skeleton height={20} width={100} radius="sm" />
+          <Skeleton height={20} width={20} radius="sm" />
+          <Skeleton height={20} width={150} radius="sm" />
+        </Group>
+        <Stack gap="xl">
+          <Paper p="lg" radius="lg" withBorder style={{ borderColor: 'var(--mantine-color-dark-5)' }}>
+            <Group align="flex-start" gap="xl">
+              <Skeleton height={200} width={200} radius="md" />
+              <Stack gap="md" style={{ flex: 1 }}>
+                <Skeleton height={28} width="60%" />
+                <Skeleton height={16} width="40%" />
+                <Skeleton height={60} width="100%" />
+              </Stack>
+            </Group>
+          </Paper>
+          <Paper p="lg" radius="lg" withBorder style={{ borderColor: 'var(--mantine-color-dark-5)' }}>
+            <Skeleton height={24} width={150} mb="md" />
+            <Group gap="md">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} height={100} width={100} radius="md" />
+              ))}
+            </Group>
+          </Paper>
+        </Stack>
       </Container>
     )
   }
@@ -759,7 +784,7 @@ function ImageCard({
       {isReady && (
         <Group mt="sm" gap="xs" justify="center">
           {!isPrimary && (
-            <Tooltip label="Set as primary">
+            <Tooltip label="Set as primary" events={{ hover: true, focus: true, touch: true }}>
               <ActionIcon
                 variant="light"
                 color="brand"
@@ -772,7 +797,7 @@ function ImageCard({
             </Tooltip>
           )}
           {isOriginal && (
-            <Tooltip label="Remove background">
+            <Tooltip label="Remove background" events={{ hover: true, focus: true, touch: true }}>
               <ActionIcon
                 variant="light"
                 color="violet"
@@ -784,7 +809,7 @@ function ImageCard({
               </ActionIcon>
             </Tooltip>
           )}
-          <Tooltip label="Download">
+          <Tooltip label="Download" events={{ hover: true, focus: true, touch: true }}>
             <ActionIcon
               component="a"
               href={image.imageUrl}
@@ -796,7 +821,7 @@ function ImageCard({
               <IconDownload size={14} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label="Delete">
+          <Tooltip label="Delete" events={{ hover: true, focus: true, touch: true }}>
             <ActionIcon
               variant="subtle"
               color="red"
@@ -897,6 +922,7 @@ function GalleryView({
           disabled={product.status === 'ready'}
           withArrow
           position="bottom"
+          events={{ hover: true, focus: true, touch: true }}
         >
           <span>
             <Button
@@ -1684,6 +1710,10 @@ function GenerateWizard({
                       onClick={() => toggleTemplate(tpl._id)}
                       w="100%"
                       mb="md"
+                      className="template-card-selectable"
+                      data-testid={`template-card-${tpl._id}`}
+                      aria-pressed={picked}
+                      aria-label={`Select template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`}
                       style={{
                         borderRadius: 'var(--mantine-radius-lg)',
                         overflow: 'hidden',
@@ -1889,14 +1919,20 @@ function GenerateWizard({
 }
 
 function StatusBadge({ status }: { status: 'analyzing' | 'ready' | 'failed' }) {
-  const colorMap = {
-    analyzing: 'yellow',
-    ready: 'teal',
-    failed: 'red',
+  const config = {
+    analyzing: { color: 'yellow', icon: IconLoader2, label: 'Analyzing' },
+    ready: { color: 'teal', icon: IconCheck, label: 'Ready' },
+    failed: { color: 'red', icon: IconAlertTriangle, label: 'Failed' },
   }
+  const { color, icon: Icon, label } = config[status]
   return (
-    <Badge size="sm" variant="light" color={colorMap[status]} tt="capitalize">
-      {status}
+    <Badge
+      size="sm"
+      variant="light"
+      color={color}
+      leftSection={<Icon size={12} style={status === 'analyzing' ? { animation: 'spin 1s linear infinite' } : undefined} />}
+    >
+      {label}
     </Badge>
   )
 }

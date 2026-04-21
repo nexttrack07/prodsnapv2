@@ -205,21 +205,29 @@ export const listProducts = query({
       .order('desc')
       .collect()
 
-    // Fetch generation counts for each product
-    const productsWithCounts = await Promise.all(
-      products.map(async (product) => {
-        const generations = await ctx.db
-          .query('templateGenerations')
-          .withIndex('by_product', (q) => q.eq('productId', product._id))
-          .collect()
-        return {
-          ...product,
-          generationCount: generations.length,
-        }
-      })
-    )
+    if (products.length === 0) return []
 
-    return productsWithCounts
+    // Batch fetch: get all generations for user's products in ONE query
+    // This avoids N+1 queries when fetching generation counts
+    const allGenerations = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .collect()
+
+    // Group generation counts by productId
+    const countsByProduct = new Map<string, number>()
+    for (const gen of allGenerations) {
+      if (gen.productId) {
+        const key = gen.productId as string
+        countsByProduct.set(key, (countsByProduct.get(key) ?? 0) + 1)
+      }
+    }
+
+    // Attach counts to products
+    return products.map((product) => ({
+      ...product,
+      generationCount: countsByProduct.get(product._id as string) ?? 0,
+    }))
   },
 })
 

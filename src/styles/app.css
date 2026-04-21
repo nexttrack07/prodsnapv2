@@ -86,6 +86,26 @@ h1, h2, h3, h4, h5, h6 {
   transform: scale(0.97);
 }
 
+.template-card-selectable:focus-visible {
+  outline: 2px solid var(--mantine-color-brand-5);
+  outline-offset: 2px;
+}
+
+/* ─── Global Focus Indicators (Accessibility) ──────────────────────────────── */
+/* Ensure all interactive elements have visible focus states */
+.mantine-ActionIcon-root:focus-visible,
+.mantine-Button-root:focus-visible,
+.mantine-UnstyledButton-root:focus-visible {
+  outline: 2px solid var(--mantine-color-brand-5);
+  outline-offset: 2px;
+}
+
+/* Generation card focus */
+.generation-card-hover:focus-visible {
+  outline: 2px solid var(--mantine-color-brand-5);
+  outline-offset: 2px;
+}
+
 /* Empty state icon animation */
 @keyframes float {
   0%, 100% { transform: translateY(0); }
@@ -110,6 +130,12 @@ img {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* Spin animation for loading indicators */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Shimmer loading animation */
@@ -144,6 +170,12 @@ img {
 
 /* ─── Mobile Touch Feedback ───────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Minimum 44x44px touch targets (WCAG 2.5.5) */
+  .mantine-ActionIcon-root {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   /* Better touch targets */
   button, a, [role="button"] {
     -webkit-tap-highlight-color: transparent;

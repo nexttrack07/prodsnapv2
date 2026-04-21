@@ -25,7 +25,7 @@ import {
   Modal,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconUpload, IconRefresh, IconTrash, IconChecks, IconX } from '@tabler/icons-react'
+import { IconUpload, IconRefresh, IconTrash, IconChecks, IconX, IconLoader2, IconCheck, IconAlertTriangle, IconClock } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { MAX_TEMPLATE_IMAGE_SIZE, getAspectRatioValue } from '../utils/constants'
@@ -898,18 +898,14 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
 }
 
 function StatusBadge({ status, error }: { status: TemplateRow['status']; error?: string }) {
-  const colorMap: Record<TemplateRow['status'], string> = {
-    pending: 'yellow',
-    ingesting: 'blue',
-    published: 'teal',
-    failed: 'red',
+  const config: Record<TemplateRow['status'], { color: string; icon: typeof IconCheck; label: string }> = {
+    pending: { color: 'yellow', icon: IconClock, label: 'Pending' },
+    ingesting: { color: 'blue', icon: IconLoader2, label: 'Ingesting' },
+    published: { color: 'teal', icon: IconCheck, label: 'Published' },
+    failed: { color: 'red', icon: IconAlertTriangle, label: 'Failed' },
   }
-  const labelMap: Record<TemplateRow['status'], string> = {
-    pending: 'Pending',
-    ingesting: 'Ingesting',
-    published: 'Published',
-    failed: 'Failed',
-  }
+  const { color, icon: Icon, label } = config[status]
+  const isAnimated = status === 'ingesting'
 
   const badge = (
     <Badge
@@ -918,11 +914,12 @@ function StatusBadge({ status, error }: { status: TemplateRow['status']; error?:
       right={8}
       size="xs"
       variant="filled"
-      color={colorMap[status]}
+      color={color}
       tt="uppercase"
+      leftSection={<Icon size={10} style={isAnimated ? { animation: 'spin 1s linear infinite' } : undefined} />}
       style={{ cursor: status === 'failed' && error ? 'help' : 'default' }}
     >
-      {labelMap[status]}
+      {label}
     </Badge>
   )
 
@@ -936,6 +933,7 @@ function StatusBadge({ status, error }: { status: TemplateRow['status']; error?:
         withArrow
         position="bottom"
         color="dark"
+        events={{ hover: true, focus: true, touch: true }}
       >
         {badge}
       </Tooltip>

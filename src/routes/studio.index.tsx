@@ -22,6 +22,7 @@ import {
   ThemeIcon,
   AspectRatio,
   LoadingOverlay,
+  Skeleton,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import { IconUpload, IconPhoto, IconX } from '@tabler/icons-react'
@@ -151,9 +152,7 @@ function ProductGridPage() {
       </Paper>
 
       {isLoading ? (
-        <Center py={80}>
-          <Loader size="lg" color="dark.6" />
-        </Center>
+        <ProductGridSkeleton />
       ) : !hasProducts ? (
         <EmptyState onUpload={handleFileDrop} isUploading={isUploading} />
       ) : (
@@ -260,6 +259,33 @@ interface ProductData {
   category?: string
   _creationTime: number
   generationCount: number
+}
+
+function ProductGridSkeleton() {
+  return (
+    <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <Paper
+          key={i}
+          radius="lg"
+          withBorder
+          style={{
+            overflow: 'hidden',
+            borderColor: 'var(--mantine-color-dark-5)',
+            backgroundColor: 'var(--mantine-color-dark-7)',
+          }}
+        >
+          <AspectRatio ratio={1}>
+            <Skeleton height="100%" radius={0} />
+          </AspectRatio>
+          <Box p="sm">
+            <Skeleton height={16} width="70%" mb="xs" />
+            <Skeleton height={12} width="40%" />
+          </Box>
+        </Paper>
+      ))}
+    </SimpleGrid>
+  )
 }
 
 function ProductGrid({ products }: { products: ProductData[] }) {
