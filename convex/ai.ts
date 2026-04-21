@@ -460,13 +460,21 @@ export const composeVariationPrompt = internalAction({
     const changes: string[] = []
     if (changeText) changes.push('different text/headlines/copy')
     if (changeIcons) changes.push('different icons, badges, or decorative graphics')
-    if (changeColors) changes.push('a different color scheme/palette')
+    if (changeColors) {
+      changes.push('a different color scheme for the BACKGROUND, TEXT, and GRAPHICS ONLY - the product itself must keep its original colors')
+    }
 
     const changeDescription = changes.join(', ')
 
+    // Extra emphasis when colors are being changed
+    const colorWarning = changeColors
+      ? ' CRITICAL: The product\'s actual color and appearance must NOT change. Only change colors of the background, text, icons, and decorative elements. The product in the second reference image shows the exact colors that must be preserved.'
+      : ''
+
     const systemPrompt = [
       'You are an expert at writing prompts for image-to-image AI models.',
-      'You will be shown an ad creative image. Your job is to write a prompt that will generate a variation of this image.',
+      'You will be shown an ad creative image and the original product photo.',
+      'Your job is to write a prompt that will generate a variation of the ad while preserving the product exactly as it appears.',
       'The variation should maintain the overall composition, layout, and product placement.',
       'The variation should ONLY change what the user requested - nothing else.',
       'Be specific and descriptive. Reference the original image structure.',
@@ -474,10 +482,14 @@ export const composeVariationPrompt = internalAction({
     ].join(' ')
 
     const userText = [
-      'Here is an ad creative image. Generate a variation that keeps everything the same EXCEPT:',
+      'Here is an ad creative image (first image) and the original product photo (second image).',
+      '',
+      'Generate a variation that keeps everything the same EXCEPT:',
       changeDescription,
       '',
-      'The product shown should remain identical. The layout and composition should be preserved.',
+      'IMPORTANT: The product shown must remain EXACTLY identical to how it appears in the original product photo - same color, same appearance, same details.',
+      colorWarning,
+      '',
       'Write a prompt that will generate this variation.',
     ].join('\n')
 

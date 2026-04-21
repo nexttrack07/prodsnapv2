@@ -2,6 +2,7 @@ import { chromium, FullConfig } from '@playwright/test'
 import { config } from 'dotenv'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -9,10 +10,28 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: resolve(__dirname, '../../.env.local') })
 
 /**
+ * Enable test mode in Convex before tests run
+ */
+function enableTestMode() {
+  try {
+    execSync('npx convex env set CONVEX_TEST_MODE=true', {
+      cwd: resolve(__dirname, '../..'),
+      stdio: 'pipe',
+    })
+    console.log('✅ Enabled CONVEX_TEST_MODE=true')
+  } catch (error) {
+    console.warn('⚠️  Could not enable test mode:', error)
+  }
+}
+
+/**
  * Global setup runs once before all tests.
  * Seeds test data for the authenticated test user.
  */
 async function globalSetup(config: FullConfig) {
+  // Enable test mode for mock AI responses
+  enableTestMode()
+
   const { baseURL } = config.projects[0].use
 
   const browser = await chromium.launch()

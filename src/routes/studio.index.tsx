@@ -22,7 +22,6 @@ import {
   ThemeIcon,
   AspectRatio,
   LoadingOverlay,
-  Progress,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import { IconUpload, IconPhoto, IconX } from '@tabler/icons-react'
@@ -40,12 +39,11 @@ function ProductGridPage() {
   const navigate = useNavigate()
   const { data: products, isLoading } = useQuery(convexQuery(api.products.listProducts, {}))
 
-  const getUploadUrl = useAction(api.r2.getUploadUrl)
+  const uploadAction = useAction(api.r2.uploadProductImage)
   const createProduct = useConvexMutation(api.products.createProduct)
   const createProductMutation = useMutation({ mutationFn: createProduct })
 
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
 
   async function handleFileDrop(files: File[]) {
     const file = files[0]
@@ -61,39 +59,23 @@ function ProductGridPage() {
     }
 
     setIsUploading(true)
-    setUploadProgress(5) // Start immediately for perceived responsiveness
-
     try {
-      // Get presigned URL - 5-20%
-      setUploadProgress(10)
-      const { uploadUrl, publicUrl } = await getUploadUrl({
+      const arrayBuffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''),
+      )
+
+      const fileName = file.name.replace(/\.[^.]+$/, '')
+      const { url } = await uploadAction({
         name: file.name,
+        base64,
         contentType: file.type,
       })
-      setUploadProgress(20)
 
-      // Upload directly to R2 - 20-70%
-      setUploadProgress(30)
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      })
-      if (!uploadResponse.ok) {
-        throw new Error(`Upload failed: ${uploadResponse.status}`)
-      }
-      setUploadProgress(70)
-
-      // Creating product - 70-100%
-      setUploadProgress(80)
-      const fileName = file.name.replace(/\.[^.]+$/, '')
       const productId = await createProductMutation.mutateAsync({
-        imageUrl: publicUrl,
+        imageUrl: url,
         name: fileName.replace(/[-_]/g, ' '),
       })
-      setUploadProgress(100)
 
       notifications.show({
         title: 'Success',
@@ -102,6 +84,7 @@ function ProductGridPage() {
       })
       navigate({ to: '/studio/$productId', params: { productId } })
     } catch (err) {
+      console.error('Upload error:', err)
       notifications.show({
         title: 'Upload failed',
         message: err instanceof Error ? err.message : 'Upload failed',
@@ -109,7 +92,6 @@ function ProductGridPage() {
       })
     } finally {
       setIsUploading(false)
-      setUploadProgress(0)
     }
   }
 
@@ -165,16 +147,6 @@ function ProductGridPage() {
               </Button>
             </Dropzone>
           </Group>
-          {isUploading && (
-            <Progress
-              value={uploadProgress}
-              size="sm"
-              radius="lg"
-              color="brand"
-              animated
-              striped={uploadProgress < 100}
-            />
-          )}
         </Stack>
       </Paper>
 
@@ -183,7 +155,7 @@ function ProductGridPage() {
           <Loader size="lg" color="dark.6" />
         </Center>
       ) : !hasProducts ? (
-        <EmptyState onUpload={handleFileDrop} isUploading={isUploading} uploadProgress={uploadProgress} />
+        <EmptyState onUpload={handleFileDrop} isUploading={isUploading} />
       ) : (
         <ProductGrid products={products} />
       )}
@@ -194,11 +166,9 @@ function ProductGridPage() {
 function EmptyState({
   onUpload,
   isUploading,
-  uploadProgress,
 }: {
   onUpload: (files: File[]) => void
   isUploading: boolean
-  uploadProgress: number
 }) {
   return (
     <Dropzone
@@ -262,19 +232,7 @@ function EmptyState({
         </Text>
 
         {isUploading ? (
-          <Box w="100%" maw={300}>
-            <Progress
-              value={uploadProgress}
-              size="md"
-              radius="lg"
-              color="brand"
-              animated
-              striped={uploadProgress < 100}
-            />
-            <Text size="sm" c="dark.2" ta="center" mt="xs">
-              {uploadProgress}% complete
-            </Text>
-          </Box>
+          <Loader size="md" color="brand" />
         ) : (
           <Button
             leftSection={<IconUpload size={18} />}

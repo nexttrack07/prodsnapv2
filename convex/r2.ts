@@ -63,7 +63,12 @@ function validateMagicBytes(buffer: Buffer, contentType: string): void {
 
 // ─── R2 Client Setup ─────────────────────────────────────────────────────────
 
+// Lazy-initialized S3 client (env vars not available at module load time in Convex)
+let s3Client: S3Client | null = null
+
 function getR2Client(): S3Client {
+  if (s3Client) return s3Client
+
   const endpoint = process.env.R2_ENDPOINT
   const accessKeyId = process.env.R2_ACCESS_KEY_ID
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY
@@ -74,14 +79,13 @@ function getR2Client(): S3Client {
     )
   }
 
-  return new S3Client({
+  s3Client = new S3Client({
     region: 'auto',
     endpoint,
     credentials: { accessKeyId, secretAccessKey },
   })
+  return s3Client
 }
-
-const s3 = getR2Client()
 
 export async function uploadToR2(
   buffer: Buffer,
@@ -90,7 +94,7 @@ export async function uploadToR2(
 ): Promise<string> {
   const bucket = process.env.R2_BUCKET_NAME!
   const publicUrl = process.env.R2_PUBLIC_URL!
-  await s3.send(
+  await getR2Client().send(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
@@ -156,8 +160,10 @@ export const getUploadUrl = action({
     contentType: v.string(),
   },
   handler: async (_ctx, { name, contentType }) => {
-    // Security: Validate content-type is an allowed image type
-    validateContentType(contentType)
+    console.log('getUploadUrl called with:', { name, contentType })
+    try {
+      // Security: Validate content-type is an allowed image type
+      validateContentType(contentType)
 
     const bucket = process.env.R2_BUCKET_NAME!
     const publicUrl = process.env.R2_PUBLIC_URL!
@@ -172,12 +178,17 @@ export const getUploadUrl = action({
     })
 
     // Generate presigned URL valid for 5 minutes
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 })
+    const uploadUrl = await getSignedUrl(getR2Client(), command, { expiresIn: 300 })
 
-    return {
-      uploadUrl,
-      key,
-      publicUrl: `${publicUrl}/${key}`,
+    console.log('Generated presigned URL successfully')
+      return {
+        uploadUrl,
+        key,
+        publicUrl: `${publicUrl}/${key}`,
+      }
+    } catch (error) {
+      console.error('getUploadUrl error:', error)
+      throw error
     }
   },
 })

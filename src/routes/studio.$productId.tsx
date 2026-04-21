@@ -14,6 +14,7 @@ import {
   Stack,
   Button,
   Paper,
+  Card,
   Image,
   Badge,
   Loader,
@@ -55,6 +56,19 @@ type AspectRatio = '1:1' | '4:5' | '9:16'
 type Mode = 'exact' | 'remix'
 type View = 'gallery' | 'generate'
 
+// Type for generation data from the query
+interface GenerationData {
+  _id: Id<'templateGenerations'>
+  _creationTime?: number
+  status: string
+  outputUrl?: string
+  currentStep?: string
+  error?: string
+  aspectRatio?: string
+  mode?: 'exact' | 'remix' | 'variation'
+  templateSnapshot?: { name?: string; aspectRatio?: string }
+}
+
 function ProductWorkspacePage() {
   const { productId } = Route.useParams()
   const [view, setView] = useState<View>('gallery')
@@ -90,8 +104,8 @@ function ProductWorkspacePage() {
     )
   }
 
-  const completedGenerations = generations?.filter((g) => g.status === 'complete') || []
-  const pendingGenerations = generations?.filter((g) => g.status !== 'complete' && g.status !== 'failed') || []
+  const completedGenerations = (generations?.filter((g) => g.status === 'complete') || []) as GenerationData[]
+  const pendingGenerations = (generations?.filter((g) => g.status !== 'complete' && g.status !== 'failed') || []) as GenerationData[]
 
   return (
     <Container size="lg" py={40}>
@@ -272,7 +286,7 @@ function GalleryView({
   pendingGenerations,
   onGenerateMore,
 }: {
-  product: { status: string; imageUrl: string }
+  product: { status: string; imageUrl: string; name: string }
   productId: Id<'products'>
   completedGenerations: Array<{
     _id: Id<'templateGenerations'>
@@ -364,15 +378,14 @@ function GalleryView({
         <Box mb="xl">
           <Text size="sm" fw={500} c="dark.2" mb="sm">In Progress</Text>
           <Box style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
-            gap: '1rem',
-            alignItems: 'start',
+            columnCount: isMobile ? 2 : 4,
+            columnGap: '1rem',
           }}>
-            {pendingGenerations.map((gen) => (
+            {pendingGenerations.map((gen, index) => (
               <GenerationCard
                 key={gen._id}
                 generation={gen}
+                title={`${product.name} #${completedGenerations.length + index + 1}`}
                 onExpand={setLightboxUrl}
                 onDelete={handleDelete}
                 onCreateVariations={setVariationTarget}
@@ -418,15 +431,14 @@ function GalleryView({
         </Paper>
       ) : completedGenerations.length > 0 ? (
         <Box style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
-          gap: '1rem',
-          alignItems: 'start',
+          columnCount: isMobile ? 2 : 4,
+          columnGap: '1rem',
         }}>
-          {completedGenerations.map((gen) => (
+          {completedGenerations.map((gen, index) => (
             <GenerationCard
               key={gen._id}
               generation={gen}
+              title={`${product.name} #${index + 1}`}
               onExpand={setLightboxUrl}
               onDelete={handleDelete}
               onCreateVariations={setVariationTarget}
@@ -468,28 +480,13 @@ function GalleryView({
           aria-label="Close image viewer"
         />
         {lightboxUrl && (
-          <>
-            <Image
-              src={lightboxUrl}
-              alt="Full size generated ad image"
-              fit="contain"
-              maw="90vw"
-              mah="90vh"
-            />
-            <Button
-              component="a"
-              href={lightboxUrl}
-              download
-              pos="absolute"
-              bottom={24}
-              left="50%"
-              style={{ transform: 'translateX(-50%)', marginBottom: 'env(safe-area-inset-bottom, 0)' }}
-              leftSection={<IconDownload size={16} />}
-              aria-label="Download image"
-            >
-              Download
-            </Button>
-          </>
+          <Image
+            src={lightboxUrl}
+            alt="Full size generated ad image"
+            fit="contain"
+            maw="90vw"
+            mah="90vh"
+          />
         )}
       </Modal>
 
@@ -723,23 +720,17 @@ function VariationDrawer({
 
 function GenerationCard({
   generation,
+  title,
   onExpand,
   onDelete,
   onCreateVariations,
 }: {
-  generation: {
-    _id: Id<'templateGenerations'>
-    status: string
-    outputUrl?: string
-    currentStep?: string
-    error?: string
-    aspectRatio?: string
-  }
+  generation: GenerationData
+  title: string
   onExpand: (url: string) => void
   onDelete: (id: Id<'templateGenerations'>) => void
   onCreateVariations: (generation: { _id: Id<'templateGenerations'>; outputUrl: string }) => void
 }) {
-  const isMobile = useMediaQuery('(max-width: 768px)')
   const isComplete = generation.status === 'complete' && generation.outputUrl
   const isFailed = generation.status === 'failed'
   const isPending = !isComplete && !isFailed
@@ -755,15 +746,50 @@ function GenerationCard({
     }
   }
 
+  const formatDate = (timestamp: number): string => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays}d ago`
+
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  const getModeLabel = (mode: string): string => {
+    switch (mode) {
+      case 'exact': return 'Exact'
+      case 'remix': return 'Remix'
+      case 'variation': return 'Variation'
+      default: return mode
+    }
+  }
+
+  const getModeColor = (mode: string): string => {
+    switch (mode) {
+      case 'variation': return 'violet'
+      case 'remix': return 'orange'
+      default: return 'teal'
+    }
+  }
+
   return (
-    <Paper
-      radius="lg"
+    <Card
+      radius="md"
       withBorder
-      mb="md"
+      padding={0}
       style={{
         breakInside: 'avoid',
         overflow: 'hidden',
         borderColor: 'var(--mantine-color-dark-5)',
+        backgroundColor: 'var(--mantine-color-dark-7)',
         transition: 'transform 150ms ease, box-shadow 150ms ease',
       }}
       styles={{
@@ -771,121 +797,146 @@ function GenerationCard({
           '&:hover': {
             transform: 'translateY(-2px)',
             boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+            borderColor: 'var(--mantine-color-dark-4)',
           },
         },
       }}
     >
-      {isComplete && generation.outputUrl && (
-        <Box pos="relative" className="generation-card-hover">
-          <Image src={generation.outputUrl} alt="Generated ad" w="100%" style={{ display: 'block' }} />
+      {/* Image Section - Clickable for lightbox */}
+      <Card.Section>
+        {isComplete && generation.outputUrl && (
           <Box
-            pos="absolute"
-            top={isMobile ? 'auto' : 0}
-            left={0}
-            right={0}
-            bottom={0}
-            className={isMobile ? undefined : 'generation-card-overlay'}
-            style={{
-              background: isMobile
-                ? 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%)'
-                : 'rgba(0, 0, 0, 0)',
-              display: 'flex',
-              alignItems: isMobile ? 'flex-end' : 'center',
-              justifyContent: 'center',
-              gap: 8,
-              padding: isMobile ? 12 : 0,
-              opacity: isMobile ? 1 : 0,
-              transition: 'all 150ms ease',
+            style={{ cursor: 'pointer' }}
+            onClick={() => onExpand(generation.outputUrl!)}
+          >
+            <Image
+              src={generation.outputUrl}
+              alt="Generated ad"
+              style={{ display: 'block' }}
+            />
+          </Box>
+        )}
+
+        {isPending && (
+          <AspectRatio ratio={getAspectRatioValue()}>
+            <Box
+              bg="dark.6"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                height: '100%',
+              }}
+            >
+              <Loader size="sm" color="brand" type="dots" mb="xs" />
+              <Text size="xs" c="dark.2">{generation.currentStep || 'Processing...'}</Text>
+            </Box>
+          </AspectRatio>
+        )}
+
+        {isFailed && (
+          <AspectRatio ratio={getAspectRatioValue()}>
+            <Box
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                height: '100%',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              }}
+            >
+              <Text size="sm" fw={500} c="red.5">Failed</Text>
+              {generation.error && (
+                <Text size="xs" c="red.4" mt={4} px="xs" ta="center" lineClamp={2}>{generation.error}</Text>
+              )}
+            </Box>
+          </AspectRatio>
+        )}
+      </Card.Section>
+
+      {/* Title Row */}
+      <Group justify="space-between" mt="md" mx="md" align="center">
+        <Text fw={500} fz="sm" c="white" lineClamp={1}>
+          {title}
+        </Text>
+        <Group gap={6}>
+          <Badge size="xs" variant="light" color="brand" radius="sm">
+            {generation.aspectRatio || '1:1'}
+          </Badge>
+          <Badge
+            size="xs"
+            variant="dot"
+            color={generation.mode === 'variation' ? 'violet' : generation.mode === 'remix' ? 'orange' : 'teal'}
+          >
+            {getModeLabel(generation.mode || 'exact')}
+          </Badge>
+        </Group>
+      </Group>
+
+      {/* Date */}
+      <Text fz="xs" c="dimmed" mt={4} mx="md">
+        {formatDate(generation._creationTime || Date.now())}
+      </Text>
+
+      {/* Action Buttons Row */}
+      {isComplete && generation.outputUrl && (
+        <Group justify="flex-end" mt="md" mb="md" mx="md" gap="xs">
+          <Button
+            variant="light"
+            color="violet"
+            size="xs"
+            radius="md"
+            leftSection={<IconSparkles size={14} />}
+            onClick={(e) => {
+              e.stopPropagation()
+              onCreateVariations({ _id: generation._id, outputUrl: generation.outputUrl! })
             }}
           >
-            <ActionIcon
-              variant="white"
-              radius="lg"
-              size="lg"
-              onClick={() => onExpand(generation.outputUrl!)}
-              title="View full size"
-              aria-label="View full size"
-            >
-              <IconMaximize size={18} />
-            </ActionIcon>
-            <ActionIcon
-              variant="white"
-              radius="lg"
-              size="lg"
-              onClick={() => onCreateVariations({ _id: generation._id, outputUrl: generation.outputUrl! })}
-              title="Create variations"
-              aria-label="Create variations"
-              c="violet"
-            >
-              <IconSparkles size={18} />
-            </ActionIcon>
-            <ActionIcon
-              component="a"
-              href={generation.outputUrl}
-              download
-              variant="white"
-              radius="lg"
-              size="lg"
-              title="Download"
-              aria-label="Download image"
-            >
-              <IconDownload size={18} />
-            </ActionIcon>
-            <ActionIcon
-              variant="white"
-              radius="lg"
-              size="lg"
-              onClick={() => onDelete(generation._id)}
-              title="Delete"
-              aria-label="Delete generation"
-              c="red"
-            >
-              <IconTrash size={18} />
-            </ActionIcon>
-          </Box>
+            Vary
+          </Button>
+          <Button
+            component="a"
+            href={generation.outputUrl}
+            download
+            variant="light"
+            color="gray"
+            size="xs"
+            radius="md"
+            leftSection={<IconDownload size={14} />}
+            onClick={(e) => e.stopPropagation()}
+          >
+            Save
+          </Button>
+          <ActionIcon
+            variant="subtle"
+            color="red"
+            size="md"
+            radius="md"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(generation._id)
+            }}
+            title="Delete"
+            aria-label="Delete generation"
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Group>
+      )}
+
+      {/* Show minimal footer for pending/failed */}
+      {!isComplete && (
+        <Box mt="md" mb="md" mx="md">
+          <Text fz="xs" c="dimmed">
+            {formatDate(generation._creationTime || Date.now())}
+          </Text>
         </Box>
       )}
-
-      {isPending && (
-        <AspectRatio ratio={getAspectRatioValue()}>
-          <Box
-            bg="dark.7"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '100%',
-              height: '100%',
-            }}
-          >
-            <Loader size="sm" color="brand" type="dots" mb="xs" />
-            <Text size="xs" c="dark.2">{generation.currentStep || 'Processing...'}</Text>
-          </Box>
-        </AspectRatio>
-      )}
-
-      {isFailed && (
-        <AspectRatio ratio={getAspectRatioValue()}>
-          <Box
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '100%',
-              height: '100%',
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            }}
-          >
-            <Text size="sm" fw={500} c="red.5">Failed</Text>
-            {generation.error && (
-              <Text size="xs" c="red.4" mt={4} px="xs" ta="center" lineClamp={2}>{generation.error}</Text>
-            )}
-          </Box>
-        </AspectRatio>
-      )}
-    </Paper>
+    </Card>
   )
 }
 
