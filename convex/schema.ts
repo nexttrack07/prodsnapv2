@@ -39,6 +39,19 @@ const genStatus = v.union(
   v.literal('failed'),
 )
 
+// Product image types (original uploads and enhancements)
+const productImageType = v.union(
+  v.literal('original'),
+  v.literal('background-removed'),
+  // Future: 'cropped', 'color-corrected', 'upscaled', etc.
+)
+
+const productImageStatus = v.union(
+  v.literal('processing'),
+  v.literal('ready'),
+  v.literal('failed'),
+)
+
 const schema = defineSchema({
   // ─── Demo (Trellaux) tables — to be removed later ─────────────────────────
   boards: defineTable({
@@ -71,23 +84,50 @@ const schema = defineSchema({
   // ─── Products (user's uploaded product images) ───────────────────────────
   products: defineTable({
     name: v.string(), // editable, defaults to filename
-    imageUrl: v.string(), // R2 URL of uploaded product image
-    imageStorageId: v.optional(v.string()), // Convex storage ID if applicable
     status: productStatus,
     // Owner (Clerk user ID from JWT subject)
     userId: v.optional(v.string()), // optional for migration of existing data
+    // Primary image for generation (references productImages table)
+    primaryImageId: v.optional(v.id('productImages')),
     // Analysis results (populated after 'analyzing' → 'ready')
     category: v.optional(v.string()),
     productDescription: v.optional(v.string()),
     targetAudience: v.optional(v.string()),
-    embedding: v.optional(v.array(v.float64())), // @deprecated - not used, kept for existing data
     // Metadata
     error: v.optional(v.string()),
     archivedAt: v.optional(v.number()), // soft delete timestamp
+    // ─── Legacy fields (kept for migration, will be removed) ─────────────
+    imageUrl: v.optional(v.string()), // @deprecated - use productImages table
+    imageStorageId: v.optional(v.string()), // @deprecated
+    embedding: v.optional(v.array(v.float64())), // @deprecated - not used
+    backgroundRemovedUrl: v.optional(v.string()), // @deprecated - use productImages
+    backgroundRemovalStatus: v.optional(v.union(
+      v.literal('idle'),
+      v.literal('processing'),
+      v.literal('complete'),
+      v.literal('failed'),
+    )), // @deprecated
   })
     .index('by_status', ['status'])
     .index('by_archived', ['archivedAt'])
-    .index('by_userId', ['userId']),
+    .index('by_userId', ['userId'])
+    .index('by_userId_archived', ['userId', 'archivedAt']),
+
+  // ─── Product Images (original uploads + enhancements) ───────────────────
+  productImages: defineTable({
+    productId: v.id('products'),
+    userId: v.string(),
+    imageUrl: v.string(),
+    thumbnailUrl: v.optional(v.string()), // for faster grid loading
+    type: productImageType,
+    // Links enhancement to its source image (null for originals)
+    parentImageId: v.optional(v.id('productImages')),
+    status: productImageStatus,
+    error: v.optional(v.string()),
+  })
+    .index('by_product', ['productId'])
+    .index('by_parent', ['parentImageId'])
+    .index('by_product_type', ['productId', 'type']),
 
   // ─── Ad Templates (library of templates for generation) ──────────────────
   adTemplates: defineTable({
@@ -158,15 +198,17 @@ const schema = defineSchema({
 
   // ─── Generations (output images from template × product) ──────────────────
   templateGenerations: defineTable({
-    // Product-centric model (new)
+    // Product-centric model
     productId: v.optional(v.id('products')),
+    // Specific product image used for this generation
+    productImageId: v.optional(v.id('productImages')),
     // Owner (Clerk user ID from JWT subject)
     userId: v.optional(v.string()), // optional for migration of existing data
     // Legacy run reference (deprecated, optional for migration)
     runId: v.optional(v.id('studioRuns')),
     templateId: v.id('adTemplates'),
     // Snapshot of inputs at generation time
-    productImageUrl: v.string(),
+    productImageUrl: v.string(), // kept for quick access + legacy
     templateImageUrl: v.string(),
     templateSnapshot: v.optional(v.object({
       name: v.optional(v.string()),
@@ -198,6 +240,7 @@ const schema = defineSchema({
     finishedAt: v.optional(v.number()),
   })
     .index('by_product', ['productId'])
+    .index('by_productImage', ['productImageId'])
     .index('by_userId', ['userId'])
     .index('by_run', ['runId']) // legacy, keep for migration
     .index('by_template', ['templateId']),
@@ -239,6 +282,7 @@ export type Item = Infer<typeof item>
 
 // ─── Studio types ─────────────────────────────────────────────────────────
 export type Product = Infer<typeof schema.tables.products.validator>
+export type ProductImage = Infer<typeof schema.tables.productImages.validator>
 export type AdTemplate = Infer<typeof schema.tables.adTemplates.validator>
 /** @deprecated Use Product instead */
 export type StudioRun = Infer<typeof schema.tables.studioRuns.validator>

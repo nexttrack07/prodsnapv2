@@ -12,6 +12,8 @@ import type * as ai from "../ai.js";
 import type * as board from "../board.js";
 import type * as crons from "../crons.js";
 import type * as invariant from "../invariant.js";
+import type * as migrations from "../migrations.js";
+import type * as productImages from "../productImages.js";
 import type * as products from "../products.js";
 import type * as prompts from "../prompts.js";
 import type * as r2 from "../r2.js";
@@ -32,6 +34,8 @@ declare const fullApi: ApiFromModules<{
   board: typeof board;
   crons: typeof crons;
   invariant: typeof invariant;
+  migrations: typeof migrations;
+  productImages: typeof productImages;
   products: typeof products;
   prompts: typeof prompts;
   r2: typeof r2;

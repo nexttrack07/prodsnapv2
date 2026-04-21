@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
+import { useAction } from 'convex/react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { notifications } from '@mantine/notifications'
 import { useMediaQuery, useHotkeys } from '@mantine/hooks'
@@ -31,7 +32,9 @@ import {
   SegmentedControl,
   AspectRatio,
   Tooltip,
+  ThemeIcon,
 } from '@mantine/core'
+import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
   IconChevronLeft,
   IconArrowRight,
@@ -43,6 +46,13 @@ import {
   IconAlignLeft,
   IconPhoto,
   IconPalette,
+  IconEraser,
+  IconX,
+  IconRefresh,
+  IconPlus,
+  IconStar,
+  IconStarFilled,
+  IconUpload,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -80,6 +90,15 @@ function ProductWorkspacePage() {
   const { data: generations } = useQuery(
     convexQuery(api.products.getProductGenerations, { productId: productId as Id<'products'> }),
   )
+
+  // Fetch product images to get the primary image URL
+  const { data: productImages } = useQuery(
+    convexQuery(api.productImages.getProductImagesList, { productId: productId as Id<'products'> }),
+  )
+
+  // Get the primary image URL (or fallback to legacy imageUrl)
+  const primaryImage = productImages?.find((img) => img._id === product?.primaryImageId)
+  const primaryImageUrl = primaryImage?.imageUrl || product?.imageUrl
 
   if (productLoading) {
     return (
@@ -120,13 +139,15 @@ function ProductWorkspacePage() {
       </Box>
 
       {/* Product Header - hidden in generate mode */}
-      {view === 'gallery' && <ProductHeader product={product} />}
+      {view === 'gallery' && <ProductHeader product={product} primaryImageUrl={primaryImageUrl} />}
 
       {/* View Toggle */}
       {view === 'gallery' ? (
         <GalleryView
           product={product}
           productId={productId as Id<'products'>}
+          primaryImageUrl={primaryImageUrl}
+          legacyImageUrl={product?.imageUrl}
           completedGenerations={completedGenerations}
           pendingGenerations={pendingGenerations}
           onGenerateMore={() => setView('generate')}
@@ -135,6 +156,7 @@ function ProductWorkspacePage() {
         <GenerateWizard
           productId={productId as Id<'products'>}
           product={product}
+          primaryImageUrl={primaryImageUrl}
           onBack={() => setView('gallery')}
           onComplete={() => setView('gallery')}
         />
@@ -145,16 +167,17 @@ function ProductWorkspacePage() {
 
 function ProductHeader({
   product,
+  primaryImageUrl,
 }: {
   product: {
     _id: Id<'products'>
     name: string
-    imageUrl: string
     status: 'analyzing' | 'ready' | 'failed'
     category?: string
     productDescription?: string
     generationCount: number
   }
+  primaryImageUrl?: string
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [isEditingName, setIsEditingName] = useState(false)
@@ -202,7 +225,7 @@ function ProductHeader({
           }}
           bg="dark.7"
         >
-          <Image src={product.imageUrl} alt={product.name} fit="cover" h="100%" w="100%" />
+          <Image src={primaryImageUrl || ''} alt={product.name} fit="cover" h="100%" w="100%" />
         </Box>
         <Box style={{ flex: 1, minWidth: 0 }}>
           {isEditingName ? (
@@ -279,15 +302,533 @@ function ProductHeader({
   )
 }
 
+interface ProductImageData {
+  _id: Id<'productImages'>
+  imageUrl: string
+  type: 'original' | 'background-removed'
+  status: 'processing' | 'ready' | 'failed'
+  parentImageId?: Id<'productImages'>
+  error?: string
+}
+
+interface ProductImageWithEnhancements extends ProductImageData {
+  enhancements: ProductImageData[]
+}
+
+function ImageGallerySection({
+  product,
+  productId,
+  legacyImageUrl,
+}: {
+  product: {
+    name: string
+    primaryImageId?: Id<'productImages'>
+  }
+  productId: Id<'products'>
+  legacyImageUrl?: string
+}) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const [deleteTarget, setDeleteTarget] = useState<{ imageId: Id<'productImages'>; isLast: boolean } | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
+  // Fetch product images
+  const { data: productImages, isLoading } = useQuery(
+    convexQuery(api.productImages.getProductImages, { productId }),
+  )
+
+  // Upload action and mutation
+  const uploadAction = useAction(api.r2.uploadProductImage)
+  const addImage = useConvexMutation(api.productImages.addProductImage)
+  const addImageMutation = useMutation({ mutationFn: addImage })
+
+  // Mutations
+  const removeBackground = useConvexMutation(api.productImages.removeImageBackground)
+  const removeBgMutation = useMutation({ mutationFn: removeBackground })
+
+  const setPrimary = useConvexMutation(api.productImages.setPrimaryImage)
+  const setPrimaryMutation = useMutation({ mutationFn: setPrimary })
+
+  const deleteImage = useConvexMutation(api.productImages.deleteProductImage)
+  const deleteMutation = useMutation({ mutationFn: deleteImage })
+
+  async function handleUpload(files: File[]) {
+    const file = files[0]
+    if (!file) return
+
+    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
+    if (file.size > MAX_SIZE) {
+      notifications.show({ title: 'File too large', message: 'Image must be under 10 MB', color: 'red' })
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''),
+      )
+
+      const { url } = await uploadAction({
+        name: file.name,
+        base64,
+        contentType: file.type,
+      })
+
+      await addImageMutation.mutateAsync({
+        productId,
+        imageUrl: url,
+      })
+
+      notifications.show({ title: 'Success', message: 'Image added!', color: 'green' })
+    } catch (err) {
+      notifications.show({
+        title: 'Upload failed',
+        message: err instanceof Error ? err.message : 'Upload failed',
+        color: 'red',
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  async function handleRemoveBackground(imageId: Id<'productImages'>) {
+    try {
+      await removeBgMutation.mutateAsync({ imageId })
+      notifications.show({ title: 'Processing', message: 'Removing background...', color: 'blue' })
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to start',
+        color: 'red',
+      })
+    }
+  }
+
+  async function handleSetPrimary(imageId: Id<'productImages'>) {
+    try {
+      await setPrimaryMutation.mutateAsync({ productId, imageId })
+      notifications.show({ title: 'Success', message: 'Primary image updated', color: 'green' })
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to update',
+        color: 'red',
+      })
+    }
+  }
+
+  async function handleDeleteImage(imageId: Id<'productImages'>, confirmDeleteProduct = false) {
+    try {
+      const result = await deleteMutation.mutateAsync({ imageId, confirmDeleteProduct })
+      if (result && 'requiresConfirmation' in result && result.requiresConfirmation) {
+        // Get all images to check if this is the last one
+        const allImages = productImages?.flatMap((img) => [img, ...img.enhancements]) || []
+        setDeleteTarget({ imageId, isLast: allImages.length === 1 })
+        return
+      }
+      notifications.show({ title: 'Success', message: 'Image deleted', color: 'green' })
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to delete',
+        color: 'red',
+      })
+    }
+  }
+
+  async function confirmDeleteWithProduct() {
+    if (!deleteTarget) return
+    try {
+      await deleteMutation.mutateAsync({ imageId: deleteTarget.imageId, confirmDeleteProduct: true })
+      notifications.show({ title: 'Success', message: 'Product deleted', color: 'green' })
+      // Navigate back to products list
+      window.location.href = '/studio'
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to delete',
+        color: 'red',
+      })
+    } finally {
+      setDeleteTarget(null)
+    }
+  }
+
+  // Flatten all images for display
+  const allImages: Array<ProductImageData & { isPrimary: boolean }> = []
+  productImages?.forEach((img) => {
+    allImages.push({ ...img, isPrimary: img._id === product.primaryImageId })
+    img.enhancements.forEach((enh) => {
+      allImages.push({ ...enh, isPrimary: enh._id === product.primaryImageId })
+    })
+  })
+
+  // Check if we have a legacy product with no productImages records
+  const hasLegacyImageOnly = allImages.length === 0 && legacyImageUrl
+
+  if (isLoading) {
+    return (
+      <Box mb="xl">
+        <Group justify="space-between" mb="md">
+          <Box>
+            <Title order={2} fz="xl" fw={600} c="white" mb={4}>Product Images</Title>
+            <Text size="sm" c="dark.2">Select primary image for ad generation</Text>
+          </Box>
+        </Group>
+        <Box py="xl" ta="center">
+          <Loader size="sm" color="brand" />
+        </Box>
+      </Box>
+    )
+  }
+
+  return (
+    <Box mb="xl">
+      <Group justify="space-between" mb="md">
+        <Box>
+          <Title order={2} fz="xl" fw={600} c="white" mb={4}>Product Images</Title>
+          <Text size="sm" c="dark.2">Select primary image for ad generation</Text>
+        </Box>
+      </Group>
+
+      <Box
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : `repeat(${Math.min(allImages.length + 2, 4)}, 1fr)`,
+          gap: 'var(--mantine-spacing-md)',
+          maxWidth: '800px',
+        }}
+      >
+        {/* Show legacy image if no productImages exist yet */}
+        {hasLegacyImageOnly && (
+          <Paper
+            radius="lg"
+            p="sm"
+            withBorder
+            style={{
+              borderColor: 'var(--mantine-color-brand-5)',
+              backgroundColor: 'var(--mantine-color-dark-7)',
+              position: 'relative',
+            }}
+          >
+            <Badge
+              size="xs"
+              color="brand"
+              variant="filled"
+              pos="absolute"
+              top={8}
+              left={8}
+              style={{ zIndex: 1 }}
+              leftSection={<IconStarFilled size={10} />}
+            >
+              Primary
+            </Badge>
+            <Badge
+              size="xs"
+              color="gray"
+              variant="light"
+              pos="absolute"
+              top={8}
+              right={8}
+              style={{ zIndex: 1 }}
+            >
+              Original
+            </Badge>
+            <Box
+              mt="lg"
+              style={{
+                borderRadius: 'var(--mantine-radius-md)',
+                overflow: 'hidden',
+                border: '1px solid var(--mantine-color-dark-5)',
+              }}
+            >
+              <Image src={legacyImageUrl} alt={product.name} fit="contain" mah={150} />
+            </Box>
+            <Text size="xs" c="dark.3" ta="center" mt="sm">
+              Legacy image - add more below
+            </Text>
+          </Paper>
+        )}
+
+        {/* Show all product images */}
+        {allImages.map((img) => (
+          <ImageCard
+            key={img._id}
+            image={img}
+            isPrimary={img.isPrimary}
+            productName={product.name}
+            onSetPrimary={() => handleSetPrimary(img._id)}
+            onRemoveBackground={() => handleRemoveBackground(img._id)}
+            onDelete={() => handleDeleteImage(img._id)}
+            isSettingPrimary={setPrimaryMutation.isPending}
+            isRemovingBg={removeBgMutation.isPending}
+          />
+        ))}
+
+        {/* Upload card */}
+        <Dropzone
+          onDrop={handleUpload}
+          accept={IMAGE_MIME_TYPE}
+          maxSize={10 * 1024 * 1024}
+          multiple={false}
+          disabled={isUploading}
+          radius="lg"
+          style={{
+            borderStyle: 'dashed',
+            borderWidth: 2,
+            borderColor: 'var(--mantine-color-dark-5)',
+            backgroundColor: 'var(--mantine-color-dark-7)',
+            minHeight: 150,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Stack align="center" gap="xs">
+            <Dropzone.Accept>
+              <ThemeIcon size={40} radius="md" color="green" variant="light">
+                <IconUpload size={20} />
+              </ThemeIcon>
+            </Dropzone.Accept>
+            <Dropzone.Reject>
+              <ThemeIcon size={40} radius="md" color="red" variant="light">
+                <IconX size={20} />
+              </ThemeIcon>
+            </Dropzone.Reject>
+            <Dropzone.Idle>
+              {isUploading ? (
+                <Loader size="sm" color="brand" />
+              ) : (
+                <ThemeIcon size={40} radius="md" color="brand" variant="light">
+                  <IconPlus size={20} />
+                </ThemeIcon>
+              )}
+            </Dropzone.Idle>
+            <Text size="sm" c="dark.2" ta="center">
+              {isUploading ? 'Uploading...' : 'Add Image'}
+            </Text>
+            <Text size="xs" c="dark.4" ta="center">
+              Different angle
+            </Text>
+          </Stack>
+        </Dropzone>
+      </Box>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        opened={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Product?"
+        centered
+        size="sm"
+      >
+        <Text size="sm" c="dark.1" mb="lg">
+          This is the last image. Deleting it will also delete the entire product.
+          This action cannot be undone.
+        </Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="subtle" color="gray" onClick={() => setDeleteTarget(null)}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={confirmDeleteWithProduct} loading={deleteMutation.isPending}>
+            Delete Product
+          </Button>
+        </Group>
+      </Modal>
+    </Box>
+  )
+}
+
+function ImageCard({
+  image,
+  isPrimary,
+  productName,
+  onSetPrimary,
+  onRemoveBackground,
+  onDelete,
+  isSettingPrimary,
+  isRemovingBg,
+}: {
+  image: ProductImageData
+  isPrimary: boolean
+  productName: string
+  onSetPrimary: () => void
+  onRemoveBackground: () => void
+  onDelete: () => void
+  isSettingPrimary: boolean
+  isRemovingBg: boolean
+}) {
+  const isOriginal = image.type === 'original'
+  const isProcessing = image.status === 'processing'
+  const isFailed = image.status === 'failed'
+  const isReady = image.status === 'ready'
+
+  // Check if this original already has a bg-removed enhancement
+  // (We can't tell from this component alone, so we disable if any bg removal is in progress)
+
+  return (
+    <Paper
+      radius="lg"
+      p="sm"
+      withBorder
+      style={{
+        borderColor: isPrimary ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)',
+        backgroundColor: 'var(--mantine-color-dark-7)',
+        position: 'relative',
+      }}
+    >
+      {/* Primary Badge */}
+      {isPrimary && (
+        <Badge
+          size="xs"
+          color="brand"
+          variant="filled"
+          pos="absolute"
+          top={8}
+          left={8}
+          style={{ zIndex: 1 }}
+          leftSection={<IconStarFilled size={10} />}
+        >
+          Primary
+        </Badge>
+      )}
+
+      {/* Type Badge */}
+      <Badge
+        size="xs"
+        color={isOriginal ? 'gray' : 'violet'}
+        variant="light"
+        pos="absolute"
+        top={8}
+        right={8}
+        style={{ zIndex: 1 }}
+      >
+        {isOriginal ? 'Original' : 'No BG'}
+      </Badge>
+
+      {/* Image */}
+      <Box
+        mt="lg"
+        style={{
+          borderRadius: 'var(--mantine-radius-md)',
+          overflow: 'hidden',
+          border: '1px solid var(--mantine-color-dark-5)',
+          background: !isOriginal
+            ? 'repeating-conic-gradient(var(--mantine-color-dark-6) 0% 25%, var(--mantine-color-dark-7) 0% 50%) 50% / 16px 16px'
+            : undefined,
+        }}
+      >
+        {isProcessing ? (
+          <AspectRatio ratio={1}>
+            <Box
+              bg="dark.6"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Loader size="sm" color="brand" type="dots" mb="xs" />
+              <Text size="xs" c="dark.2">Processing...</Text>
+            </Box>
+          </AspectRatio>
+        ) : isFailed ? (
+          <AspectRatio ratio={1}>
+            <Box
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              }}
+            >
+              <Text size="sm" fw={500} c="red.5">Failed</Text>
+              {image.error && (
+                <Text size="xs" c="red.4" mt={4} px="xs" ta="center" lineClamp={2}>{image.error}</Text>
+              )}
+            </Box>
+          </AspectRatio>
+        ) : (
+          <Image src={image.imageUrl} alt={productName} fit="contain" mah={150} />
+        )}
+      </Box>
+
+      {/* Actions */}
+      {isReady && (
+        <Group mt="sm" gap="xs" justify="center">
+          {!isPrimary && (
+            <Tooltip label="Set as primary">
+              <ActionIcon
+                variant="light"
+                color="brand"
+                size="sm"
+                onClick={onSetPrimary}
+                loading={isSettingPrimary}
+              >
+                <IconStar size={14} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          {isOriginal && (
+            <Tooltip label="Remove background">
+              <ActionIcon
+                variant="light"
+                color="violet"
+                size="sm"
+                onClick={onRemoveBackground}
+                loading={isRemovingBg}
+              >
+                <IconEraser size={14} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          <Tooltip label="Download">
+            <ActionIcon
+              component="a"
+              href={image.imageUrl}
+              download
+              variant="light"
+              color="gray"
+              size="sm"
+            >
+              <IconDownload size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Delete">
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              size="sm"
+              onClick={onDelete}
+            >
+              <IconTrash size={14} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
+      )}
+    </Paper>
+  )
+}
+
 function GalleryView({
   product,
   productId,
+  primaryImageUrl,
+  legacyImageUrl,
   completedGenerations,
   pendingGenerations,
   onGenerateMore,
 }: {
-  product: { status: string; imageUrl: string; name: string }
+  product: {
+    status: string
+    name: string
+    primaryImageId?: Id<'productImages'>
+  }
   productId: Id<'products'>
+  primaryImageUrl?: string
+  legacyImageUrl?: string
   completedGenerations: Array<{
     _id: Id<'templateGenerations'>
     status: string
@@ -342,6 +883,9 @@ function GalleryView({
 
   return (
     <Box>
+      {/* Image Gallery Section */}
+      <ImageGallerySection product={product} productId={productId} legacyImageUrl={legacyImageUrl} />
+
       {/* Action bar */}
       <Group justify="space-between" mb="lg">
         <Box>
@@ -496,7 +1040,7 @@ function GalleryView({
         onClose={() => setVariationTarget(null)}
         generation={variationTarget}
         productId={productId}
-        productImageUrl={product.imageUrl}
+        productImageUrl={primaryImageUrl || ''}
         onComplete={() => setVariationTarget(null)}
       />
 
@@ -943,11 +1487,13 @@ function GenerationCard({
 function GenerateWizard({
   productId,
   product,
+  primaryImageUrl,
   onBack,
   onComplete,
 }: {
   productId: Id<'products'>
-  product: { imageUrl: string; name: string }
+  product: { name: string }
+  primaryImageUrl?: string
   onBack: () => void
   onComplete: () => void
 }) {
@@ -1216,7 +1762,7 @@ function GenerateWizard({
           {/* Product preview */}
           <Paper p="xs" mb="md" bg="dark.7" radius="md" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
             <Group gap="xs">
-              <Image src={product.imageUrl} alt={product.name} w={40} h={40} radius="sm" fit="cover" style={{ border: '1px solid var(--mantine-color-dark-5)' }} />
+              <Image src={primaryImageUrl || ''} alt={product.name} w={40} h={40} radius="sm" fit="cover" style={{ border: '1px solid var(--mantine-color-dark-5)' }} />
               <Box>
                 <Text size="sm" fw={600} c="white" lineClamp={1}>{capitalizeWords(product.name)}</Text>
                 <Text size="xs" c="dark.2">Your product</Text>

@@ -254,7 +254,8 @@ function EmptyState({
 interface ProductData {
   _id: Id<'products'>
   name: string
-  imageUrl: string
+  imageUrl?: string
+  primaryImageId?: Id<'productImages'>
   status: 'analyzing' | 'ready' | 'failed'
   category?: string
   _creationTime: number
@@ -321,7 +322,7 @@ function ProductCard({ product }: { product: ProductData }) {
             overlayProps={{ blur: 2, backgroundOpacity: 0.5 }}
           />
           <Image
-            src={product.imageUrl}
+            src={product.imageUrl || ''}
             alt={product.name}
             fit="contain"
             h="100%"

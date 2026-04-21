@@ -578,3 +578,39 @@ export const enhancePrompt = action({
     return { enhanced: text.trim() }
   },
 })
+
+// ─── Background Removal ───────────────────────────────────────────────────
+
+/**
+ * Removes the background from a product image using fal.ai BRIA RMBG 2.0.
+ * Returns a URL to the image with transparent background.
+ */
+export const removeBackground = internalAction({
+  args: {
+    productId: v.id('products'),
+    imageUrl: v.string(),
+  },
+  handler: async (ctx, { productId, imageUrl }): Promise<{ outputUrl: string }> => {
+    // Test mode: return mock URL without calling AI
+    if (isTestMode()) {
+      await mockDelay(500)
+      return { outputUrl: imageUrl } // Just return the original in test mode
+    }
+
+    const result = await fal.subscribe('fal-ai/bria/background/remove', {
+      input: {
+        image_url: imageUrl,
+      },
+    })
+
+    const data = result.data as { image?: { url?: string } }
+    const outputUrl = data.image?.url
+    if (!outputUrl) throw new Error('Background removal did not return an image URL')
+
+    // Upload to our R2 bucket for persistence
+    const key = `studio/products/${productId}/no-bg-${nanoid(6)}.png`
+    const persistedUrl = await uploadFromUrl(outputUrl, key, 'image/png')
+
+    return { outputUrl: persistedUrl }
+  },
+})

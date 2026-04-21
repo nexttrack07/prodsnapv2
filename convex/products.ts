@@ -61,13 +61,26 @@ export const createProduct = mutation({
     // Default name from URL if not provided (extract filename, clean up)
     const defaultName = name || deriveNameFromUrl(imageUrl)
 
+    // Create the product first (without primaryImageId)
     const productId = await ctx.db.insert('products', {
       name: defaultName,
-      imageUrl,
+      imageUrl, // Keep for backward compatibility during migration
       imageStorageId,
       status: 'analyzing',
       userId,
     })
+
+    // Create the productImage record
+    const imageId = await ctx.db.insert('productImages', {
+      productId,
+      userId,
+      imageUrl,
+      type: 'original',
+      status: 'ready',
+    })
+
+    // Set the primary image
+    await ctx.db.patch(productId, { primaryImageId: imageId })
 
     // Fire-and-forget analysis — flips product to 'ready' or 'failed'.
     await ctx.scheduler.runAfter(0, internal.products.runProductAnalysis, {
@@ -108,6 +121,9 @@ export const runProductAnalysis = internalAction({
       productId,
     })
     if (!product) return
+    if (!product.imageUrl) {
+      throw new Error('Product has no image URL')
+    }
 
     try {
       const result = await ctx.runAction(internal.ai.analyzeProduct, {
@@ -180,11 +196,12 @@ export const listProducts = query({
     const userId = await getAuthUserId(ctx)
     if (!userId) return []
 
-    // Use index for efficient user-scoped queries
+    // Use composite index for efficient user-scoped queries filtering archived
     const products = await ctx.db
       .query('products')
-      .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .filter((q) => q.eq(q.field('archivedAt'), undefined))
+      .withIndex('by_userId_archived', (q) =>
+        q.eq('userId', userId).eq('archivedAt', undefined)
+      )
       .order('desc')
       .collect()
 
@@ -328,6 +345,129 @@ export const restoreProduct = mutation({
   },
 })
 
+// ─── Image Enhancements (DEPRECATED) ──────────────────────────────────────
+// These functions operate on the legacy `backgroundRemovedUrl` field on products.
+// For new code, use `productImages.removeImageBackground` which creates entries
+// in the productImages table with proper parent/child relationships.
+// These will be removed once all products are migrated to the new system.
+
+/**
+ * @deprecated Use `productImages.removeImageBackground` instead.
+ * This operates on the legacy product-level background removal fields.
+ * Triggers background removal for a product image.
+ * Requires authentication and ownership.
+ */
+export const removeProductBackground = mutation({
+  args: { productId: v.id('products') },
+  handler: async (ctx, { productId }) => {
+    const userId = await requireAuth(ctx)
+    const product = await ctx.db.get(productId)
+    if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to modify this product')
+    }
+    if (product.archivedAt) throw new Error('Cannot modify archived product')
+    if (product.backgroundRemovalStatus === 'processing') {
+      throw new Error('Background removal already in progress')
+    }
+
+    await ctx.db.patch(productId, {
+      backgroundRemovalStatus: 'processing',
+    })
+
+    await ctx.scheduler.runAfter(0, internal.products.runBackgroundRemoval, {
+      productId,
+    })
+
+    return { ok: true }
+  },
+})
+
+/**
+ * @deprecated Use `productImages.runImageBackgroundRemoval` instead.
+ * Internal action to run background removal.
+ */
+export const runBackgroundRemoval = internalAction({
+  args: { productId: v.id('products') },
+  handler: async (ctx, { productId }) => {
+    const product = await ctx.runQuery(internal.products.getProductInternal, {
+      productId,
+    })
+    if (!product) return
+    if (!product.imageUrl) {
+      throw new Error('Product has no image URL')
+    }
+
+    try {
+      const result = await ctx.runAction(internal.ai.removeBackground, {
+        productId,
+        imageUrl: product.imageUrl,
+      })
+
+      await ctx.runMutation(internal.products.saveBackgroundRemoval, {
+        productId,
+        backgroundRemovedUrl: result.outputUrl,
+      })
+    } catch (err) {
+      await ctx.runMutation(internal.products.failBackgroundRemoval, {
+        productId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  },
+})
+
+/** @deprecated Use `productImages.saveImageEnhancement` instead. */
+export const saveBackgroundRemoval = internalMutation({
+  args: {
+    productId: v.id('products'),
+    backgroundRemovedUrl: v.string(),
+  },
+  handler: async (ctx, { productId, backgroundRemovedUrl }) => {
+    await ctx.db.patch(productId, {
+      backgroundRemovedUrl,
+      backgroundRemovalStatus: 'complete',
+    })
+  },
+})
+
+/** @deprecated Use `productImages.failImageEnhancement` instead. */
+export const failBackgroundRemoval = internalMutation({
+  args: {
+    productId: v.id('products'),
+    error: v.string(),
+  },
+  handler: async (ctx, { productId, error }) => {
+    await ctx.db.patch(productId, {
+      backgroundRemovalStatus: 'failed',
+      error,
+    })
+  },
+})
+
+/**
+ * @deprecated Use productImages table deletion instead.
+ * Clears the background-removed image (revert to original).
+ */
+export const clearBackgroundRemoval = mutation({
+  args: { productId: v.id('products') },
+  handler: async (ctx, { productId }) => {
+    const userId = await requireAuth(ctx)
+    const product = await ctx.db.get(productId)
+    if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to modify this product')
+    }
+
+    await ctx.db.patch(productId, {
+      backgroundRemovedUrl: undefined,
+      backgroundRemovalStatus: 'idle',
+    })
+
+    return { ok: true }
+  },
+})
+
 // ─── Generation queries for a product ─────────────────────────────────────
 
 /**
@@ -412,6 +552,24 @@ export const generateFromProduct = mutation({
       throw new Error('Cannot generate from archived product')
     }
 
+    // Get the primary image to use for generation
+    let productImageUrl: string
+    let productImageId: Id<'productImages'> | undefined
+
+    if (product.primaryImageId) {
+      const primaryImage = await ctx.db.get(product.primaryImageId)
+      if (!primaryImage || primaryImage.status !== 'ready') {
+        throw new Error('Primary image not available')
+      }
+      productImageUrl = primaryImage.imageUrl
+      productImageId = primaryImage._id
+    } else if (product.imageUrl) {
+      // Fallback for legacy products not yet migrated
+      productImageUrl = product.imageUrl
+    } else {
+      throw new Error('Product has no image')
+    }
+
     // Create generations for each (template × variation) pair
     const generationIds: string[] = []
     let variationCounter = 0
@@ -426,9 +584,10 @@ export const generateFromProduct = mutation({
       for (let v = 0; v < args.variationsPerTemplate; v++) {
         const genId = await ctx.db.insert('templateGenerations', {
           productId: args.productId,
+          productImageId, // Track which image was used
           userId, // Store userId on generation for efficient queries
           templateId,
-          productImageUrl: product.imageUrl,
+          productImageUrl,
           templateImageUrl: tpl.imageUrl,
           templateSnapshot: {
             name: tpl.category || undefined,
