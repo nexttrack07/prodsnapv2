@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { notifications } from '@mantine/notifications'
+import { useMediaQuery, useHotkeys } from '@mantine/hooks'
 import { useConvex } from 'convex/react'
 import {
   Container,
@@ -28,6 +29,7 @@ import {
   CloseButton,
   SegmentedControl,
   AspectRatio,
+  Tooltip,
 } from '@mantine/core'
 import {
   IconChevronLeft,
@@ -43,6 +45,7 @@ import {
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import { capitalizeWords } from '../utils/strings'
 
 export const Route = createFileRoute('/studio/$productId')({
   component: ProductWorkspacePage,
@@ -79,7 +82,7 @@ function ProductWorkspacePage() {
       <Container size="lg" py={40}>
         <Box py={80} ta="center">
           <Title order={2} fz="xl" fw={500} c="white" mb="xs">Product not found</Title>
-          <Anchor component={Link} to="/studio" c="blue.6">
+          <Anchor component={Link} to="/studio" c="brand.5">
             Back to products
           </Anchor>
         </Box>
@@ -126,13 +129,6 @@ function ProductWorkspacePage() {
   )
 }
 
-function capitalizeWords(str: string): string {
-  return str
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ')
-}
-
 function ProductHeader({
   product,
 }: {
@@ -146,6 +142,7 @@ function ProductHeader({
     generationCount: number
   }
 }) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
   const [isEditingName, setIsEditingName] = useState(false)
   const [editedName, setEditedName] = useState('')
 
@@ -166,20 +163,22 @@ function ProductHeader({
     }
   }
 
+  const imageSize = isMobile ? 80 : 120
+
   return (
     <Paper
       radius="lg"
-      p="xl"
+      p={isMobile ? 'md' : 'xl'}
       mb="xl"
       style={{
         background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
         border: '1px solid var(--mantine-color-dark-6)',
       }}
     >
-      <Group align="flex-start" gap="xl">
+      <Group align="flex-start" gap={isMobile ? 'md' : 'xl'} wrap={isMobile ? 'wrap' : 'nowrap'}>
         <Box
-          w={120}
-          h={120}
+          w={imageSize}
+          h={imageSize}
           style={{
             borderRadius: 'var(--mantine-radius-lg)',
             overflow: 'hidden',
@@ -220,14 +219,24 @@ function ProductHeader({
           ) : (
             <Title
               order={1}
-              fz={28}
+              fz={isMobile ? 20 : 28}
               fw={700}
               c="white"
               mb={4}
+              tabIndex={0}
+              role="button"
+              aria-label={`Edit product name: ${product.name}`}
               style={{ cursor: 'pointer', letterSpacing: '-0.02em' }}
               onClick={() => {
                 setEditedName(product.name)
                 setIsEditingName(true)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setEditedName(product.name)
+                  setIsEditingName(true)
+                }
               }}
               title="Click to edit"
             >
@@ -283,20 +292,37 @@ function GalleryView({
   }>
   onGenerateMore: () => void
 }) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [variationTarget, setVariationTarget] = useState<{ _id: Id<'templateGenerations'>; outputUrl: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Id<'templateGenerations'> | null>(null)
   const hasAny = completedGenerations.length > 0 || pendingGenerations.length > 0
+
+  // Keyboard shortcuts
+  useHotkeys([
+    ['Escape', () => {
+      if (lightboxUrl) setLightboxUrl(null)
+      else if (variationTarget) setVariationTarget(null)
+      else if (deleteTarget) setDeleteTarget(null)
+    }],
+  ])
 
   const deleteGeneration = useConvexMutation(api.products.deleteGeneration)
   const deleteMutation = useMutation({ mutationFn: deleteGeneration })
 
-  async function handleDelete(id: Id<'templateGenerations'>) {
-    if (!confirm('Delete this generation?')) return
+  function handleDelete(id: Id<'templateGenerations'>) {
+    setDeleteTarget(id)
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return
     try {
-      await deleteMutation.mutateAsync({ generationId: id })
+      await deleteMutation.mutateAsync({ generationId: deleteTarget })
       notifications.show({ title: 'Success', message: 'Deleted', color: 'green' })
     } catch {
       notifications.show({ title: 'Error', message: 'Failed to delete', color: 'red' })
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -308,27 +334,41 @@ function GalleryView({
           <Title order={2} fz="xl" fw={600} c="white" mb={4}>Generations</Title>
           <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
         </Box>
-        <Button
-          onClick={onGenerateMore}
-          disabled={product.status !== 'ready'}
-          color="brand"
-          size="md"
-          rightSection={<IconArrowRight size={16} />}
-          styles={{
-            root: {
-              boxShadow: '0 4px 14px rgba(84, 116, 180, 0.25)',
-            },
-          }}
+        <Tooltip
+          label={product.status === 'analyzing' ? 'Product is still being analyzed...' : 'Product analysis failed'}
+          disabled={product.status === 'ready'}
+          withArrow
+          position="bottom"
         >
-          Generate More
-        </Button>
+          <span>
+            <Button
+              onClick={onGenerateMore}
+              disabled={product.status !== 'ready'}
+              color="brand"
+              size="md"
+              rightSection={<IconArrowRight size={16} />}
+              styles={{
+                root: {
+                  boxShadow: '0 4px 14px rgba(84, 116, 180, 0.25)',
+                },
+              }}
+            >
+              Generate More
+            </Button>
+          </span>
+        </Tooltip>
       </Group>
 
       {/* Pending generations */}
       {pendingGenerations.length > 0 && (
         <Box mb="xl">
           <Text size="sm" fw={500} c="dark.2" mb="sm">In Progress</Text>
-          <Box style={{ columns: '4', columnGap: '1rem' }}>
+          <Box style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
+            gap: '1rem',
+            alignItems: 'start',
+          }}>
             {pendingGenerations.map((gen) => (
               <GenerationCard
                 key={gen._id}
@@ -377,7 +417,12 @@ function GalleryView({
           </Button>
         </Paper>
       ) : completedGenerations.length > 0 ? (
-        <Box style={{ columns: '4', columnGap: '1rem' }}>
+        <Box style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
+          gap: '1rem',
+          alignItems: 'start',
+        }}>
           {completedGenerations.map((gen) => (
             <GenerationCard
               key={gen._id}
@@ -397,6 +442,8 @@ function GalleryView({
         fullScreen
         withCloseButton={false}
         padding={0}
+        aria-label="Full size image viewer"
+        data-testid="lightbox"
         styles={{
           body: {
             height: '100%',
@@ -418,12 +465,13 @@ function GalleryView({
           variant="subtle"
           c="white"
           onClick={() => setLightboxUrl(null)}
+          aria-label="Close image viewer"
         />
         {lightboxUrl && (
           <>
             <Image
               src={lightboxUrl}
-              alt="Full size"
+              alt="Full size generated ad image"
               fit="contain"
               maw="90vw"
               mah="90vh"
@@ -435,8 +483,9 @@ function GalleryView({
               pos="absolute"
               bottom={24}
               left="50%"
-              style={{ transform: 'translateX(-50%)' }}
+              style={{ transform: 'translateX(-50%)', marginBottom: 'env(safe-area-inset-bottom, 0)' }}
               leftSection={<IconDownload size={16} />}
+              aria-label="Download image"
             >
               Download
             </Button>
@@ -453,6 +502,28 @@ function GalleryView({
         productImageUrl={product.imageUrl}
         onComplete={() => setVariationTarget(null)}
       />
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        opened={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Generation"
+        centered
+        size="sm"
+        data-testid="delete-modal"
+      >
+        <Text size="sm" c="dark.1" mb="lg">
+          Are you sure you want to delete this generation? This action cannot be undone.
+        </Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="subtle" color="gray" onClick={() => setDeleteTarget(null)}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={confirmDelete} loading={deleteMutation.isPending}>
+            Delete
+          </Button>
+        </Group>
+      </Modal>
     </Box>
   )
 }
@@ -472,11 +543,22 @@ function VariationDrawer({
   productImageUrl: string
   onComplete: () => void
 }) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
   const [changeText, setChangeText] = useState(false)
   const [changeIcons, setChangeIcons] = useState(false)
   const [changeColors, setChangeColors] = useState(false)
   const [variationCount, setVariationCount] = useState('2')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Reset state when drawer opens
+  useEffect(() => {
+    if (opened) {
+      setChangeText(false)
+      setChangeIcons(false)
+      setChangeColors(false)
+      setVariationCount('2')
+    }
+  }, [opened])
 
   const generateVariations = useConvexMutation(api.products.generateVariations)
   const generateMutation = useMutation({ mutationFn: generateVariations })
@@ -499,7 +581,7 @@ function VariationDrawer({
         changeText,
         changeIcons,
         changeColors,
-        variationCount: parseInt(variationCount),
+        variationCount: parseInt(variationCount, 10),
       })
       notifications.show({ title: 'Success', message: 'Variations started!', color: 'green' })
       onComplete()
@@ -515,9 +597,10 @@ function VariationDrawer({
       opened={opened}
       onClose={onClose}
       position="right"
-      size="md"
+      size={isMobile ? '100%' : 'md'}
       title={<Title order={3} fz="lg" fw={600}>Create Variations</Title>}
-      padding="lg"
+      padding={isMobile ? 'md' : 'lg'}
+      data-testid="variation-drawer"
     >
       {generation && (
         <Stack gap="lg">
@@ -541,7 +624,7 @@ function VariationDrawer({
                 onChange={(e) => setChangeText(e.currentTarget.checked)}
                 label={
                   <Group gap="xs">
-                    <IconAlignLeft size={16} color="var(--mantine-color-gray-6)" />
+                    <IconAlignLeft size={16} color="var(--mantine-color-dark-2)" />
                     <Box>
                       <Text fw={500} size="sm">Text</Text>
                       <Text size="xs" c="dark.2">Generate new headlines, copy, and messaging</Text>
@@ -553,7 +636,7 @@ function VariationDrawer({
                     padding: 'var(--mantine-spacing-sm)',
                     border: `2px solid ${changeText ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
                     borderRadius: 'var(--mantine-radius-md)',
-                    backgroundColor: changeText ? 'var(--mantine-color-gray-0)' : 'transparent',
+                    backgroundColor: changeText ? 'var(--mantine-color-dark-6)' : 'transparent',
                   },
                   body: { alignItems: 'flex-start' },
                   labelWrapper: { width: '100%' },
@@ -564,7 +647,7 @@ function VariationDrawer({
                 onChange={(e) => setChangeIcons(e.currentTarget.checked)}
                 label={
                   <Group gap="xs">
-                    <IconPhoto size={16} color="var(--mantine-color-gray-6)" />
+                    <IconPhoto size={16} color="var(--mantine-color-dark-2)" />
                     <Box>
                       <Text fw={500} size="sm">Icons & Graphics</Text>
                       <Text size="xs" c="dark.2">Replace icons, badges, and decorative elements</Text>
@@ -576,7 +659,7 @@ function VariationDrawer({
                     padding: 'var(--mantine-spacing-sm)',
                     border: `2px solid ${changeIcons ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
                     borderRadius: 'var(--mantine-radius-md)',
-                    backgroundColor: changeIcons ? 'var(--mantine-color-gray-0)' : 'transparent',
+                    backgroundColor: changeIcons ? 'var(--mantine-color-dark-6)' : 'transparent',
                   },
                   body: { alignItems: 'flex-start' },
                   labelWrapper: { width: '100%' },
@@ -587,7 +670,7 @@ function VariationDrawer({
                 onChange={(e) => setChangeColors(e.currentTarget.checked)}
                 label={
                   <Group gap="xs">
-                    <IconPalette size={16} color="var(--mantine-color-gray-6)" />
+                    <IconPalette size={16} color="var(--mantine-color-dark-2)" />
                     <Box>
                       <Text fw={500} size="sm">Colors</Text>
                       <Text size="xs" c="dark.2">Adjust color scheme and tones</Text>
@@ -599,7 +682,7 @@ function VariationDrawer({
                     padding: 'var(--mantine-spacing-sm)',
                     border: `2px solid ${changeColors ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
                     borderRadius: 'var(--mantine-radius-md)',
-                    backgroundColor: changeColors ? 'var(--mantine-color-gray-0)' : 'transparent',
+                    backgroundColor: changeColors ? 'var(--mantine-color-dark-6)' : 'transparent',
                   },
                   body: { alignItems: 'flex-start' },
                   labelWrapper: { width: '100%' },
@@ -630,7 +713,7 @@ function VariationDrawer({
             loading={isSubmitting}
             leftSection={!isSubmitting && <IconSparkles size={18} />}
           >
-            {isSubmitting ? 'Starting...' : `Generate ${variationCount} Variation${parseInt(variationCount) > 1 ? 's' : ''}`}
+            {isSubmitting ? 'Starting...' : `Generate ${variationCount} Variation${parseInt(variationCount, 10) > 1 ? 's' : ''}`}
           </Button>
         </Stack>
       )}
@@ -656,6 +739,7 @@ function GenerationCard({
   onDelete: (id: Id<'templateGenerations'>) => void
   onCreateVariations: (generation: { _id: Id<'templateGenerations'>; outputUrl: string }) => void
 }) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
   const isComplete = generation.status === 'complete' && generation.outputUrl
   const isFailed = generation.status === 'failed'
   const isPending = !isComplete && !isFailed
@@ -696,36 +780,41 @@ function GenerationCard({
           <Image src={generation.outputUrl} alt="Generated ad" w="100%" style={{ display: 'block' }} />
           <Box
             pos="absolute"
-            top={0}
+            top={isMobile ? 'auto' : 0}
             left={0}
             right={0}
             bottom={0}
-            className="generation-card-overlay"
+            className={isMobile ? undefined : 'generation-card-overlay'}
             style={{
-              backgroundColor: 'rgba(0, 0, 0, 0)',
+              background: isMobile
+                ? 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%)'
+                : 'rgba(0, 0, 0, 0)',
               display: 'flex',
-              alignItems: 'center',
+              alignItems: isMobile ? 'flex-end' : 'center',
               justifyContent: 'center',
               gap: 8,
-              opacity: 0,
+              padding: isMobile ? 12 : 0,
+              opacity: isMobile ? 1 : 0,
               transition: 'all 150ms ease',
             }}
           >
             <ActionIcon
               variant="white"
-              radius="xl"
+              radius="lg"
               size="lg"
               onClick={() => onExpand(generation.outputUrl!)}
               title="View full size"
+              aria-label="View full size"
             >
               <IconMaximize size={18} />
             </ActionIcon>
             <ActionIcon
               variant="white"
-              radius="xl"
+              radius="lg"
               size="lg"
               onClick={() => onCreateVariations({ _id: generation._id, outputUrl: generation.outputUrl! })}
               title="Create variations"
+              aria-label="Create variations"
               c="violet"
             >
               <IconSparkles size={18} />
@@ -735,18 +824,20 @@ function GenerationCard({
               href={generation.outputUrl}
               download
               variant="white"
-              radius="xl"
+              radius="lg"
               size="lg"
               title="Download"
+              aria-label="Download image"
             >
               <IconDownload size={18} />
             </ActionIcon>
             <ActionIcon
               variant="white"
-              radius="xl"
+              radius="lg"
               size="lg"
               onClick={() => onDelete(generation._id)}
               title="Delete"
+              aria-label="Delete generation"
               c="red"
             >
               <IconTrash size={18} />
@@ -816,6 +907,9 @@ function GenerateWizard({
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Mobile detection for responsive layout
+  const isMobile = useMediaQuery('(max-width: 768px)')
+
   const convex = useConvex()
   const generateFromProduct = useConvexMutation(api.products.generateFromProduct)
   const generateMutation = useMutation({ mutationFn: generateFromProduct })
@@ -878,7 +972,7 @@ function GenerateWizard({
         templateIds: pickedIds,
         mode,
         colorAdapt,
-        variationsPerTemplate: parseInt(variationsPerTemplate),
+        variationsPerTemplate: parseInt(variationsPerTemplate, 10),
         aspectRatio,
       })
       notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
@@ -890,7 +984,7 @@ function GenerateWizard({
     }
   }
 
-  const totalCount = pickedIds.length * parseInt(variationsPerTemplate)
+  const totalCount = pickedIds.length * parseInt(variationsPerTemplate, 10)
 
   return (
     <Box>
@@ -905,15 +999,27 @@ function GenerateWizard({
         }}
       >
         <Group gap="md">
-          <Anchor c="dark.2" onClick={onBack} style={{ cursor: 'pointer' }}>
+          <Anchor
+            component="button"
+            type="button"
+            c="dark.2"
+            onClick={onBack}
+            onKeyDown={(e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onBack()
+              }
+            }}
+            style={{ cursor: 'pointer' }}
+          >
             <Group gap={4}>
               <IconChevronLeft size={16} />
               Back
             </Group>
           </Anchor>
           <Text fw={600} size="lg" c="white">Pick Templates</Text>
-          <Text size="sm" c="dark.3">·</Text>
-          <Text size="sm" c="dark.3">{templates.length} available</Text>
+          <Text size="sm" c="dark.2">·</Text>
+          <Text size="sm" c="dark.2">{templates.length} available</Text>
         </Group>
         <Group gap="sm">
           {/* Placeholder for future filters */}
@@ -923,19 +1029,49 @@ function GenerateWizard({
         </Group>
       </Group>
 
-      <Box style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 'var(--mantine-spacing-lg)' }}>
+      <Box style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 320px',
+        gap: 'var(--mantine-spacing-lg)'
+      }}>
         {/* Template Grid */}
-        <Box mah="calc(100vh - 180px)" style={{ overflowY: 'auto', paddingRight: 'var(--mantine-spacing-sm)' }}>
+        <Box
+          mah={isMobile ? 'none' : 'calc(100vh - 180px)'}
+          style={{
+            overflowY: isMobile ? 'visible' : 'auto',
+            paddingRight: isMobile ? 0 : 'var(--mantine-spacing-sm)',
+            order: 1,
+          }}
+        >
 
           {templatesLoading && templates.length === 0 ? (
-            <Box py={48} ta="center">
-              <Loader size="lg" color="brand" />
+            <Box style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
+              gap: '0.75rem',
+              alignItems: 'start',
+            }}>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Box
+                  key={i}
+                  className="shimmer"
+                  style={{
+                    borderRadius: 'var(--mantine-radius-lg)',
+                    aspectRatio: i % 3 === 0 ? '4/5' : i % 3 === 1 ? '9/16' : '1/1',
+                  }}
+                />
+              ))}
             </Box>
           ) : templates.length === 0 ? (
             <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
           ) : (
             <>
-              <Box style={{ columns: '4', columnGap: '0.75rem' }}>
+              <Box style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
+                gap: '0.75rem',
+                alignItems: 'start',
+              }}>
                 {templates.map((tpl) => {
                   const picked = pickedIds.includes(tpl._id)
                   const getAspectStyle = (): React.CSSProperties => {
@@ -964,7 +1100,7 @@ function GenerateWizard({
                       }}
                     >
                       <Box style={getAspectStyle()}>
-                        <Image src={tpl.thumbnailUrl} alt="" fit="cover" h="100%" w="100%" />
+                        <Image src={tpl.thumbnailUrl} alt={`Template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`} fit="cover" h="100%" w="100%" />
                       </Box>
                       <Badge
                         size="xs"
@@ -1005,7 +1141,7 @@ function GenerateWizard({
                   {isFetchingNextPage ? (
                     <Loader size="sm" color="brand" />
                   ) : (
-                    <Text size="sm" c="dark.3">Scroll for more</Text>
+                    <Text size="sm" c="dark.2">Scroll for more</Text>
                   )}
                 </Box>
               )}
@@ -1021,17 +1157,18 @@ function GenerateWizard({
             border: '1px solid var(--mantine-color-dark-6)',
             background: 'rgba(26, 26, 26, 0.5)',
             alignSelf: 'flex-start',
-            position: 'sticky',
-            top: 80,
+            position: isMobile ? 'relative' : 'sticky',
+            top: isMobile ? undefined : 80,
+            order: 2,
           }}
         >
           {/* Product preview */}
           <Paper p="xs" mb="md" bg="dark.7" radius="md" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
             <Group gap="xs">
-              <Image src={product.imageUrl} alt="" w={40} h={40} radius="sm" fit="cover" style={{ border: '1px solid var(--mantine-color-dark-5)' }} />
+              <Image src={product.imageUrl} alt={product.name} w={40} h={40} radius="sm" fit="cover" style={{ border: '1px solid var(--mantine-color-dark-5)' }} />
               <Box>
                 <Text size="sm" fw={600} c="white" lineClamp={1}>{capitalizeWords(product.name)}</Text>
-                <Text size="xs" c="dark.3">Your product</Text>
+                <Text size="xs" c="dark.2">Your product</Text>
               </Box>
             </Group>
           </Paper>
@@ -1118,7 +1255,7 @@ function GenerateWizard({
           {/* Summary & Submit */}
           <Box pt="lg" mt="lg" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
             {pickedIds.length === 0 ? (
-              <Text size="sm" c="dark.3" ta="center" mb="md">
+              <Text size="sm" c="dark.2" ta="center" mb="md">
                 Select templates to continue
               </Text>
             ) : (
@@ -1127,8 +1264,8 @@ function GenerateWizard({
                   <Text size="sm" c="dark.2">Total images</Text>
                   <Text size="lg" fw={700} c="white">{totalCount}</Text>
                 </Group>
-                <Text size="xs" c="dark.3" mt={4}>
-                  {pickedIds.length} template{pickedIds.length > 1 ? 's' : ''} × {variationsPerTemplate} variation{parseInt(variationsPerTemplate) > 1 ? 's' : ''}
+                <Text size="xs" c="dark.2" mt={4}>
+                  {pickedIds.length} template{pickedIds.length > 1 ? 's' : ''} × {variationsPerTemplate} variation{parseInt(variationsPerTemplate, 10) > 1 ? 's' : ''}
                 </Text>
               </Paper>
             )}

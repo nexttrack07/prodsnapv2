@@ -22,10 +22,13 @@ import {
   Checkbox,
   Tooltip,
   Chip,
+  Modal,
 } from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
 import { IconUpload, IconRefresh, IconTrash, IconChecks, IconX } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import { MAX_TEMPLATE_IMAGE_SIZE, getAspectRatioValue } from '../utils/constants'
 
 // Batch upload settings
 const UPLOAD_BATCH_SIZE = 3
@@ -85,7 +88,7 @@ function AdminTemplatesPage() {
   return (
     <Container size="lg" py={40}>
       <Paper
-        radius="xl"
+        radius="lg"
         p="xl"
         mb="xl"
         style={{
@@ -217,7 +220,7 @@ function UploadArea() {
         batch.map(async ({ file, hash }) => {
           try {
             if (!file.type.startsWith('image/')) throw new Error('Not an image')
-            if (file.size > 20 * 1024 * 1024) throw new Error('Over 20 MB')
+            if (file.size > MAX_TEMPLATE_IMAGE_SIZE) throw new Error('Over 20 MB')
             const { width, height } = await measureImage(file)
             const base64 = await fileToBase64(file)
             const upload = await uploadTemplate({
@@ -300,7 +303,7 @@ function UploadArea() {
   return (
     <Paper
       component="label"
-      radius="xl"
+      radius="lg"
       p={48}
       mb="xl"
       ta="center"
@@ -334,7 +337,7 @@ function UploadArea() {
       />
       <ThemeIcon
         size={64}
-        radius="xl"
+        radius="lg"
         variant="gradient"
         gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
         mx="auto"
@@ -395,6 +398,9 @@ async function computeFileHash(file: File): Promise<string> {
 function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   const [selectedIds, setSelectedIds] = useState<Set<Id<'adTemplates'>>>(new Set())
   const [isRetagging, setIsRetagging] = useState(false)
+  const [bulkDeleteModalOpened, { open: openBulkDeleteModal, close: closeBulkDeleteModal }] = useDisclosure(false)
+  const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false)
+  const [templateToDelete, setTemplateToDelete] = useState<Id<'adTemplates'> | null>(null)
 
   // Track templates being retagged for progress notification
   const [retaggingIds, setRetaggingIds] = useState<Set<Id<'adTemplates'>>>(new Set())
@@ -526,6 +532,42 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
     setSelectedIds(new Set(rows.filter((r) => r.status === 'failed').map((r) => r._id)))
   }
 
+  async function handleBulkDelete() {
+    closeBulkDeleteModal()
+    const ids = Array.from(selectedIds)
+    let deleted = 0
+    for (const id of ids) {
+      try {
+        await deleteMutation.mutateAsync({ id })
+        deleted++
+      } catch (err) {
+        console.error(`Failed to delete ${id}:`, err)
+      }
+    }
+    setSelectedIds(new Set())
+    notifications.show({
+      title: 'Templates deleted',
+      message: `Deleted ${deleted} template${deleted === 1 ? '' : 's'}`,
+      color: 'green',
+    })
+  }
+
+  async function handleSingleDelete() {
+    if (!templateToDelete) return
+    closeDeleteModal()
+    try {
+      await deleteMutation.mutateAsync({ id: templateToDelete })
+      notifications.show({
+        title: 'Template deleted',
+        message: 'Template has been removed',
+        color: 'green',
+      })
+    } catch (err) {
+      console.error(`Failed to delete ${templateToDelete}:`, err)
+    }
+    setTemplateToDelete(null)
+  }
+
   async function retagSelected() {
     if (selectedIds.size === 0) return
     setIsRetagging(true)
@@ -570,7 +612,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   if (rows.length === 0) {
     return (
       <Paper
-        radius="xl"
+        radius="lg"
         p={64}
         ta="center"
         withBorder
@@ -586,7 +628,56 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   }
 
   return (
-    <Box>
+    <>
+      {/* Bulk delete confirmation modal */}
+      <Modal
+        opened={bulkDeleteModalOpened}
+        onClose={closeBulkDeleteModal}
+        title="Delete templates?"
+        centered
+        styles={{
+          header: { backgroundColor: 'var(--mantine-color-dark-7)' },
+          body: { backgroundColor: 'var(--mantine-color-dark-7)' },
+        }}
+      >
+        <Text size="sm" c="dark.1" mb="lg">
+          Are you sure you want to delete {selectedIds.size} template{selectedIds.size === 1 ? '' : 's'}? This cannot be undone.
+        </Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="subtle" color="gray" onClick={closeBulkDeleteModal}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={handleBulkDelete}>
+            Delete {selectedIds.size} template{selectedIds.size === 1 ? '' : 's'}
+          </Button>
+        </Group>
+      </Modal>
+
+      {/* Single delete confirmation modal */}
+      <Modal
+        opened={deleteModalOpened}
+        onClose={closeDeleteModal}
+        title="Delete template?"
+        centered
+        styles={{
+          header: { backgroundColor: 'var(--mantine-color-dark-7)' },
+          body: { backgroundColor: 'var(--mantine-color-dark-7)' },
+        }}
+      >
+        <Text size="sm" c="dark.1" mb="lg">
+          Are you sure you want to delete this template? This cannot be undone.
+        </Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="subtle" color="gray" onClick={closeDeleteModal}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={handleSingleDelete}>
+            Delete
+          </Button>
+        </Group>
+      </Modal>
+
+      <Box>
       <Group justify="space-between" mb="md">
         <Title order={2} size="lg" fw={600} c="white">
           Library
@@ -612,26 +703,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
                 variant="light"
                 color="red"
                 leftSection={<IconTrash size={14} />}
-                onClick={async () => {
-                  const count = selectedIds.size
-                  if (!confirm(`Delete ${count} template${count === 1 ? '' : 's'}? This cannot be undone.`)) return
-                  const ids = Array.from(selectedIds)
-                  let deleted = 0
-                  for (const id of ids) {
-                    try {
-                      await deleteMutation.mutateAsync({ id })
-                      deleted++
-                    } catch (err) {
-                      console.error(`Failed to delete ${id}:`, err)
-                    }
-                  }
-                  setSelectedIds(new Set())
-                  notifications.show({
-                    title: 'Templates deleted',
-                    message: `Deleted ${deleted} template${deleted === 1 ? '' : 's'}`,
-                    color: 'green',
-                  })
-                }}
+                onClick={openBulkDeleteModal}
               >
                 Delete Selected
               </Button>
@@ -662,8 +734,10 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
       </Group>
       <Box
         style={{
-          columns: '3',
-          columnGap: '1rem',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '1rem',
+          alignItems: 'start',
         }}
       >
         {sortedRows.map((t) => {
@@ -673,9 +747,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
               key={t._id}
               radius="lg"
               withBorder
-              mb="md"
               style={{
-                breakInside: 'avoid',
                 overflow: 'hidden',
                 borderColor: isSelected ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)',
                 backgroundColor: 'var(--mantine-color-dark-7)',
@@ -692,7 +764,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
             >
               <AspectRatio ratio={getAspectRatioValue(t.aspectRatio)}>
                 <Box pos="relative" bg="dark.6" w="100%" h="100%">
-                  <Image src={t.thumbnailUrl} alt="" fit="cover" h="100%" w="100%" loading="lazy" />
+                  <Image src={t.thumbnailUrl} alt={`Template: ${t.aspectRatio}${t.productCategory ? ` - ${t.productCategory}` : ''}`} fit="cover" h="100%" w="100%" loading="lazy" />
                   <StatusBadge status={t.status} error={t.ingestError} />
                   {/* Selection checkbox */}
                   <Checkbox
@@ -702,10 +774,11 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
                     top={8}
                     left={8}
                     size="sm"
+                    aria-label={`Select template ${t.aspectRatio}`}
                     styles={{
                       input: {
                         backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                        borderColor: 'rgba(255, 255, 255, 0.3)',
+                        borderColor: 'rgba(255, 255, 255, 0.5)',
                         cursor: 'pointer',
                       },
                     }}
@@ -715,7 +788,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
               <Box p="md">
                 {/* Dimensions row */}
                 <Group gap={8} wrap="wrap" mb={8}>
-                  <Text size="xs" c="dark.3">
+                  <Text size="xs" c="dark.2">
                     {t.aspectRatio} · {t.width}×{t.height}
                   </Text>
                   {t.subcategory && (
@@ -806,7 +879,8 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
                     color="red"
                     leftSection={<IconTrash size={14} />}
                     onClick={() => {
-                      if (confirm('Delete this template?')) deleteMutation.mutate({ id: t._id })
+                      setTemplateToDelete(t._id)
+                      openDeleteModal()
                     }}
                     loading={deleteMutation.isPending}
                   >
@@ -819,6 +893,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
         })}
       </Box>
     </Box>
+    </>
   )
 }
 
@@ -884,7 +959,7 @@ function StatPill({
       size="lg"
       variant="light"
       color={color || 'gray'}
-      radius="xl"
+      radius="lg"
       px="sm"
     >
       <Group gap={6}>
@@ -893,16 +968,6 @@ function StatPill({
       </Group>
     </Badge>
   )
-}
-
-function getAspectRatioValue(ar: string): number {
-  switch (ar) {
-    case '1:1': return 1
-    case '4:5': return 4 / 5
-    case '9:16': return 9 / 16
-    case '16:9': return 16 / 9
-    default: return 1
-  }
 }
 
 /** Check if template has new structured tags */

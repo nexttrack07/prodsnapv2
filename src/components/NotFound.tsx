@@ -13,11 +13,10 @@ export function NotFound({ children }: { children?: React.ReactNode }) {
           <Group>
             <Button
               onClick={() => window.history.back()}
-              variant="filled"
-              color="teal"
-              tt="uppercase"
-              fw={800}
-              size="sm"
+              variant="light"
+              color="brand"
+              fw={600}
+              size="md"
             >
               Go back
             </Button>
@@ -25,10 +24,9 @@ export function NotFound({ children }: { children?: React.ReactNode }) {
               component={Link}
               to="/"
               variant="filled"
-              color="cyan"
-              tt="uppercase"
-              fw={800}
-              size="sm"
+              color="brand"
+              fw={600}
+              size="md"
             >
               Start Over
             </Button>

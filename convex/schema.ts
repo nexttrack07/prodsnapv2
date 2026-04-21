@@ -74,6 +74,8 @@ const schema = defineSchema({
     imageUrl: v.string(), // R2 URL of uploaded product image
     imageStorageId: v.optional(v.string()), // Convex storage ID if applicable
     status: productStatus,
+    // Owner (Clerk user ID from JWT subject)
+    userId: v.optional(v.string()), // optional for migration of existing data
     // Analysis results (populated after 'analyzing' → 'ready')
     category: v.optional(v.string()),
     productDescription: v.optional(v.string()),
@@ -84,7 +86,8 @@ const schema = defineSchema({
     archivedAt: v.optional(v.number()), // soft delete timestamp
   })
     .index('by_status', ['status'])
-    .index('by_archived', ['archivedAt']),
+    .index('by_archived', ['archivedAt'])
+    .index('by_userId', ['userId']),
 
   // ─── Ad Templates (library of templates for generation) ──────────────────
   adTemplates: defineTable({
@@ -157,6 +160,8 @@ const schema = defineSchema({
   templateGenerations: defineTable({
     // Product-centric model (new)
     productId: v.optional(v.id('products')),
+    // Owner (Clerk user ID from JWT subject)
+    userId: v.optional(v.string()), // optional for migration of existing data
     // Legacy run reference (deprecated, optional for migration)
     runId: v.optional(v.id('studioRuns')),
     templateId: v.id('adTemplates'),
@@ -193,6 +198,7 @@ const schema = defineSchema({
     finishedAt: v.optional(v.number()),
   })
     .index('by_product', ['productId'])
+    .index('by_userId', ['userId'])
     .index('by_run', ['runId']) // legacy, keep for migration
     .index('by_template', ['templateId']),
 })

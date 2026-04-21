@@ -46,7 +46,7 @@ function Home() {
           <Badge
             variant="outline"
             color="gray"
-            radius="xl"
+            radius="lg"
             px="md"
             py={4}
             pl="lg"
@@ -120,7 +120,7 @@ function Home() {
           ].map((s) => (
             <Paper
               key={s.n}
-              radius="xl"
+              radius="lg"
               p="xl"
               withBorder
               style={{

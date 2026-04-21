@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAction } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useEffect, useRef, useState } from 'react'
+import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import {
   Container,
@@ -21,6 +22,7 @@ import {
   Collapse,
   ThemeIcon,
   Accordion,
+  Modal,
 } from '@mantine/core'
 import { IconSparkles, IconX } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
@@ -38,6 +40,7 @@ function AdminPromptsPage() {
   const [exactPrompt, setExactPrompt] = useState('')
   const [remixPrompt, setRemixPrompt] = useState('')
   const [colorAdaptSuffix, setColorAdaptSuffix] = useState('')
+  const [resetModalOpened, { open: openResetModal, close: closeResetModal }] = useDisclosure(false)
   const lastSyncedRef = useRef<{ core: string; e: string; r: string; c: string }>({
     core: '',
     e: '',
@@ -95,7 +98,7 @@ function AdminPromptsPage() {
   }
 
   async function handleReset() {
-    if (!confirm('Reset composer settings to defaults?')) return
+    closeResetModal()
     try {
       await resetMutation.mutateAsync({})
       notifications.show({
@@ -115,7 +118,7 @@ function AdminPromptsPage() {
   return (
     <Container size="md" py={40}>
       <Paper
-        radius="xl"
+        radius="lg"
         p="xl"
         mb="xl"
         style={{
@@ -245,22 +248,45 @@ function AdminPromptsPage() {
         </Accordion.Item>
       </Accordion>
 
+      <Modal
+        opened={resetModalOpened}
+        onClose={closeResetModal}
+        title="Reset to defaults?"
+        centered
+        styles={{
+          header: { backgroundColor: 'var(--mantine-color-dark-7)' },
+          body: { backgroundColor: 'var(--mantine-color-dark-7)' },
+        }}
+      >
+        <Text size="sm" c="dark.1" mb="lg">
+          This will reset all composer settings to their default values. Your current settings will be lost.
+        </Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="subtle" color="gray" onClick={closeResetModal}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={handleReset} loading={resetMutation.isPending}>
+            Reset
+          </Button>
+        </Group>
+      </Modal>
+
       <Group justify="space-between" pt="lg" mt="xl" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
         <Button
           variant="subtle"
           color="gray"
-          onClick={handleReset}
+          onClick={openResetModal}
           loading={resetMutation.isPending}
         >
           Reset to defaults
         </Button>
         <Group gap="md">
           {cfg?.updatedAt ? (
-            <Text size="xs" c="dark.3">
+            <Text size="xs" c="dark.2">
               Last saved {new Date(cfg.updatedAt).toLocaleString()}
             </Text>
           ) : (
-            <Text size="xs" c="dark.3">Using built-in defaults</Text>
+            <Text size="xs" c="dark.2">Using built-in defaults</Text>
           )}
           <Button
             color="brand"
@@ -341,7 +367,7 @@ function PromptField({
             size="sm"
             variant={enhanceOpen ? 'filled' : 'light'}
             color="brand"
-            radius="xl"
+            radius="lg"
             leftSection={<IconSparkles size={10} />}
             style={{ cursor: 'pointer' }}
             onClick={() => setEnhanceOpen((v) => !v)}
@@ -359,7 +385,7 @@ function PromptField({
             </Button>
           )}
         </Group>
-        <Text size="xs" c="dark.3">{value.length} chars</Text>
+        <Text size="xs" c="dark.2">{value.length} chars</Text>
       </Group>
       <Text size="xs" c="dark.2" mb="xs">{description}</Text>
       <Textarea
@@ -419,7 +445,7 @@ function PromptField({
             }}
           />
           <Group justify="space-between" mt="sm">
-            <Text size="xs" c="dark.3">⌘/Ctrl+Enter to submit</Text>
+            <Text size="xs" c="dark.2">⌘/Ctrl+Enter to submit</Text>
             <Button
               size="xs"
               color="brand"
@@ -497,7 +523,7 @@ function PromptFieldContent({
             size="sm"
             variant={enhanceOpen ? 'filled' : 'light'}
             color="brand"
-            radius="xl"
+            radius="lg"
             leftSection={<IconSparkles size={10} />}
             style={{ cursor: 'pointer' }}
             onClick={() => setEnhanceOpen((v) => !v)}
@@ -515,7 +541,7 @@ function PromptFieldContent({
             </Button>
           )}
         </Group>
-        <Text size="xs" c="dark.3">{value.length} chars</Text>
+        <Text size="xs" c="dark.2">{value.length} chars</Text>
       </Group>
       <Textarea
         value={value}
@@ -575,7 +601,7 @@ function PromptFieldContent({
             }}
           />
           <Group justify="space-between" mt="sm">
-            <Text size="xs" c="dark.3">⌘/Ctrl+Enter to submit</Text>
+            <Text size="xs" c="dark.2">⌘/Ctrl+Enter to submit</Text>
             <Button
               size="xs"
               color="brand"

@@ -2,8 +2,9 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAction } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { notifications } from '@mantine/notifications'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   Container,
   Title,
@@ -18,41 +19,39 @@ import {
   Box,
   Image,
   Badge,
-  FileButton,
   ThemeIcon,
   AspectRatio,
   LoadingOverlay,
+  Progress,
 } from '@mantine/core'
-import { IconUpload, IconPackage } from '@tabler/icons-react'
+import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
+import { IconUpload, IconPhoto, IconX } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import { capitalizeWords } from '../utils/strings'
+import { MAX_PRODUCT_IMAGE_SIZE } from '../utils/constants'
 
 export const Route = createFileRoute('/studio/')({
   component: ProductGridPage,
 })
 
 function ProductGridPage() {
+  const isMobile = useMediaQuery('(max-width: 768px)')
   const navigate = useNavigate()
   const { data: products, isLoading } = useQuery(convexQuery(api.products.listProducts, {}))
 
-  const uploadAction = useAction(api.r2.uploadProductImage)
+  const getUploadUrl = useAction(api.r2.getUploadUrl)
   const createProduct = useConvexMutation(api.products.createProduct)
   const createProductMutation = useMutation({ mutationFn: createProduct })
 
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
-  async function handleFileChange(file: File | null) {
+  async function handleFileDrop(files: File[]) {
+    const file = files[0]
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
-      notifications.show({
-        title: 'Invalid file',
-        message: 'Please upload an image file',
-        color: 'red',
-      })
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > MAX_PRODUCT_IMAGE_SIZE) {
       notifications.show({
         title: 'File too large',
         message: 'Image must be under 10 MB',
@@ -62,23 +61,39 @@ function ProductGridPage() {
     }
 
     setIsUploading(true)
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''),
-      )
+    setUploadProgress(5) // Start immediately for perceived responsiveness
 
-      const fileName = file.name.replace(/\.[^.]+$/, '')
-      const { url } = await uploadAction({
+    try {
+      // Get presigned URL - 5-20%
+      setUploadProgress(10)
+      const { uploadUrl, publicUrl } = await getUploadUrl({
         name: file.name,
-        base64,
         contentType: file.type,
       })
+      setUploadProgress(20)
 
+      // Upload directly to R2 - 20-70%
+      setUploadProgress(30)
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      })
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.status}`)
+      }
+      setUploadProgress(70)
+
+      // Creating product - 70-100%
+      setUploadProgress(80)
+      const fileName = file.name.replace(/\.[^.]+$/, '')
       const productId = await createProductMutation.mutateAsync({
-        imageUrl: url,
+        imageUrl: publicUrl,
         name: fileName.replace(/[-_]/g, ' '),
       })
+      setUploadProgress(100)
 
       notifications.show({
         title: 'Success',
@@ -94,6 +109,7 @@ function ProductGridPage() {
       })
     } finally {
       setIsUploading(false)
+      setUploadProgress(0)
     }
   }
 
@@ -102,40 +118,64 @@ function ProductGridPage() {
   return (
     <Container size="lg" py="xl">
       <Paper
-        radius="xl"
-        p="xl"
+        radius="lg"
+        p={isMobile ? 'md' : 'xl'}
         mb="xl"
         style={{
           background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.15) 0%, rgba(84, 116, 180, 0.05) 100%)',
           border: '1px solid var(--mantine-color-dark-5)',
         }}
       >
-        <Group justify="space-between" align="center">
-          <Box>
-            <Title order={1} fz={36} fw={600} c="white">
-              My Products
-            </Title>
-            <Text size="lg" c="dark.2" mt={8}>
-              Upload product photos and generate ad creatives.
-            </Text>
-          </Box>
-          <FileButton onChange={handleFileChange} accept="image/*" disabled={isUploading}>
-            {(props) => (
+        <Stack gap={isMobile ? 'md' : 'sm'}>
+          <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+            <Box>
+              <Title order={1} fz={isMobile ? 24 : 36} fw={600} c="white">
+                My Products
+              </Title>
+              <Text size={isMobile ? 'md' : 'lg'} c="dark.2" mt={8}>
+                Upload product photos and generate ad creatives.
+              </Text>
+            </Box>
+            <Dropzone
+              onDrop={handleFileDrop}
+              accept={IMAGE_MIME_TYPE}
+              maxSize={MAX_PRODUCT_IMAGE_SIZE}
+              multiple={false}
+              disabled={isUploading}
+              data-testid="upload-dropzone"
+              style={{
+                border: 'none',
+                background: 'none',
+                padding: 0,
+                minHeight: 'auto',
+              }}
+            >
               <Button
-                {...props}
                 leftSection={<IconUpload size={18} />}
-                size="lg"
+                size={isMobile ? 'md' : 'lg'}
                 color="brand"
                 loading={isUploading}
+                fullWidth={isMobile}
                 style={{
                   boxShadow: '0 4px 20px rgba(84, 116, 180, 0.3)',
+                  pointerEvents: 'none',
                 }}
               >
                 {isUploading ? 'Uploading...' : 'New Product'}
               </Button>
-            )}
-          </FileButton>
-        </Group>
+            </Dropzone>
+          </Group>
+          {isUploading && (
+            <Progress
+              value={uploadProgress}
+              size="sm"
+              radius="lg"
+              color="brand"
+              animated
+              striped={uploadProgress < 100}
+            />
+          )}
+        </Stack>
       </Paper>
 
       {isLoading ? (
@@ -143,7 +183,7 @@ function ProductGridPage() {
           <Loader size="lg" color="dark.6" />
         </Center>
       ) : !hasProducts ? (
-        <EmptyState onUpload={handleFileChange} isUploading={isUploading} />
+        <EmptyState onUpload={handleFileDrop} isUploading={isUploading} uploadProgress={uploadProgress} />
       ) : (
         <ProductGrid products={products} />
       )}
@@ -154,16 +194,21 @@ function ProductGridPage() {
 function EmptyState({
   onUpload,
   isUploading,
+  uploadProgress,
 }: {
-  onUpload: (file: File | null) => void
+  onUpload: (files: File[]) => void
   isUploading: boolean
+  uploadProgress: number
 }) {
   return (
-    <Paper
-      radius="xl"
+    <Dropzone
+      onDrop={onUpload}
+      accept={IMAGE_MIME_TYPE}
+      maxSize={MAX_PRODUCT_IMAGE_SIZE}
+      multiple={false}
+      disabled={isUploading}
+      radius="lg"
       p={64}
-      ta="center"
-      withBorder
       style={{
         borderStyle: 'dashed',
         borderWidth: 2,
@@ -171,41 +216,80 @@ function EmptyState({
         background: 'linear-gradient(180deg, rgba(84, 116, 180, 0.08) 0%, transparent 100%)',
       }}
     >
-      <ThemeIcon
-        size={80}
-        radius="xl"
-        variant="gradient"
-        gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
-        mx="auto"
-        mb="lg"
-        style={{ boxShadow: '0 8px 32px rgba(84, 116, 180, 0.25)' }}
-      >
-        <IconPackage size={40} />
-      </ThemeIcon>
-      <Title order={2} fw={600} c="white" mb={8}>
-        No products yet
-      </Title>
-      <Text c="dark.2" size="lg" maw={440} mx="auto" mb="xl">
-        Upload your first product photo to get started. We'll analyze it and help you generate
-        stunning ad creatives.
-      </Text>
-      <FileButton onChange={onUpload} accept="image/*" disabled={isUploading}>
-        {(props) => (
+      <Stack align="center" gap="md">
+        <Dropzone.Accept>
+          <ThemeIcon
+            size={80}
+            radius="lg"
+            variant="gradient"
+            gradient={{ from: 'green.7', to: 'green.5', deg: 135 }}
+            style={{ boxShadow: '0 8px 32px rgba(34, 139, 34, 0.25)' }}
+          >
+            <IconUpload size={40} />
+          </ThemeIcon>
+        </Dropzone.Accept>
+        <Dropzone.Reject>
+          <ThemeIcon
+            size={80}
+            radius="lg"
+            variant="gradient"
+            gradient={{ from: 'red.7', to: 'red.5', deg: 135 }}
+            style={{ boxShadow: '0 8px 32px rgba(220, 53, 69, 0.25)' }}
+          >
+            <IconX size={40} />
+          </ThemeIcon>
+        </Dropzone.Reject>
+        <Dropzone.Idle>
+          <ThemeIcon
+            size={80}
+            radius="lg"
+            variant="gradient"
+            gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+            className="empty-state-icon"
+            style={{ boxShadow: '0 8px 32px rgba(84, 116, 180, 0.25)' }}
+          >
+            <IconPhoto size={40} />
+          </ThemeIcon>
+        </Dropzone.Idle>
+
+        <Title order={2} fw={600} c="white">
+          {isUploading ? 'Uploading...' : 'No products yet'}
+        </Title>
+        <Text c="dark.2" size="lg" maw={440} ta="center">
+          {isUploading
+            ? 'Please wait while we process your image'
+            : 'Drag & drop a product photo here, or click to browse. We\'ll analyze it and help you generate stunning ad creatives.'}
+        </Text>
+
+        {isUploading ? (
+          <Box w="100%" maw={300}>
+            <Progress
+              value={uploadProgress}
+              size="md"
+              radius="lg"
+              color="brand"
+              animated
+              striped={uploadProgress < 100}
+            />
+            <Text size="sm" c="dark.2" ta="center" mt="xs">
+              {uploadProgress}% complete
+            </Text>
+          </Box>
+        ) : (
           <Button
-            {...props}
             leftSection={<IconUpload size={18} />}
             size="lg"
             color="brand"
-            loading={isUploading}
             style={{
               boxShadow: '0 4px 20px rgba(84, 116, 180, 0.3)',
+              pointerEvents: 'none',
             }}
           >
-            {isUploading ? 'Uploading...' : 'Upload Your First Product'}
+            Upload Your First Product
           </Button>
         )}
-      </FileButton>
-    </Paper>
+      </Stack>
+    </Dropzone>
   )
 }
 
@@ -229,13 +313,6 @@ function ProductGrid({ products }: { products: ProductData[] }) {
   )
 }
 
-function capitalizeWords(str: string): string {
-  return str
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ')
-}
-
 function formatDate(timestamp: number): string {
   const date = new Date(timestamp)
   const now = new Date()
@@ -251,20 +328,22 @@ function formatDate(timestamp: number): string {
 
 function ProductCard({ product }: { product: ProductData }) {
   return (
-    <Paper
-      component={Link}
+    <Link
       to="/studio/$productId"
-      params={{ productId: product._id } as any}
-      radius="lg"
-      withBorder
-      className="product-card-hover"
-      style={{
-        overflow: 'hidden',
-        textDecoration: 'none',
-        borderColor: 'var(--mantine-color-dark-5)',
-        backgroundColor: 'var(--mantine-color-dark-7)',
-      }}
+      params={{ productId: product._id }}
+      style={{ textDecoration: 'none' }}
+      data-testid={`product-card-${product._id}`}
     >
+      <Paper
+        radius="lg"
+        withBorder
+        className="product-card-hover"
+        style={{
+          overflow: 'hidden',
+          borderColor: 'var(--mantine-color-dark-5)',
+          backgroundColor: 'var(--mantine-color-dark-7)',
+        }}
+      >
       <AspectRatio ratio={4 / 3}>
         <Box
           pos="relative"
@@ -333,6 +412,7 @@ function ProductCard({ product }: { product: ProductData }) {
           </Text>
         </Group>
       </Box>
-    </Paper>
+      </Paper>
+    </Link>
   )
 }

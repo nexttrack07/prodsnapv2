@@ -6,10 +6,35 @@ import {
   internalQuery,
   mutation,
   query,
+  type QueryCtx,
+  type MutationCtx,
 } from './_generated/server'
 import { internal } from './_generated/api'
 import { workflow } from './studio'
 import type { Id } from './_generated/dataModel'
+
+// ─── Auth helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Gets the authenticated user's ID from Clerk JWT.
+ * Throws if user is not authenticated.
+ */
+async function requireAuth(ctx: QueryCtx | MutationCtx): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) {
+    throw new Error('Not authenticated')
+  }
+  // Use tokenIdentifier for unique user ID (includes issuer + subject)
+  return identity.tokenIdentifier
+}
+
+/**
+ * Gets the authenticated user's ID, or null if not authenticated.
+ */
+async function getAuthUserId(ctx: QueryCtx | MutationCtx): Promise<string | null> {
+  const identity = await ctx.auth.getUserIdentity()
+  return identity?.tokenIdentifier ?? null
+}
 
 const aspectRatioValidator = v.union(
   v.literal('1:1'),
@@ -22,6 +47,7 @@ const aspectRatioValidator = v.union(
 /**
  * Creates a new product from an uploaded image. Triggers analysis automatically.
  * The product name defaults to a cleaned-up version of the filename.
+ * Requires authentication.
  */
 export const createProduct = mutation({
   args: {
@@ -30,6 +56,8 @@ export const createProduct = mutation({
     imageStorageId: v.optional(v.string()),
   },
   handler: async (ctx, { imageUrl, name, imageStorageId }) => {
+    const userId = await requireAuth(ctx)
+
     // Default name from URL if not provided (extract filename, clean up)
     const defaultName = name || deriveNameFromUrl(imageUrl)
 
@@ -38,6 +66,7 @@ export const createProduct = mutation({
       imageUrl,
       imageStorageId,
       status: 'analyzing',
+      userId,
     })
 
     // Fire-and-forget analysis — flips product to 'ready' or 'failed'.
@@ -126,8 +155,11 @@ export const markProductFailed = internalMutation({
 export const getProduct = query({
   args: { productId: v.id('products') },
   handler: async (ctx, { productId }) => {
+    const userId = await getAuthUserId(ctx)
     const product = await ctx.db.get(productId)
     if (!product || product.archivedAt) return null
+    // Only return product if user owns it (or it's legacy data without userId)
+    if (product.userId && product.userId !== userId) return null
     return product
   },
 })
@@ -138,14 +170,20 @@ export const getProductInternal = internalQuery({
 })
 
 /**
- * Lists all non-archived products, newest first.
+ * Lists all non-archived products for the authenticated user, newest first.
  * Includes generation count for each product.
+ * Returns empty array if not authenticated.
  */
 export const listProducts = query({
   args: {},
   handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return []
+
+    // Use index for efficient user-scoped queries
     const products = await ctx.db
       .query('products')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
       .filter((q) => q.eq(q.field('archivedAt'), undefined))
       .order('desc')
       .collect()
@@ -170,12 +208,16 @@ export const listProducts = query({
 
 /**
  * Gets a product with its generation count.
+ * Only returns the product if the authenticated user owns it.
  */
 export const getProductWithStats = query({
   args: { productId: v.id('products') },
   handler: async (ctx, { productId }) => {
+    const userId = await getAuthUserId(ctx)
     const product = await ctx.db.get(productId)
     if (!product || product.archivedAt) return null
+    // Only return product if user owns it (or it's legacy data without userId)
+    if (product.userId && product.userId !== userId) return null
 
     const generations = await ctx.db
       .query('templateGenerations')
@@ -196,6 +238,7 @@ export const getProductWithStats = query({
 
 /**
  * Updates product fields (name, description, audience).
+ * Requires authentication and ownership.
  */
 export const updateProduct = mutation({
   args: {
@@ -205,6 +248,13 @@ export const updateProduct = mutation({
     targetAudience: v.optional(v.string()),
   },
   handler: async (ctx, { productId, name, productDescription, targetAudience }) => {
+    const userId = await requireAuth(ctx)
+    const product = await ctx.db.get(productId)
+    if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to update this product')
+    }
+
     const patch: Record<string, string> = {}
     if (name !== undefined) patch.name = name
     if (productDescription !== undefined) patch.productDescription = productDescription
@@ -217,12 +267,17 @@ export const updateProduct = mutation({
 
 /**
  * Re-runs product analysis on an existing product.
+ * Requires authentication and ownership.
  */
 export const reanalyzeProduct = mutation({
   args: { productId: v.id('products') },
   handler: async (ctx, { productId }) => {
+    const userId = await requireAuth(ctx)
     const product = await ctx.db.get(productId)
     if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to reanalyze this product')
+    }
     if (product.archivedAt) throw new Error('Cannot reanalyze archived product')
 
     await ctx.db.patch(productId, {
@@ -237,12 +292,17 @@ export const reanalyzeProduct = mutation({
 
 /**
  * Soft-deletes a product by setting archivedAt timestamp.
+ * Requires authentication and ownership.
  */
 export const archiveProduct = mutation({
   args: { productId: v.id('products') },
   handler: async (ctx, { productId }) => {
+    const userId = await requireAuth(ctx)
     const product = await ctx.db.get(productId)
     if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to archive this product')
+    }
     if (product.archivedAt) return // Already archived
 
     await ctx.db.patch(productId, { archivedAt: Date.now() })
@@ -251,12 +311,17 @@ export const archiveProduct = mutation({
 
 /**
  * Restores an archived product.
+ * Requires authentication and ownership.
  */
 export const restoreProduct = mutation({
   args: { productId: v.id('products') },
   handler: async (ctx, { productId }) => {
+    const userId = await requireAuth(ctx)
     const product = await ctx.db.get(productId)
     if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to restore this product')
+    }
     if (!product.archivedAt) return // Not archived
 
     await ctx.db.patch(productId, { archivedAt: undefined })
@@ -267,10 +332,17 @@ export const restoreProduct = mutation({
 
 /**
  * Gets all generations for a product, newest first.
+ * Requires authentication and product ownership.
  */
 export const getProductGenerations = query({
   args: { productId: v.id('products') },
   handler: async (ctx, { productId }) => {
+    const userId = await getAuthUserId(ctx)
+    // Verify product ownership
+    const product = await ctx.db.get(productId)
+    if (!product) return []
+    if (product.userId && product.userId !== userId) return []
+
     const generations = await ctx.db
       .query('templateGenerations')
       .withIndex('by_product', (q) => q.eq('productId', productId))
@@ -282,12 +354,23 @@ export const getProductGenerations = query({
 
 /**
  * Deletes a generation.
+ * Requires authentication and ownership of the parent product.
  */
 export const deleteGeneration = mutation({
   args: { generationId: v.id('templateGenerations') },
   handler: async (ctx, { generationId }) => {
+    const userId = await requireAuth(ctx)
     const generation = await ctx.db.get(generationId)
     if (!generation) throw new Error('Generation not found')
+
+    // Verify ownership via the parent product
+    if (generation.productId) {
+      const product = await ctx.db.get(generation.productId)
+      if (product?.userId && product.userId !== userId) {
+        throw new Error('Not authorized to delete this generation')
+      }
+    }
+
     await ctx.db.delete(generationId)
   },
 })
@@ -297,6 +380,7 @@ export const deleteGeneration = mutation({
 /**
  * Submits a generation request for a product with selected templates.
  * This is the product-centric equivalent of studio.submitRun.
+ * Requires authentication and product ownership.
  */
 export const generateFromProduct = mutation({
   args: {
@@ -308,6 +392,8 @@ export const generateFromProduct = mutation({
     aspectRatio: aspectRatioValidator,
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx)
+
     if (args.templateIds.length === 0) throw new Error('No templates selected')
     if (args.templateIds.length > 3) throw new Error('At most 3 templates')
     if (args.variationsPerTemplate < 1 || args.variationsPerTemplate > 4) {
@@ -316,6 +402,9 @@ export const generateFromProduct = mutation({
 
     const product = await ctx.db.get(args.productId)
     if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to generate from this product')
+    }
     if (product.status !== 'ready') {
       throw new Error(`Product not ready (status=${product.status})`)
     }
@@ -337,6 +426,7 @@ export const generateFromProduct = mutation({
       for (let v = 0; v < args.variationsPerTemplate; v++) {
         const genId = await ctx.db.insert('templateGenerations', {
           productId: args.productId,
+          userId, // Store userId on generation for efficient queries
           templateId,
           productImageUrl: product.imageUrl,
           templateImageUrl: tpl.imageUrl,
@@ -406,6 +496,7 @@ export const listTemplates = query({
 /**
  * Generate variations from an existing generated image.
  * User can choose to change text, icons, and/or colors.
+ * Requires authentication and product ownership.
  */
 export const generateVariations = mutation({
   args: {
@@ -419,6 +510,15 @@ export const generateVariations = mutation({
     variationCount: v.number(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx)
+
+    // Verify product ownership
+    const product = await ctx.db.get(args.productId)
+    if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to create variations for this product')
+    }
+
     if (args.variationCount < 1 || args.variationCount > 3) {
       throw new Error('Variation count must be 1-3')
     }
@@ -435,6 +535,7 @@ export const generateVariations = mutation({
     for (let i = 0; i < args.variationCount; i++) {
       const genId = await ctx.db.insert('templateGenerations', {
         productId: args.productId,
+        userId, // Store userId on generation for efficient queries
         templateId: sourceGen.templateId,
         productImageUrl: args.productImageUrl,
         templateImageUrl: args.sourceImageUrl, // Use the generated image as the "template"

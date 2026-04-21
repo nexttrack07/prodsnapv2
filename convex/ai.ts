@@ -7,6 +7,15 @@ import { action, internalAction } from './_generated/server'
 import { internal } from './_generated/api'
 import { uploadFromUrl } from './r2'
 import { nanoid } from 'nanoid'
+import {
+  isTestMode,
+  mockVisionResponse,
+  mockTemplateTags,
+  mockComposedPrompt,
+  mockVariationPrompt,
+  mockGeneratedImageUrl,
+  mockDelay,
+} from './testMocks'
 
 // Configure fal client with API key
 fal.config({ credentials: process.env.FAL_KEY })
@@ -187,6 +196,12 @@ const productAnalysisSchema = z.object({
 export const analyzeProduct = internalAction({
   args: { imageUrl: v.string() },
   handler: async (_ctx, { imageUrl }) => {
+    // Test mode: return mock response without calling AI
+    if (isTestMode()) {
+      await mockDelay()
+      return mockVisionResponse
+    }
+
     const analysisText = await callVision({
       imageUrls: [imageUrl],
       prompt: `Analyze this product image and return a JSON object with these exact fields:
@@ -229,6 +244,22 @@ const structuredTagsSchema = z.object({
 export const computeTemplateTags = internalAction({
   args: { imageUrl: v.string() },
   handler: async (_ctx, { imageUrl }) => {
+    // Test mode: return mock tags without calling AI
+    if (isTestMode()) {
+      await mockDelay()
+      return {
+        productCategory: 'electronics' as const,
+        primaryColor: 'neutral' as const,
+        imageStyle: 'product-hero' as const,
+        setting: 'studio' as const,
+        composition: 'centered' as const,
+        textAmount: 'minimal-text' as const,
+        subcategory: 'test-product',
+        sceneDescription: 'A clean studio shot with soft lighting and minimal props for testing purposes.',
+        moods: ['minimal' as const],
+      }
+    }
+
     const response = await callVision({
       imageUrls: [imageUrl],
       prompt: `Classify this product ad image for a template library.
@@ -282,6 +313,12 @@ export const composePrompt = internalAction({
     ctx,
     { generationId },
   ): Promise<{ prompt: string }> => {
+    // Test mode: return mock prompt without calling AI
+    if (isTestMode()) {
+      await mockDelay()
+      return { prompt: mockComposedPrompt }
+    }
+
     const ctxData = await ctx.runQuery(internal.studio.getGenerationContextInternal, {
       generationId,
     })
@@ -350,6 +387,12 @@ export const generateFromTemplate = internalAction({
     ctx,
     { generationId },
   ): Promise<{ outputUrl: string }> => {
+    // Test mode: return mock image URL without calling AI
+    if (isTestMode()) {
+      await mockDelay(500) // Simulate longer generation time
+      return { outputUrl: mockGeneratedImageUrl }
+    }
+
     const ctxData = await ctx.runQuery(internal.studio.getGenerationContextInternal, {
       generationId,
     })
@@ -401,6 +444,12 @@ export const generateFromTemplate = internalAction({
 export const composeVariationPrompt = internalAction({
   args: { generationId: v.id('templateGenerations') },
   handler: async (ctx, { generationId }): Promise<{ prompt: string }> => {
+    // Test mode: return mock prompt without calling AI
+    if (isTestMode()) {
+      await mockDelay()
+      return { prompt: mockVariationPrompt }
+    }
+
     const gen = await ctx.runQuery(internal.studio.getGenerationInternal, { generationId })
     if (!gen) throw new Error('Generation not found')
     if (!gen.variationSource) throw new Error('Not a variation generation')
@@ -450,6 +499,12 @@ export const composeVariationPrompt = internalAction({
 export const generateVariation = internalAction({
   args: { generationId: v.id('templateGenerations') },
   handler: async (ctx, { generationId }): Promise<{ outputUrl: string }> => {
+    // Test mode: return mock image URL without calling AI
+    if (isTestMode()) {
+      await mockDelay(500) // Simulate longer generation time
+      return { outputUrl: mockGeneratedImageUrl }
+    }
+
     const gen = await ctx.runQuery(internal.studio.getGenerationInternal, { generationId })
     if (!gen) throw new Error('Generation not found')
     if (!gen.dynamicPrompt) throw new Error('Dynamic prompt missing')

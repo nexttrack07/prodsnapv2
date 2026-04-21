@@ -17,6 +17,9 @@ import type * as prompts from "../prompts.js";
 import type * as r2 from "../r2.js";
 import type * as studio from "../studio.js";
 import type * as templates from "../templates.js";
+import type * as testMocks from "../testMocks.js";
+import type * as testing_cleanup from "../testing/cleanup.js";
+import type * as testing_seed from "../testing/seed.js";
 
 import type {
   ApiFromModules,
@@ -34,6 +37,9 @@ declare const fullApi: ApiFromModules<{
   r2: typeof r2;
   studio: typeof studio;
   templates: typeof templates;
+  testMocks: typeof testMocks;
+  "testing/cleanup": typeof testing_cleanup;
+  "testing/seed": typeof testing_seed;
 }>;
 
 /**

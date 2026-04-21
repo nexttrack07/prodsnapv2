@@ -10,7 +10,7 @@ function AdminIndex() {
   return (
     <Container size="lg" py={48}>
       <Paper
-        radius="xl"
+        radius="lg"
         p="xl"
         mb={40}
         style={{
@@ -59,7 +59,7 @@ function AdminCard({
     <Paper
       component={Link}
       to={to}
-      radius="xl"
+      radius="lg"
       p="xl"
       withBorder
       style={{
@@ -83,7 +83,7 @@ function AdminCard({
     >
       <ThemeIcon
         size={52}
-        radius="xl"
+        radius="lg"
         variant="gradient"
         gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
         mb="lg"

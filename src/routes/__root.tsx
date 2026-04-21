@@ -20,7 +20,13 @@ import {
   Loader,
   Box,
   Button,
+  Burger,
+  Drawer,
+  Stack,
+  Divider,
+  Text,
 } from '@mantine/core'
+import { useDisclosure, useMediaQuery } from '@mantine/hooks'
 import { Notifications } from '@mantine/notifications'
 import type { QueryClient } from '@tanstack/react-query'
 import { SignInButton, UserButton } from '@clerk/react'
@@ -111,6 +117,9 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const [mobileNavOpened, { toggle: toggleMobileNav, close: closeMobileNav }] = useDisclosure(false)
+
   return (
     <html lang="en">
       <head>
@@ -118,7 +127,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <MantineProvider theme={theme} forceColorScheme="dark">
-          <Notifications position="bottom-right" />
+          <Notifications position={isMobile ? 'top-center' : 'bottom-right'} />
           <AppShell
             header={{ height: 64 }}
             padding={0}
@@ -133,9 +142,19 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               <Container size="xl" h="100%">
                 <Group h="100%" justify="space-between">
                   <Group gap="xl">
+                    {/* Mobile hamburger menu - hidden on desktop */}
+                    <Burger
+                      opened={mobileNavOpened}
+                      onClick={toggleMobileNav}
+                      hiddenFrom="sm"
+                      size="sm"
+                      color="var(--mantine-color-dark-1)"
+                      aria-label="Toggle navigation"
+                    />
                     <Anchor component={Link} to="/" underline="never" aria-label="ProdSnap home">
                       <Logo size="md" />
                     </Anchor>
+                    {/* Desktop navigation - hidden on mobile */}
                     <Group gap={4} visibleFrom="sm">
                       <NavLink to="/">Home</NavLink>
                       <NavLink to="/studio">Studio</NavLink>
@@ -173,6 +192,38 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             </AppShell.Main>
           </AppShell>
 
+          {/* Mobile navigation drawer - only renders on mobile */}
+          <Drawer
+            opened={mobileNavOpened}
+            onClose={closeMobileNav}
+            size="xs"
+            padding="md"
+            hiddenFrom="sm"
+            title={<Logo size="sm" />}
+            styles={{
+              header: {
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderBottom: '1px solid var(--mantine-color-dark-5)',
+              },
+              body: {
+                backgroundColor: 'var(--mantine-color-dark-7)',
+              },
+              overlay: {
+                backdropFilter: 'blur(4px)',
+              },
+            }}
+          >
+            <Stack gap="xs">
+              <MobileNavLink to="/" onClick={closeMobileNav}>Home</MobileNavLink>
+              <MobileNavLink to="/studio" onClick={closeMobileNav}>Studio</MobileNavLink>
+              <MobileNavLink to="/admin" onClick={closeMobileNav}>Admin</MobileNavLink>
+              <Divider my="sm" color="dark.5" />
+              <Text size="xs" c="dark.2" px="md">
+                Pro-quality product photos in a snap
+              </Text>
+            </Stack>
+          </Drawer>
+
           <ReactQueryDevtools />
           <TanStackRouterDevtools position="bottom-right" />
         </MantineProvider>
@@ -183,6 +234,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const isActive = to === '/' ? pathname === '/' : pathname.startsWith(to)
+
   return (
     <Anchor
       component={Link}
@@ -192,7 +246,8 @@ function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
       py={6}
       fz="sm"
       fw={500}
-      c="dark.1"
+      c={isActive ? 'white' : 'dark.1'}
+      bg={isActive ? 'dark.6' : undefined}
       style={{
         borderRadius: 'var(--mantine-radius-md)',
         transition: 'background-color 150ms ease, color 150ms ease',
@@ -202,6 +257,40 @@ function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
           '&:hover': {
             backgroundColor: 'var(--mantine-color-dark-6)',
             color: 'white',
+          },
+        },
+      }}
+    >
+      {children}
+    </Anchor>
+  )
+}
+
+function MobileNavLink({ to, children, onClick }: { to: string; children: React.ReactNode; onClick: () => void }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const isActive = to === '/' ? pathname === '/' : pathname.startsWith(to)
+
+  return (
+    <Anchor
+      component={Link}
+      to={to}
+      onClick={onClick}
+      underline="never"
+      px="md"
+      py="sm"
+      fz="md"
+      fw={isActive ? 600 : 500}
+      c={isActive ? 'white' : 'dark.0'}
+      bg={isActive ? 'dark.6' : undefined}
+      display="block"
+      style={{
+        borderRadius: 'var(--mantine-radius-md)',
+        transition: 'background-color 150ms ease',
+      }}
+      styles={{
+        root: {
+          '&:hover': {
+            backgroundColor: 'var(--mantine-color-dark-6)',
           },
         },
       }}

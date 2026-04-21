@@ -31,10 +31,6 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
-.using-mouse * {
-  outline: none !important;
-}
-
 /* Subtle radial gradient used on empty/hero sections */
 .bg-radial-fade {
   background-image: radial-gradient(
@@ -56,9 +52,13 @@ h1, h2, h3, h4, h5, h6 {
   cursor: pointer;
 }
 
+.generation-card-hover .generation-card-overlay {
+  transition: background-color 200ms ease, opacity 200ms ease;
+}
+
 .generation-card-hover:hover .generation-card-overlay {
-  background-color: rgba(0, 0, 0, 0.5) !important;
-  opacity: 1 !important;
+  background-color: rgba(0, 0, 0, 0.5);
+  opacity: 1;
 }
 
 /* Product card hover effects */
@@ -70,6 +70,30 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--mantine-color-dark-4) !important;
   box-shadow: 0 8px 32px rgba(84, 116, 180, 0.15) !important;
   transform: translateY(-2px);
+}
+
+.product-card-hover:focus-visible {
+  outline: 2px solid var(--mantine-color-brand-5);
+  outline-offset: 2px;
+}
+
+/* Template selection click feedback */
+.template-card-selectable {
+  transition: transform 150ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.template-card-selectable:active {
+  transform: scale(0.97);
+}
+
+/* Empty state icon animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.empty-state-icon {
+  animation: float 3s ease-in-out infinite;
 }
 
 /* Subtle glow effect for brand elements */
@@ -103,4 +127,48 @@ img {
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+}
+
+/* ─── Mobile Safe Areas (iPhone notch/home indicator) ───────────────────────── */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Add bottom padding for fixed elements to clear home indicator */
+  .mantine-AppShell-main {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ─── Mobile Touch Feedback ───────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Better touch targets */
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Active states for touch */
+  .product-card-hover:active {
+    transform: scale(0.98);
+    transition: transform 100ms ease !important;
+  }
+
+  .generation-card-hover:active {
+    transform: scale(0.98);
+    transition: transform 100ms ease !important;
+  }
+
+  /* Prevent text selection on touch */
+  .mantine-Button-root,
+  .mantine-SegmentedControl-root {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Smoother scrolling on mobile */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
 }

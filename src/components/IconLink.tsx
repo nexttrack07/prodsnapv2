@@ -12,7 +12,7 @@ export function IconLink({
   return (
     <Anchor href={href} underline="never">
       <Stack align="center" gap={8}>
-        <Image src={icon} h={32} w={32} radius="xl" />
+        <Image src={icon} h={32} w={32} radius="lg" />
         <Text size="xs" tt="uppercase" fw={700} c="gray.6" ta="center">
           {label}
         </Text>
