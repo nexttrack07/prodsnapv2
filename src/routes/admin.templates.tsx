@@ -354,32 +354,35 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   useEffect(() => {
     if (retaggingIds.size === 0 || !retagNotifIdRef.current) return
 
-    // Count how many tracked templates are still processing vs completed
+    // Count status of tracked templates
     const tracked = rows.filter((r) => retaggingIds.has(r._id))
-    const completed = tracked.filter((r) => r.status === 'published' || r.status === 'failed')
-    const succeeded = tracked.filter((r) => r.status === 'published')
-    const failed = tracked.filter((r) => r.status === 'failed')
-    const pending = tracked.filter((r) => r.status === 'pending' || r.status === 'ingesting')
-
     const total = retagTotalRef.current
 
-    if (pending.length === 0 && completed.length > 0) {
-      // All done
-      if (failed.length === 0) {
+    // Detailed status breakdown
+    const ingesting = tracked.filter((r) => r.status === 'ingesting').length
+    const pending = tracked.filter((r) => r.status === 'pending').length
+    const succeeded = tracked.filter((r) => r.status === 'published').length
+    const failed = tracked.filter((r) => r.status === 'failed').length
+    const completed = succeeded + failed
+    const processing = ingesting + pending
+
+    // All done?
+    if (processing === 0 && completed === total) {
+      if (failed === 0) {
         notifications.update({
           id: retagNotifIdRef.current,
           title: 'Re-tagging complete',
-          message: `Successfully tagged ${succeeded.length} template${succeeded.length === 1 ? '' : 's'}`,
+          message: `Successfully tagged ${succeeded} template${succeeded === 1 ? '' : 's'}`,
           color: 'green',
           loading: false,
           autoClose: 5000,
           withCloseButton: true,
         })
-      } else if (succeeded.length > 0) {
+      } else if (succeeded > 0) {
         notifications.update({
           id: retagNotifIdRef.current,
           title: 'Re-tagging partially complete',
-          message: `${succeeded.length} succeeded, ${failed.length} failed`,
+          message: `${succeeded} succeeded, ${failed} failed`,
           color: 'yellow',
           loading: false,
           autoClose: 5000,
@@ -389,7 +392,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
         notifications.update({
           id: retagNotifIdRef.current,
           title: 'Re-tagging failed',
-          message: `All ${failed.length} template${failed.length === 1 ? '' : 's'} failed`,
+          message: `All ${failed} template${failed === 1 ? '' : 's'} failed`,
           color: 'red',
           loading: false,
           autoClose: 5000,
@@ -400,12 +403,19 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
       setRetaggingIds(new Set())
       retagNotifIdRef.current = null
       retagTotalRef.current = 0
-    } else if (completed.length > 0) {
-      // Still in progress, update count
+    } else {
+      // Still in progress - show detailed status
+      let statusText = ''
+      if (ingesting > 0) {
+        statusText = `Analyzing ${ingesting} image${ingesting === 1 ? '' : 's'}...`
+      } else if (pending > 0) {
+        statusText = `Queued: ${pending}`
+      }
+
       notifications.update({
         id: retagNotifIdRef.current,
-        title: 'Re-tagging templates',
-        message: `${completed.length}/${total} completed (${pending.length} processing...)`,
+        title: `Tagging: ${completed}/${total} done`,
+        message: statusText || 'Processing...',
         loading: true,
         autoClose: false,
       })
@@ -443,10 +453,15 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
     const idsToRetag = Array.from(selectedIds)
     const notifId = `retag-progress-${Date.now()}`
 
+    // Start tracking immediately before the mutation
+    setRetaggingIds(new Set(idsToRetag))
+    retagNotifIdRef.current = notifId
+    retagTotalRef.current = idsToRetag.length
+
     notifications.show({
       id: notifId,
-      title: 'Re-tagging templates',
-      message: `Starting ${idsToRetag.length} template${idsToRetag.length === 1 ? '' : 's'}...`,
+      title: `Tagging: 0/${idsToRetag.length} done`,
+      message: `Queuing ${idsToRetag.length} template${idsToRetag.length === 1 ? '' : 's'}...`,
       loading: true,
       autoClose: false,
       withCloseButton: false,
@@ -454,20 +469,6 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
 
     try {
       await retryBatchMutation.mutateAsync({ ids: idsToRetag })
-
-      // Start tracking these templates for progress updates
-      setRetaggingIds(new Set(idsToRetag))
-      retagNotifIdRef.current = notifId
-      retagTotalRef.current = idsToRetag.length
-
-      // Update notification to show tracking has started
-      notifications.update({
-        id: notifId,
-        title: 'Re-tagging templates',
-        message: `0/${idsToRetag.length} completed (${idsToRetag.length} processing...)`,
-        loading: true,
-        autoClose: false,
-      })
 
       setSelectedIds(new Set())
     } catch (err) {
