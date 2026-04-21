@@ -48,40 +48,14 @@ async function globalSetup(config: FullConfig) {
       await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 15000 })
     }
 
-    // Navigate to studio and seed data via Convex
+    // Navigate to studio to ensure we're authenticated
     await page.goto(`${baseURL}/studio`)
     await page.waitForLoadState('networkidle')
 
-    // Call the seed mutation via the browser console
-    const seedResult = await page.evaluate(async () => {
-      // @ts-expect-error - Convex client is available globally
-      const { ConvexHttpClient } = await import('convex/browser')
-      // @ts-expect-error - API is generated
-      const { api } = await import('../../convex/_generated/api')
+    // Wait for the page to load (My Products heading)
+    await page.waitForSelector('h1, h2, h3', { timeout: 10000 })
 
-      const convexUrl = (window as any).__CONVEX_URL__ || import.meta.env.VITE_CONVEX_URL
-      const client = new ConvexHttpClient(convexUrl)
-
-      // Get auth token from Clerk
-      // @ts-expect-error - Clerk is available globally
-      const token = await window.Clerk?.session?.getToken({ template: 'convex' })
-      if (token) {
-        client.setAuth(token)
-      }
-
-      try {
-        const result = await client.mutation(api.testing.seed.seedForCurrentUser)
-        return { success: true, result }
-      } catch (error: any) {
-        return { success: false, error: error.message }
-      }
-    })
-
-    if (seedResult.success) {
-      console.log('✅ Test data seeded:', seedResult.result?.message)
-    } else {
-      console.log('⚠️  Seed skipped or failed:', seedResult.error)
-    }
+    console.log('✅ Global setup: User authenticated')
 
   } catch (error) {
     console.error('Global setup error:', error)

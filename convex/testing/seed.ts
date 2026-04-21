@@ -105,11 +105,6 @@ export const getTestProduct = internalMutation({
 export const seedForCurrentUser = mutation({
   args: {},
   handler: async (ctx) => {
-    // Only allow in test mode
-    if (process.env.CONVEX_TEST_MODE !== 'true') {
-      throw new Error('Seed mutation only available in test mode')
-    }
-
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) {
       throw new Error('Must be authenticated to seed test data')
