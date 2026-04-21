@@ -19,9 +19,12 @@ import {
   Anchor,
   Loader,
   Box,
+  Button,
 } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
 import type { QueryClient } from '@tanstack/react-query'
+import { SignInButton, UserButton } from '@clerk/react'
+import { Authenticated, Unauthenticated, AuthLoading } from 'convex/react'
 import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
 import { NotFound } from '~/components/NotFound'
 import { Logo } from '~/components/Logo'
@@ -139,7 +142,31 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                       <NavLink to="/admin">Admin</NavLink>
                     </Group>
                   </Group>
-                  <LoadingIndicator />
+                  <Group gap="md">
+                    <LoadingIndicator />
+                    <AuthLoading>
+                      <Loader size="xs" color="brand" />
+                    </AuthLoading>
+                    <Unauthenticated>
+                      <SignInButton mode="modal">
+                        <Button size="sm" variant="light" color="brand">
+                          Sign In
+                        </Button>
+                      </SignInButton>
+                    </Unauthenticated>
+                    <Authenticated>
+                      <UserButton
+                        appearance={{
+                          elements: {
+                            avatarBox: {
+                              width: 32,
+                              height: 32,
+                            },
+                          },
+                        }}
+                      />
+                    </Authenticated>
+                  </Group>
                 </Group>
               </Container>
             </AppShell.Header>

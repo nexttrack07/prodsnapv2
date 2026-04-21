@@ -7,10 +7,13 @@ import {
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 import { notifications } from '@mantine/notifications'
 import { ConvexQueryClient } from '@convex-dev/react-query'
-import { ConvexProvider } from 'convex/react'
+import { ConvexProviderWithClerk } from 'convex/react-clerk'
+import { ClerkProvider, useAuth } from '@clerk/react'
 import { routeTree } from './routeTree.gen'
 import { DefaultCatchBoundary } from './components/DefaultCatchBoundary'
 import { NotFound } from './components/NotFound'
+
+const CLERK_PUBLISHABLE_KEY = (import.meta as any).env.VITE_CLERK_PUBLISHABLE_KEY
 
 export function getRouter() {
   if (typeof document !== 'undefined') {
@@ -49,9 +52,16 @@ export function getRouter() {
     defaultNotFoundComponent: () => <NotFound />,
     context: { queryClient },
     Wrap: ({ children }) => (
-      <ConvexProvider client={convexQueryClient.convexClient}>
-        {children}
-      </ConvexProvider>
+      <ClerkProvider
+        publishableKey={CLERK_PUBLISHABLE_KEY}
+        signInUrl="/sign-in"
+        signUpUrl="/sign-in"
+        afterSignOutUrl="/"
+      >
+        <ConvexProviderWithClerk client={convexQueryClient.convexClient} useAuth={useAuth}>
+          {children}
+        </ConvexProviderWithClerk>
+      </ClerkProvider>
     ),
     scrollRestoration: true,
   })
