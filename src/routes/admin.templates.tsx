@@ -400,8 +400,9 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   const [retaggingIds, setRetaggingIds] = useState<Set<Id<'adTemplates'>>>(new Set())
   const retagNotifIdRef = useRef<string | null>(null)
   const retagTotalRef = useRef<number>(0)
-  // Track if we've seen templates start processing (prevents false "all failed" on initial render)
-  const hasSeenProcessingRef = useRef<boolean>(false)
+  // Track which templates we've actually seen enter processing (pending/ingesting)
+  // This prevents counting old "failed" status as completion
+  const seenInProcessingRef = useRef<Set<Id<'adTemplates'>>>(new Set())
 
   const retryMutation = useMutation({ mutationFn: useConvexMutation(api.templates.retryTemplateIngest) })
   const retryBatchMutation = useMutation({ mutationFn: useConvexMutation(api.templates.retryTemplatesBatch) })
@@ -414,41 +415,34 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   useEffect(() => {
     if (retaggingIds.size === 0 || !retagNotifIdRef.current) return
 
-    // Count status of tracked templates
-    const tracked = rows.filter((r) => retaggingIds.has(r._id))
     const total = retagTotalRef.current
+    const tracked = rows.filter((r) => retaggingIds.has(r._id))
 
-    // Detailed status breakdown
-    const ingesting = tracked.filter((r) => r.status === 'ingesting').length
-    const pending = tracked.filter((r) => r.status === 'pending').length
-    const succeeded = tracked.filter((r) => r.status === 'published').length
-    const failed = tracked.filter((r) => r.status === 'failed').length
+    // Track which templates have entered processing state (pending or ingesting)
+    // Once seen in processing, we know their final status is from THIS re-tag run
+    for (const t of tracked) {
+      if (t.status === 'pending' || t.status === 'ingesting') {
+        seenInProcessingRef.current.add(t._id)
+      }
+    }
+
+    // Count templates that have been through processing
+    const seenProcessing = seenInProcessingRef.current
+    const processedTemplates = tracked.filter((t) => seenProcessing.has(t._id))
+
+    // Status breakdown - ONLY count templates we've seen go through processing
+    const ingesting = processedTemplates.filter((r) => r.status === 'ingesting').length
+    const pending = processedTemplates.filter((r) => r.status === 'pending').length
+    const succeeded = processedTemplates.filter((r) => r.status === 'published').length
+    const failed = processedTemplates.filter((r) => r.status === 'failed').length
     const processing = ingesting + pending
-
-    // Mark that we've seen processing start (templates moved to pending/ingesting)
-    if (processing > 0) {
-      hasSeenProcessingRef.current = true
-    }
-
-    // Only check for completion AFTER we've seen processing start
-    // This prevents false "all failed" when useEffect runs before mutation updates status
-    if (!hasSeenProcessingRef.current) {
-      // Still waiting for templates to transition to pending/ingesting
-      notifications.update({
-        id: retagNotifIdRef.current,
-        title: `Tagging: 0/${total} done`,
-        message: 'Starting...',
-        loading: true,
-        autoClose: false,
-      })
-      return
-    }
-
-    // Now we can safely check completion
     const completed = succeeded + failed
 
-    // All done? (no more processing AND we've seen processing start)
-    if (processing === 0 && completed > 0) {
+    // How many haven't entered processing yet?
+    const waitingToStart = total - seenProcessing.size
+
+    // All templates have been through processing and none are still processing?
+    if (waitingToStart === 0 && processing === 0 && completed === total) {
       if (failed === 0) {
         notifications.update({
           id: retagNotifIdRef.current,
@@ -484,20 +478,24 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
       setRetaggingIds(new Set())
       retagNotifIdRef.current = null
       retagTotalRef.current = 0
-      hasSeenProcessingRef.current = false
+      seenInProcessingRef.current = new Set()
     } else {
       // Still in progress - show detailed status
       let statusText = ''
-      if (ingesting > 0) {
+      if (waitingToStart > 0) {
+        statusText = `Waiting for ${waitingToStart} to start...`
+      } else if (ingesting > 0) {
         statusText = `Analyzing ${ingesting} image${ingesting === 1 ? '' : 's'}...`
       } else if (pending > 0) {
         statusText = `Queued: ${pending}`
+      } else {
+        statusText = 'Processing...'
       }
 
       notifications.update({
         id: retagNotifIdRef.current,
         title: `Tagging: ${completed}/${total} done`,
-        message: statusText || 'Processing...',
+        message: statusText,
         loading: true,
         autoClose: false,
       })
@@ -539,7 +537,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
     setRetaggingIds(new Set(idsToRetag))
     retagNotifIdRef.current = notifId
     retagTotalRef.current = idsToRetag.length
-    hasSeenProcessingRef.current = false  // Reset - wait for templates to start processing
+    seenInProcessingRef.current = new Set()  // Reset - track which templates enter processing
 
     notifications.show({
       id: notifId,
