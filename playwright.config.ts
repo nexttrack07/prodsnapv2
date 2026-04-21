@@ -31,7 +31,9 @@ export default defineConfig({
     },
     {
       name: 'mobile',
-      use: { ...devices['iPhone 13'] },
+      use: {
+        ...devices['Pixel 5'], // Use chromium-based mobile instead of webkit (Safari has Clerk auth issues)
+      },
     },
   ],
   webServer: {
