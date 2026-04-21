@@ -609,6 +609,34 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
               </Button>
               <Button
                 size="xs"
+                variant="light"
+                color="red"
+                leftSection={<IconTrash size={14} />}
+                onClick={async () => {
+                  const count = selectedIds.size
+                  if (!confirm(`Delete ${count} template${count === 1 ? '' : 's'}? This cannot be undone.`)) return
+                  const ids = Array.from(selectedIds)
+                  let deleted = 0
+                  for (const id of ids) {
+                    try {
+                      await deleteMutation.mutateAsync({ id })
+                      deleted++
+                    } catch (err) {
+                      console.error(`Failed to delete ${id}:`, err)
+                    }
+                  }
+                  setSelectedIds(new Set())
+                  notifications.show({
+                    title: 'Templates deleted',
+                    message: `Deleted ${deleted} template${deleted === 1 ? '' : 's'}`,
+                    color: 'green',
+                  })
+                }}
+              >
+                Delete Selected
+              </Button>
+              <Button
+                size="xs"
                 variant="subtle"
                 color="gray"
                 leftSection={<IconX size={14} />}
