@@ -132,6 +132,7 @@ export const createTemplate = mutation({
     ),
     width: v.number(),
     height: v.number(),
+    contentHash: v.optional(v.string()),  // SHA-256 hash for duplicate detection
   },
   handler: async (ctx, args) => {
     const id = await ctx.db.insert('adTemplates', { ...args, status: 'pending' })
@@ -191,6 +192,21 @@ export const listAll = query({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query('adTemplates').collect()
+  },
+})
+
+/**
+ * Returns all existing content hashes for duplicate detection.
+ * Client computes SHA-256 of new files and checks against this set.
+ */
+export const getExistingHashes = query({
+  args: {},
+  handler: async (ctx) => {
+    const templates = await ctx.db.query('adTemplates').collect()
+    // Return only non-null hashes as a Set-friendly array
+    return templates
+      .map((t) => t.contentHash)
+      .filter((h): h is string => h != null)
   },
 })
 

@@ -127,6 +127,7 @@ function AdminTemplatesPage() {
 function UploadArea() {
   const uploadTemplate = useAction(api.r2.uploadTemplateImage)
   const createTemplate = useConvexMutation(api.templates.createTemplate)
+  const { data: existingHashes } = useQuery(convexQuery(api.templates.getExistingHashes, {}))
   const [inFlight, setInFlight] = useState(0)
   const [dragging, setDragging] = useState(false)
   const notificationIdRef = useRef<string | null>(null)
@@ -136,29 +137,76 @@ function UploadArea() {
     const list = Array.from(files)
     if (list.length === 0) return
 
-    const total = list.length
+    const notifId = `upload-progress-${Date.now()}`
+    notificationIdRef.current = notifId
+
+    // Show initial notification while computing hashes
+    notifications.show({
+      id: notifId,
+      title: 'Checking for duplicates',
+      message: `Analyzing ${list.length} file${list.length === 1 ? '' : 's'}...`,
+      loading: true,
+      autoClose: false,
+      withCloseButton: false,
+    })
+
+    // Compute hashes for all files and filter duplicates
+    const existingHashSet = new Set(existingHashes ?? [])
+    const filesToUpload: { file: File; hash: string }[] = []
+    const duplicates: string[] = []
+
+    for (const file of list) {
+      try {
+        const hash = await computeFileHash(file)
+        if (existingHashSet.has(hash)) {
+          duplicates.push(file.name)
+        } else {
+          filesToUpload.push({ file, hash })
+          // Add to set to catch duplicates within the same upload batch
+          existingHashSet.add(hash)
+        }
+      } catch (err) {
+        console.error(`Failed to hash ${file.name}:`, err)
+        // Still try to upload if hashing fails
+        filesToUpload.push({ file, hash: '' })
+      }
+    }
+
+    // If all files are duplicates, show notification and return
+    if (filesToUpload.length === 0) {
+      notifications.update({
+        id: notifId,
+        title: 'No new templates',
+        message: `All ${duplicates.length} file${duplicates.length === 1 ? '' : 's'} already exist in the library`,
+        color: 'yellow',
+        loading: false,
+        autoClose: 5000,
+        withCloseButton: true,
+      })
+      return
+    }
+
+    const total = filesToUpload.length
     let completed = 0
     let ok = 0
     let failed = 0
 
     setInFlight(total)
 
-    // Show initial progress notification
-    const notifId = `upload-progress-${Date.now()}`
-    notificationIdRef.current = notifId
-    notifications.show({
+    // Update notification to show upload starting
+    const duplicateNote = duplicates.length > 0 ? ` (${duplicates.length} duplicate${duplicates.length === 1 ? '' : 's'} skipped)` : ''
+    notifications.update({
       id: notifId,
       title: 'Uploading templates',
-      message: `Processing 0/${total}...`,
+      message: `Processing 0/${total}...${duplicateNote}`,
       loading: true,
       autoClose: false,
-      withCloseButton: false,
     })
 
     // Process files in batches to avoid rate limiting
-    const batches: File[][] = []
-    for (let i = 0; i < list.length; i += UPLOAD_BATCH_SIZE) {
-      batches.push(list.slice(i, i + UPLOAD_BATCH_SIZE))
+    const batches: { file: File; hash: string }[][] = []
+    for (let i = 0; i < filesToUpload.length; i += UPLOAD_BATCH_SIZE) {
+      batches.push(filesToUpload.slice(i, i + UPLOAD_BATCH_SIZE))
     }
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
@@ -166,7 +214,7 @@ function UploadArea() {
 
       // Process batch in parallel
       await Promise.all(
-        batch.map(async (file) => {
+        batch.map(async ({ file, hash }) => {
           try {
             if (!file.type.startsWith('image/')) throw new Error('Not an image')
             if (file.size > 20 * 1024 * 1024) throw new Error('Over 20 MB')
@@ -185,6 +233,7 @@ function UploadArea() {
               aspectRatio: upload.aspectRatio,
               width: upload.width,
               height: upload.height,
+              contentHash: hash || undefined,
             })
             ok++
           } catch (err) {
@@ -197,7 +246,7 @@ function UploadArea() {
             notifications.update({
               id: notifId,
               title: 'Uploading templates',
-              message: `Processing ${completed}/${total}... (${ok} uploaded, ${failed} failed)`,
+              message: `Processing ${completed}/${total}... (${ok} uploaded, ${failed} failed)${duplicateNote}`,
               loading: true,
               autoClose: false,
             })
@@ -212,11 +261,12 @@ function UploadArea() {
     }
 
     // Show final notification
+    const skipMessage = duplicates.length > 0 ? ` ${duplicates.length} duplicate${duplicates.length === 1 ? '' : 's'} skipped.` : ''
     if (failed === 0 && ok > 0) {
       notifications.update({
         id: notifId,
         title: 'Upload complete',
-        message: `Successfully uploaded ${ok} template${ok === 1 ? '' : 's'}. Tagging in progress...`,
+        message: `Successfully uploaded ${ok} template${ok === 1 ? '' : 's'}.${skipMessage} Tagging in progress...`,
         color: 'green',
         loading: false,
         autoClose: 5000,
@@ -226,7 +276,7 @@ function UploadArea() {
       notifications.update({
         id: notifId,
         title: 'Upload partially complete',
-        message: `Uploaded ${ok} template${ok === 1 ? '' : 's'}, ${failed} failed. Tagging in progress...`,
+        message: `Uploaded ${ok} template${ok === 1 ? '' : 's'}, ${failed} failed.${skipMessage} Tagging in progress...`,
         color: 'yellow',
         loading: false,
         autoClose: 5000,
@@ -334,6 +384,14 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
+/** Compute SHA-256 hash of file contents for duplicate detection */
+async function computeFileHash(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   const [selectedIds, setSelectedIds] = useState<Set<Id<'adTemplates'>>>(new Set())
   const [isRetagging, setIsRetagging] = useState(false)
@@ -342,6 +400,8 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   const [retaggingIds, setRetaggingIds] = useState<Set<Id<'adTemplates'>>>(new Set())
   const retagNotifIdRef = useRef<string | null>(null)
   const retagTotalRef = useRef<number>(0)
+  // Track if we've seen templates start processing (prevents false "all failed" on initial render)
+  const hasSeenProcessingRef = useRef<boolean>(false)
 
   const retryMutation = useMutation({ mutationFn: useConvexMutation(api.templates.retryTemplateIngest) })
   const retryBatchMutation = useMutation({ mutationFn: useConvexMutation(api.templates.retryTemplatesBatch) })
@@ -363,11 +423,32 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
     const pending = tracked.filter((r) => r.status === 'pending').length
     const succeeded = tracked.filter((r) => r.status === 'published').length
     const failed = tracked.filter((r) => r.status === 'failed').length
-    const completed = succeeded + failed
     const processing = ingesting + pending
 
-    // All done?
-    if (processing === 0 && completed === total) {
+    // Mark that we've seen processing start (templates moved to pending/ingesting)
+    if (processing > 0) {
+      hasSeenProcessingRef.current = true
+    }
+
+    // Only check for completion AFTER we've seen processing start
+    // This prevents false "all failed" when useEffect runs before mutation updates status
+    if (!hasSeenProcessingRef.current) {
+      // Still waiting for templates to transition to pending/ingesting
+      notifications.update({
+        id: retagNotifIdRef.current,
+        title: `Tagging: 0/${total} done`,
+        message: 'Starting...',
+        loading: true,
+        autoClose: false,
+      })
+      return
+    }
+
+    // Now we can safely check completion
+    const completed = succeeded + failed
+
+    // All done? (no more processing AND we've seen processing start)
+    if (processing === 0 && completed > 0) {
       if (failed === 0) {
         notifications.update({
           id: retagNotifIdRef.current,
@@ -403,6 +484,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
       setRetaggingIds(new Set())
       retagNotifIdRef.current = null
       retagTotalRef.current = 0
+      hasSeenProcessingRef.current = false
     } else {
       // Still in progress - show detailed status
       let statusText = ''
@@ -457,6 +539,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
     setRetaggingIds(new Set(idsToRetag))
     retagNotifIdRef.current = notifId
     retagTotalRef.current = idsToRetag.length
+    hasSeenProcessingRef.current = false  // Reset - wait for templates to start processing
 
     notifications.show({
       id: notifId,

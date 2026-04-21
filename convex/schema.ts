@@ -101,6 +101,8 @@ const schema = defineSchema({
     width: v.number(),
     height: v.number(),
     status: templateStatus,
+    // Content hash for duplicate detection (SHA-256 of file bytes)
+    contentHash: v.optional(v.string()),
     // ─── Structured Tags (new system) ─────────────────────────────────────
     // Each field stores exactly ONE value from its enum
     productCategory: v.optional(v.string()),  // beauty, skincare, supplements, etc.
@@ -121,6 +123,7 @@ const schema = defineSchema({
   })
     .index('by_status', ['status'])
     .index('by_aspect_status', ['aspectRatio', 'status'])
+    .index('by_content_hash', ['contentHash'])  // For duplicate detection
     // Structured tag indexes for filtering
     .index('by_product_category', ['productCategory', 'status'])
     .index('by_primary_color', ['primaryColor', 'status'])
