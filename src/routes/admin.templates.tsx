@@ -44,11 +44,29 @@ interface TemplateRow {
   width: number
   height: number
   status: 'pending' | 'ingesting' | 'published' | 'failed'
-  category?: string
+  // New structured tags (one value per category)
+  productCategory?: string
+  primaryColor?: string
+  imageStyle?: string
+  setting?: string
+  composition?: string
+  textAmount?: string
   subcategory?: string
+  // Legacy fields
+  category?: string
   sceneTypes?: string[]
   moods?: string[]
   ingestError?: string
+}
+
+// Tag category colors for visual organization
+const TAG_COLORS: Record<string, string> = {
+  productCategory: 'blue',
+  primaryColor: 'grape',
+  imageStyle: 'teal',
+  setting: 'orange',
+  composition: 'cyan',
+  textAmount: 'pink',
 }
 
 function AdminTemplatesPage() {
@@ -585,67 +603,80 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
                 </Box>
               </AspectRatio>
               <Box p="md">
+                {/* Dimensions row */}
                 <Group gap={8} wrap="wrap" mb={8}>
-                  {t.category && (
-                    <Badge size="xs" variant="light" color="gray" tt="uppercase">
-                      {t.category}
-                    </Badge>
-                  )}
-                  {t.subcategory && (
-                    <Badge size="xs" variant="light" color="gray">
-                      {t.subcategory}
-                    </Badge>
-                  )}
                   <Text size="xs" c="dark.3">
                     {t.aspectRatio} · {t.width}×{t.height}
                   </Text>
+                  {t.subcategory && (
+                    <Badge size="xs" variant="outline" color="gray">
+                      {t.subcategory}
+                    </Badge>
+                  )}
                 </Group>
-                {(t.sceneTypes?.length || t.moods?.length) ? (
-                  <Chip.Group multiple>
-                    <Group gap={4} wrap="wrap" mb={8}>
-                      {t.sceneTypes?.map((s) => (
-                        <Chip
-                          key={`s-${s}`}
-                          size="xs"
-                          variant="light"
-                          color="brand"
-                          checked={false}
-                          styles={{
-                            label: {
-                              cursor: 'default',
-                              paddingLeft: 8,
-                              paddingRight: 8,
-                            },
-                          }}
-                        >
-                          {s}
-                        </Chip>
-                      ))}
-                      {t.moods?.map((m) => (
-                        <Chip
-                          key={`m-${m}`}
-                          size="xs"
-                          variant="light"
-                          color="violet"
-                          checked={false}
-                          styles={{
-                            label: {
-                              cursor: 'default',
-                              paddingLeft: 8,
-                              paddingRight: 8,
-                            },
-                          }}
-                        >
-                          {m}
-                        </Chip>
-                      ))}
-                    </Group>
-                  </Chip.Group>
+                {/* Structured tags - organized display */}
+                {hasStructuredTags(t) ? (
+                  <Group gap={4} wrap="wrap" mb={8}>
+                    {t.productCategory && (
+                      <Badge size="xs" variant="light" color={TAG_COLORS.productCategory} tt="capitalize">
+                        {t.productCategory}
+                      </Badge>
+                    )}
+                    {t.primaryColor && (
+                      <Badge size="xs" variant="light" color={TAG_COLORS.primaryColor} tt="capitalize">
+                        {t.primaryColor}
+                      </Badge>
+                    )}
+                    {t.imageStyle && (
+                      <Badge size="xs" variant="light" color={TAG_COLORS.imageStyle} tt="capitalize">
+                        {t.imageStyle}
+                      </Badge>
+                    )}
+                    {t.setting && (
+                      <Badge size="xs" variant="light" color={TAG_COLORS.setting} tt="capitalize">
+                        {t.setting}
+                      </Badge>
+                    )}
+                    {t.composition && (
+                      <Badge size="xs" variant="light" color={TAG_COLORS.composition} tt="capitalize">
+                        {t.composition}
+                      </Badge>
+                    )}
+                    {t.textAmount && (
+                      <Badge size="xs" variant="light" color={TAG_COLORS.textAmount} tt="capitalize">
+                        {t.textAmount}
+                      </Badge>
+                    )}
+                  </Group>
+                ) : hasLegacyTags(t) ? (
+                  /* Legacy tags display for older templates */
+                  <Group gap={4} wrap="wrap" mb={8}>
+                    {t.category && (
+                      <Badge size="xs" variant="light" color="gray" tt="uppercase">
+                        {t.category}
+                      </Badge>
+                    )}
+                    {t.sceneTypes?.map((s) => (
+                      <Badge key={`s-${s}`} size="xs" variant="light" color="brand">
+                        {s}
+                      </Badge>
+                    ))}
+                    {t.moods?.map((m) => (
+                      <Badge key={`m-${m}`} size="xs" variant="light" color="violet">
+                        {m}
+                      </Badge>
+                    ))}
+                  </Group>
                 ) : null}
-                {/* Show placeholder text for failed templates without tags */}
-                {t.status === 'failed' && !t.sceneTypes?.length && !t.moods?.length && (
+                {/* Show placeholder text for templates without tags */}
+                {t.status === 'failed' && !hasStructuredTags(t) && !hasLegacyTags(t) && (
                   <Text size="xs" c="dark.4" fs="italic" mb={8}>
                     Tagging failed — click Re-tag to retry
+                  </Text>
+                )}
+                {t.status === 'published' && !hasStructuredTags(t) && hasLegacyTags(t) && (
+                  <Text size="xs" c="dark.4" fs="italic" mb={8}>
+                    Legacy tags — re-tag for structured categories
                   </Text>
                 )}
                 <Group justify="flex-end" gap={8} mt={4}>
@@ -762,4 +793,14 @@ function getAspectRatioValue(ar: string): number {
     case '16:9': return 16 / 9
     default: return 1
   }
+}
+
+/** Check if template has new structured tags */
+function hasStructuredTags(t: TemplateRow): boolean {
+  return !!(t.productCategory || t.primaryColor || t.imageStyle || t.setting || t.composition || t.textAmount)
+}
+
+/** Check if template has legacy tags (old system) */
+function hasLegacyTags(t: TemplateRow): boolean {
+  return !!(t.category || t.sceneTypes?.length || t.moods?.length)
 }

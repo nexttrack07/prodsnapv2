@@ -48,15 +48,27 @@ export const saveTemplateAnalysis = internalMutation({
   args: {
     templateId: v.id('adTemplates'),
     embedding: v.array(v.float64()),
-    category: v.string(),
+    // New structured tags (each is exactly ONE value)
+    productCategory: v.string(),
+    primaryColor: v.string(),
+    imageStyle: v.string(),
+    setting: v.string(),
+    composition: v.string(),
+    textAmount: v.string(),
     subcategory: v.optional(v.string()),
-    sceneTypes: v.array(v.string()),
-    moods: v.array(v.string()),
     sceneDescription: v.string(),
+    // Legacy fields for backward compatibility
+    moods: v.array(v.string()),
     aiTagsRaw: v.any(),
   },
-  handler: async (ctx, { templateId, ...rest }) => {
-    await ctx.db.patch(templateId, { ...rest, status: 'published' })
+  handler: async (ctx, { templateId, productCategory, ...rest }) => {
+    await ctx.db.patch(templateId, {
+      ...rest,
+      productCategory,
+      // Also set legacy 'category' field for backward compatibility
+      category: productCategory,
+      status: 'published',
+    })
   },
 })
 
@@ -80,11 +92,17 @@ export const ingestTemplateWorkflow = workflow.define({
       await step.runMutation(internal.templates.saveTemplateAnalysis, {
         templateId,
         embedding,
-        category: tags.category,
+        // New structured tags (exactly ONE per category)
+        productCategory: tags.productCategory,
+        primaryColor: tags.primaryColor,
+        imageStyle: tags.imageStyle,
+        setting: tags.setting,
+        composition: tags.composition,
+        textAmount: tags.textAmount,
         subcategory: tags.subcategory ?? undefined,
-        sceneTypes: [...tags.scene_types],
+        sceneDescription: tags.sceneDescription,
+        // Legacy fields
         moods: [...tags.moods],
-        sceneDescription: tags.scene_description,
         aiTagsRaw: tags,
       })
     } catch (err) {

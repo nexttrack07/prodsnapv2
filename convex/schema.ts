@@ -101,8 +101,17 @@ const schema = defineSchema({
     width: v.number(),
     height: v.number(),
     status: templateStatus,
-    category: v.optional(v.string()),
-    subcategory: v.optional(v.string()),
+    // ─── Structured Tags (new system) ─────────────────────────────────────
+    // Each field stores exactly ONE value from its enum
+    productCategory: v.optional(v.string()),  // beauty, skincare, supplements, etc.
+    primaryColor: v.optional(v.string()),     // neutral, warm, cool, pink, etc.
+    imageStyle: v.optional(v.string()),       // product-hero, lifestyle, flat-lay, etc.
+    setting: v.optional(v.string()),          // studio, home, bathroom, outdoor, etc.
+    composition: v.optional(v.string()),      // centered, rule-of-thirds, scattered, etc.
+    textAmount: v.optional(v.string()),       // no-text, minimal-text, text-heavy, etc.
+    subcategory: v.optional(v.string()),      // free-form specific product type
+    // ─── Legacy fields (kept for backward compatibility) ──────────────────
+    category: v.optional(v.string()),         // @deprecated use productCategory
     sceneTypes: v.optional(v.array(v.string())),
     moods: v.optional(v.array(v.string())),
     sceneDescription: v.optional(v.string()),
@@ -112,6 +121,11 @@ const schema = defineSchema({
   })
     .index('by_status', ['status'])
     .index('by_aspect_status', ['aspectRatio', 'status'])
+    // Structured tag indexes for filtering
+    .index('by_product_category', ['productCategory', 'status'])
+    .index('by_primary_color', ['primaryColor', 'status'])
+    .index('by_image_style', ['imageStyle', 'status'])
+    .index('by_setting', ['setting', 'status'])
     .vectorIndex('by_embedding', {
       vectorField: 'embedding',
       dimensions: CLIP_EMBEDDING_DIMS,

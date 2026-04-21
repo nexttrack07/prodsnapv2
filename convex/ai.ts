@@ -19,19 +19,101 @@ const GENERATION_MODEL = 'google/nano-banana-2' as const
 
 export const CLIP_EMBEDDING_DIMS = 768
 
-// ─── Shared taxonomy ──────────────────────────────────────────────────────
-const AD_CATEGORIES = [
-  'skincare', 'cosmetics', 'haircare', 'beverage', 'food', 'supplements',
-  'fitness', 'apparel', 'accessories', 'electronics', 'home-goods', 'pet',
-  'saas', 'service', 'other',
+// ─── Structured Tag Taxonomy ──────────────────────────────────────────────
+// Each category requires exactly ONE selection - enables structured filtering
+
+/** Product Category - What type of physical product is being advertised */
+export const PRODUCT_CATEGORIES = [
+  'beauty',        // makeup, cosmetics
+  'skincare',      // serums, moisturizers, cleansers
+  'haircare',      // shampoo, conditioner, styling
+  'supplements',   // vitamins, protein, wellness pills
+  'food',          // snacks, meals, ingredients
+  'beverage',      // drinks, coffee, juice, alcohol
+  'apparel',       // clothing, shoes, activewear
+  'accessories',   // jewelry, bags, watches, sunglasses
+  'electronics',   // gadgets, devices, tech
+  'home',          // furniture, decor, kitchenware
+  'fitness',       // equipment, yoga mats, weights
+  'pet',           // pet food, toys, accessories
+  'baby',          // infant products, toys
+  'health',        // medical devices, wellness tools
+  'cleaning',      // household cleaning products
+  'other',         // catch-all for uncategorized
 ] as const
 
+/** Primary Color - The dominant color palette in the image */
+export const PRIMARY_COLORS = [
+  'neutral',       // white, black, gray, beige
+  'warm',          // red, orange, yellow, gold
+  'cool',          // blue, teal, cyan
+  'green',         // green, mint, sage
+  'pink',          // pink, magenta, rose, coral
+  'purple',        // violet, lavender, plum
+  'earth',         // brown, tan, terracotta
+  'pastel',        // light muted tones
+  'vibrant',       // saturated, bold multi-color
+  'monochrome',    // single color focus with tints/shades
+] as const
+
+/** Image Style - The overall visual style/type of the ad */
+export const IMAGE_STYLES = [
+  'product-hero',  // single product focus, clean presentation
+  'lifestyle',     // product in use, real-world setting
+  'flat-lay',      // top-down arrangement of items
+  'infographic',   // text-heavy, stats, feature callouts
+  'before-after',  // comparison/transformation
+  'testimonial',   // quote, review, social proof style
+  'collage',       // multiple images/elements combined
+  'ugc-style',     // user-generated content aesthetic
+  'editorial',     // magazine/high-fashion style
+  'minimalist',    // lots of whitespace, very clean
+] as const
+
+/** Setting - The environment/backdrop of the photo */
+export const SETTINGS = [
+  'studio',        // plain backdrop, professional lighting
+  'home',          // living room, bedroom, general home
+  'bathroom',      // skincare/beauty setting
+  'kitchen',       // food prep, counters
+  'outdoor',       // nature, garden, beach
+  'urban',         // street, city, cafe
+  'gym',           // fitness, workout space
+  'office',        // workspace, desk
+  'abstract',      // gradients, patterns, shapes, no real setting
+  'none',          // product floating, no distinct setting
+] as const
+
+/** Composition - How elements are arranged in the frame */
+export const COMPOSITIONS = [
+  'centered',      // product in center focus
+  'rule-of-thirds', // offset, dynamic placement
+  'symmetrical',   // balanced, mirrored elements
+  'diagonal',      // dynamic angles, movement
+  'framed',        // product framed by other elements
+  'scattered',     // multiple items spread out
+  'stacked',       // layered, overlapping elements
+  'close-up',      // tight crop, detail shot
+  'full-frame',    // product fills entire frame
+] as const
+
+/** Text Presence - Amount of text/copy in the image */
+export const TEXT_AMOUNTS = [
+  'no-text',       // purely visual, no text
+  'logo-only',     // just brand logo/name
+  'minimal-text',  // short headline or tagline
+  'moderate-text', // headline + supporting copy
+  'text-heavy',    // lots of features, benefits, copy
+  'price-focused', // price/discount prominently displayed
+] as const
+
+// Legacy arrays for backward compatibility
+const AD_CATEGORIES = PRODUCT_CATEGORIES
 const AD_SCENE_TYPES = [
   'studio', 'lifestyle', 'outdoor', 'flat-lay', 'hand-held',
   'bathroom-counter', 'kitchen-counter', 'desk-setup', 'text-overlay',
   'split-screen', 'before-after', 'testimonial',
 ] as const
-
 const AD_MOODS = [
   'minimal', 'luxe', 'playful', 'natural', 'clinical', 'bold', 'cozy',
   'vibrant', 'dark', 'bright', 'retro', 'futuristic',
@@ -100,12 +182,20 @@ export const computeClipEmbedding = internalAction({
   },
 })
 
-const adTemplateTagsSchema = z.object({
-  category: z.enum(AD_CATEGORIES),
+// ─── New Structured Tags Schema ───────────────────────────────────────────
+const structuredTagsSchema = z.object({
+  // Required: Pick exactly ONE from each category
+  productCategory: z.enum(PRODUCT_CATEGORIES),
+  primaryColor: z.enum(PRIMARY_COLORS),
+  imageStyle: z.enum(IMAGE_STYLES),
+  setting: z.enum(SETTINGS),
+  composition: z.enum(COMPOSITIONS),
+  textAmount: z.enum(TEXT_AMOUNTS),
+  // Optional refinements
   subcategory: z.string().max(40).nullable(),
-  scene_types: z.array(z.enum(AD_SCENE_TYPES)).min(1).max(4),
-  moods: z.array(z.enum(AD_MOODS)).min(1).max(4),
-  scene_description: z.string().min(20).max(400),
+  sceneDescription: z.string().min(20).max(400),
+  // Legacy fields for backward compatibility
+  moods: z.array(z.enum(AD_MOODS)).min(1).max(3),
 })
 
 export const computeTemplateTags = internalAction({
@@ -113,22 +203,47 @@ export const computeTemplateTags = internalAction({
   handler: async (_ctx, { imageUrl }) => {
     const result = await generateObject({
       model: openai('gpt-4o-mini'),
-      schema: adTemplateTagsSchema,
-      system:
-        'You are a visual ad classifier. Be precise and pick only from the provided enum values. Respond with structured JSON matching the schema exactly.',
+      schema: structuredTagsSchema,
+      system: `You are a visual ad classifier for product photography templates. Your job is to categorize ad images with STRUCTURED tags that enable filtering and search.
+
+CRITICAL RULES:
+- Pick EXACTLY ONE value from each category - no exceptions
+- Base your choices on what you ACTUALLY SEE in the image
+- For productCategory, identify the PRIMARY product type being advertised
+- For primaryColor, identify the DOMINANT color palette (not every color present)
+- Be consistent: similar images should get similar tags`,
       messages: [
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: `This is a Facebook ad image. Classify it for a template library.
+              text: `Classify this product ad image for a template library.
 
-Pick ONE category that best matches the primary product/service being advertised.
-Pick 1-4 scene_types that describe the setting/composition.
-Pick 1-4 moods that describe the visual feeling.
-Optionally provide a subcategory (free-form, ~1-3 words, e.g. "serum", "protein-bar", "running-shoe").
-Write a 2-3 sentence scene_description covering the composition, lighting, props, and framing — this will be used as reference when another product is re-shot into this scene.`,
+REQUIRED - Pick exactly ONE from each:
+
+1. productCategory: What type of physical product is being advertised?
+   Options: beauty, skincare, haircare, supplements, food, beverage, apparel, accessories, electronics, home, fitness, pet, baby, health, cleaning, other
+
+2. primaryColor: What is the DOMINANT color palette?
+   Options: neutral, warm, cool, green, pink, purple, earth, pastel, vibrant, monochrome
+
+3. imageStyle: What type of ad image is this?
+   Options: product-hero, lifestyle, flat-lay, infographic, before-after, testimonial, collage, ugc-style, editorial, minimalist
+
+4. setting: Where was this photographed / what's the backdrop?
+   Options: studio, home, bathroom, kitchen, outdoor, urban, gym, office, abstract, none
+
+5. composition: How are elements arranged in the frame?
+   Options: centered, rule-of-thirds, symmetrical, diagonal, framed, scattered, stacked, close-up, full-frame
+
+6. textAmount: How much text/copy is in the image?
+   Options: no-text, logo-only, minimal-text, moderate-text, text-heavy, price-focused
+
+OPTIONAL:
+- subcategory: A specific product type (e.g., "serum", "protein powder", "sneakers")
+- moods: 1-3 visual moods (minimal, luxe, playful, natural, clinical, bold, cozy, vibrant, dark, bright, retro, futuristic)
+- sceneDescription: 2-3 sentences describing composition, lighting, props, and framing`,
             },
             { type: 'image', image: imageUrl },
           ],
