@@ -70,7 +70,7 @@ function deriveNameFromUrl(url: string): string {
 }
 
 /**
- * Runs product analysis (vision + CLIP embedding).
+ * Runs product analysis (vision).
  */
 export const runProductAnalysis = internalAction({
   args: { productId: v.id('products') },
@@ -89,7 +89,6 @@ export const runProductAnalysis = internalAction({
         category: result.category,
         productDescription: result.productDescription,
         targetAudience: result.targetAudience,
-        embedding: result.embedding,
       })
     } catch (err) {
       await ctx.runMutation(internal.products.markProductFailed, {
@@ -106,7 +105,6 @@ export const saveProductAnalysis = internalMutation({
     category: v.string(),
     productDescription: v.string(),
     targetAudience: v.string(),
-    embedding: v.array(v.float64()),
   },
   handler: async (ctx, { productId, ...rest }) => {
     await ctx.db.patch(productId, { ...rest, status: 'ready' })

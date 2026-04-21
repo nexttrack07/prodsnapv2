@@ -1,8 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { type Infer, v } from 'convex/values'
 
-export const CLIP_EMBEDDING_DIMS = 768
-
 const aspectRatio = v.union(
   v.literal('1:1'),
   v.literal('4:5'),
@@ -80,18 +78,13 @@ const schema = defineSchema({
     category: v.optional(v.string()),
     productDescription: v.optional(v.string()),
     targetAudience: v.optional(v.string()),
-    embedding: v.optional(v.array(v.float64())), // CLIP embedding for template matching
+    embedding: v.optional(v.array(v.float64())), // @deprecated - not used, kept for existing data
     // Metadata
     error: v.optional(v.string()),
     archivedAt: v.optional(v.number()), // soft delete timestamp
   })
     .index('by_status', ['status'])
-    .index('by_archived', ['archivedAt'])
-    .vectorIndex('by_embedding', {
-      vectorField: 'embedding',
-      dimensions: CLIP_EMBEDDING_DIMS,
-      filterFields: ['status'],
-    }),
+    .index('by_archived', ['archivedAt']),
 
   // ─── Ad Templates (library of templates for generation) ──────────────────
   adTemplates: defineTable({
@@ -117,7 +110,7 @@ const schema = defineSchema({
     sceneTypes: v.optional(v.array(v.string())),
     moods: v.optional(v.array(v.string())),
     sceneDescription: v.optional(v.string()),
-    embedding: v.optional(v.array(v.float64())),
+    embedding: v.optional(v.array(v.float64())), // @deprecated - not used, kept for existing data
     aiTagsRaw: v.optional(v.any()),
     ingestError: v.optional(v.string()),
   })
@@ -128,12 +121,7 @@ const schema = defineSchema({
     .index('by_product_category', ['productCategory', 'status'])
     .index('by_primary_color', ['primaryColor', 'status'])
     .index('by_image_style', ['imageStyle', 'status'])
-    .index('by_setting', ['setting', 'status'])
-    .vectorIndex('by_embedding', {
-      vectorField: 'embedding',
-      dimensions: CLIP_EMBEDDING_DIMS,
-      filterFields: ['status', 'aspectRatio'],
-    }),
+    .index('by_setting', ['setting', 'status']),
 
   // ─── DEPRECATED: Legacy studio runs (use products + generations instead) ──
   // Kept temporarily for migration; will be removed once existing flows updated
@@ -143,7 +131,7 @@ const schema = defineSchema({
     category: v.optional(v.string()),
     productDescription: v.optional(v.string()),
     targetAudience: v.optional(v.string()),
-    embedding: v.optional(v.array(v.float64())),
+    embedding: v.optional(v.array(v.float64())), // @deprecated - not used, kept for existing data
     aspectRatio: v.optional(aspectRatio),
     mode: v.optional(v.union(v.literal('exact'), v.literal('remix'))),
     colorAdapt: v.optional(v.boolean()),

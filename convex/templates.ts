@@ -47,8 +47,7 @@ export const markIngesting = internalMutation({
 export const saveTemplateAnalysis = internalMutation({
   args: {
     templateId: v.id('adTemplates'),
-    embedding: v.array(v.float64()),
-    // New structured tags (each is exactly ONE value)
+    // Structured tags (each is exactly ONE value)
     productCategory: v.string(),
     primaryColor: v.string(),
     imageStyle: v.string(),
@@ -85,14 +84,10 @@ export const ingestTemplateWorkflow = workflow.define({
   handler: async (step, { templateId, imageUrl }) => {
     await step.runMutation(internal.templates.markIngesting, { templateId })
     try {
-      const [{ embedding }, tags] = await Promise.all([
-        step.runAction(internal.ai.computeClipEmbedding, { imageUrl }),
-        step.runAction(internal.ai.computeTemplateTags, { imageUrl }),
-      ])
+      const tags = await step.runAction(internal.ai.computeTemplateTags, { imageUrl })
       await step.runMutation(internal.templates.saveTemplateAnalysis, {
         templateId,
-        embedding,
-        // New structured tags (exactly ONE per category)
+        // Structured tags (exactly ONE per category)
         productCategory: tags.productCategory,
         primaryColor: tags.primaryColor,
         imageStyle: tags.imageStyle,

@@ -14,11 +14,6 @@ fal.config({ credentials: process.env.FAL_KEY })
 // Model constants
 const VISION_MODEL = 'google/gemini-2.5-flash'
 
-// Image embedding dimensions
-// SAM3 embeddings may differ from CLIP's 768 - will be validated at runtime
-// Exported as CLIP_EMBEDDING_DIMS for backward compatibility with schema.ts
-export const CLIP_EMBEDDING_DIMS = 768
-
 // ─── Structured Tag Taxonomy ──────────────────────────────────────────────
 // Each category requires exactly ONE selection - enables structured filtering
 
@@ -84,7 +79,7 @@ export const SETTINGS = [
   'none',          // product floating, no distinct setting
 ] as const
 
-/** Composition - How elements are arranged in the frame */
+/** Composition - Spatial arrangement of elements in the frame (NOT the visual style) */
 export const COMPOSITIONS = [
   'centered',      // product in center focus
   'rule-of-thirds', // offset, dynamic placement
@@ -154,21 +149,6 @@ async function callText(opts: {
   return data.output
 }
 
-// ─── Helper: Get SAM3 image embedding ──────────────────────────────────────
-async function getImageEmbedding(imageUrl: string): Promise<number[]> {
-  const result = await fal.subscribe('fal-ai/sam-3/image/embed', {
-    input: { image_url: imageUrl },
-  })
-  const data = result.data as { embedding_b64?: string; error?: string }
-  if (data.error) throw new Error(`Embedding model error: ${data.error}`)
-  if (!data.embedding_b64) throw new Error('SAM3 returned no embedding')
-
-  // Decode base64 to float32 array using Node.js Buffer
-  const buffer = Buffer.from(data.embedding_b64, 'base64')
-  const floats = new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4)
-  return Array.from(floats)
-}
-
 // ─── Helper: Parse JSON from LLM response ──────────────────────────────────
 function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
   // Try to extract JSON from markdown code blocks or raw JSON
@@ -197,7 +177,7 @@ function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
   }
 }
 
-// ─── Product analysis (vision + embedding, parallel) ───────────────────────
+// ─── Product analysis (vision) ─────────────────────────────────────────────
 const productAnalysisSchema = z.object({
   category: z.enum(AD_CATEGORIES),
   productDescription: z.string().min(10).max(300),
@@ -207,10 +187,9 @@ const productAnalysisSchema = z.object({
 export const analyzeProduct = internalAction({
   args: { imageUrl: v.string() },
   handler: async (_ctx, { imageUrl }) => {
-    const [analysisText, embedding] = await Promise.all([
-      callVision({
-        imageUrls: [imageUrl],
-        prompt: `Analyze this product image and return a JSON object with these exact fields:
+    const analysisText = await callVision({
+      imageUrls: [imageUrl],
+      prompt: `Analyze this product image and return a JSON object with these exact fields:
 {
   "category": "<one of: ${AD_CATEGORIES.join(', ')}>",
   "productDescription": "<25-30 word description of the product, key features, and use case>",
@@ -218,10 +197,8 @@ export const analyzeProduct = internalAction({
 }
 
 Return ONLY the JSON object, no other text.`,
-        systemPrompt: 'You are a product analyst for marketing use cases. Be factual and concise. Return valid JSON only.',
-      }),
-      getImageEmbedding(imageUrl),
-    ])
+      systemPrompt: 'You are a product analyst for marketing use cases. Be factual and concise. Return valid JSON only.',
+    })
 
     const analysis = parseJsonFromResponse(analysisText, productAnalysisSchema)
 
@@ -229,21 +206,11 @@ Return ONLY the JSON object, no other text.`,
       category: analysis.category,
       productDescription: analysis.productDescription,
       targetAudience: analysis.targetAudience,
-      embedding,
     }
   },
 })
 
-// ─── Template ingestion pieces ────────────────────────────────────────────
-export const computeClipEmbedding = internalAction({
-  args: { imageUrl: v.string() },
-  handler: async (_ctx, { imageUrl }) => {
-    const embedding = await getImageEmbedding(imageUrl)
-    return { embedding }
-  },
-})
-
-// ─── New Structured Tags Schema ───────────────────────────────────────────
+// ─── Structured Tags Schema ───────────────────────────────────────────────
 const structuredTagsSchema = z.object({
   // Required: Pick exactly ONE from each category
   productCategory: z.enum(PRODUCT_CATEGORIES),
@@ -254,7 +221,7 @@ const structuredTagsSchema = z.object({
   textAmount: z.enum(TEXT_AMOUNTS),
   // Optional refinements
   subcategory: z.string().max(40).nullable(),
-  sceneDescription: z.string().min(20).max(400),
+  sceneDescription: z.string().min(20).max(600),
   // Legacy fields for backward compatibility
   moods: z.array(z.enum(AD_MOODS)).min(1).max(3),
 })
@@ -271,12 +238,12 @@ Return a JSON object with these EXACT fields:
 {
   "productCategory": "<one of: ${PRODUCT_CATEGORIES.join(', ')}>",
   "primaryColor": "<one of: ${PRIMARY_COLORS.join(', ')}>",
-  "imageStyle": "<one of: ${IMAGE_STYLES.join(', ')}>",
+  "imageStyle": "<VISUAL FORMAT TYPE - one of: ${IMAGE_STYLES.join(', ')}>",
   "setting": "<one of: ${SETTINGS.join(', ')}>",
-  "composition": "<one of: ${COMPOSITIONS.join(', ')}>",
+  "composition": "<SPATIAL ARRANGEMENT - one of: ${COMPOSITIONS.join(', ')}>",
   "textAmount": "<one of: ${TEXT_AMOUNTS.join(', ')}>",
   "subcategory": "<specific product type like 'serum', 'protein powder', or null>",
-  "sceneDescription": "<2-3 sentences describing composition, lighting, props, and framing>",
+  "sceneDescription": "<2-3 SHORT sentences about lighting, props, and framing - max 100 words>",
   "moods": ["<1-3 moods from: ${AD_MOODS.join(', ')}>"]
 }
 
@@ -288,6 +255,13 @@ CRITICAL RULES:
 - Base your choices on what you ACTUALLY SEE in the image
 - For productCategory, identify the PRIMARY product type being advertised
 - For primaryColor, identify the DOMINANT color palette (not every color present)
+
+IMPORTANT DISTINCTION - do NOT confuse these two fields:
+- imageStyle = the VISUAL FORMAT TYPE (e.g., collage, infographic, flat-lay, lifestyle, product-hero)
+- composition = the SPATIAL ARRANGEMENT of elements (e.g., centered, rule-of-thirds, symmetrical, diagonal)
+
+For example: A collage IS an imageStyle. The composition of a collage might be "scattered" or "stacked".
+
 - Be consistent: similar images should get similar tags
 - Return valid JSON only, no markdown or extra text`,
     })

@@ -47,7 +47,6 @@ export const runAnalysis = internalAction({
         category: result.category,
         productDescription: result.productDescription,
         targetAudience: result.targetAudience,
-        embedding: result.embedding,
       })
     } catch (err) {
       await ctx.runMutation(internal.studio.markRunFailed, {
@@ -64,7 +63,6 @@ export const saveRunAnalysis = internalMutation({
     category: v.string(),
     productDescription: v.string(),
     targetAudience: v.string(),
-    embedding: v.array(v.float64()),
   },
   handler: async (ctx, { runId, ...rest }) => {
     await ctx.db.patch(runId, { ...rest, status: 'ready' })
@@ -142,8 +140,8 @@ export const getGenerations = query({
   },
 })
 
-// ─── Template matching (action — vectorSearch is action-only) ─────────────
-export const matchTemplates = action({
+// ─── Template matching (query-based, no embeddings) ───────────────────────
+export const matchTemplates = query({
   args: {
     runId: v.id('studioRuns'),
     aspectRatio: v.union(
@@ -171,31 +169,25 @@ export const matchTemplates = action({
     hasMore: boolean
     nextOffset: number
   }> => {
-    const run = await ctx.runQuery(internal.studio.getRunInternal, { runId })
-    if (!run?.embedding) throw new Error('Run has no embedding yet')
+    const run = await ctx.db.get(runId)
+    if (!run) throw new Error('Run not found')
 
     const pageSize = limit ?? 24
     const startOffset = offset ?? 0
-    // Pull a generous overfetch so aspect-ratio post-filter + pagination
-    // both have enough candidates.
-    const overfetch = Math.max(pageSize * 6, 120) + startOffset
-    const results = await ctx.vectorSearch('adTemplates', 'by_embedding', {
-      vector: run.embedding,
-      limit: overfetch,
-      filter: (q) => q.eq('status', 'published'),
-    })
-    const all = await Promise.all(
-      results.map(async ({ _id, _score }) => {
-        const tpl = await ctx.runQuery(internal.studio.getTemplateInternal, { id: _id })
-        return tpl ? { ...tpl, _id, _score } : null
-      }),
-    )
-    let filtered = all
-      .filter((r): r is NonNullable<typeof r> => r !== null)
-      .filter((r) => r.aspectRatio === aspectRatio)
+
+    // Query published templates with matching aspect ratio
+    const all = await ctx.db
+      .query('adTemplates')
+      .withIndex('by_aspect_status', (q) =>
+        q.eq('aspectRatio', aspectRatio).eq('status', 'published'),
+      )
+      .collect()
+
+    // Add a score of 1.0 for all (no vector ranking)
+    let filtered = all.map((tpl) => ({ ...tpl, _score: 1.0 }))
 
     if (shuffle) {
-      // Fisher-Yates — keeps the aspect-filtered set, just randomizes order.
+      // Fisher-Yates shuffle
       for (let i = filtered.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
         ;[filtered[i], filtered[j]] = [filtered[j], filtered[i]]
