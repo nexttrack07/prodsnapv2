@@ -3,7 +3,27 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAction } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { notifications } from '@mantine/notifications'
+import {
+  Container,
+  Title,
+  Text,
+  Button,
+  Group,
+  SimpleGrid,
+  Paper,
+  Center,
+  Loader,
+  Stack,
+  Box,
+  Image,
+  Badge,
+  FileButton,
+  ThemeIcon,
+  AspectRatio,
+  LoadingOverlay,
+} from '@mantine/core'
+import { IconUpload, IconPackage } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 
@@ -20,18 +40,24 @@ function ProductGridPage() {
   const createProductMutation = useMutation({ mutationFn: createProduct })
 
   const [isUploading, setIsUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  async function handleFileChange(file: File | null) {
     if (!file) return
 
     if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file')
+      notifications.show({
+        title: 'Invalid file',
+        message: 'Please upload an image file',
+        color: 'red',
+      })
       return
     }
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('Image must be under 10 MB')
+      notifications.show({
+        title: 'File too large',
+        message: 'Image must be under 10 MB',
+        color: 'red',
+      })
       return
     }
 
@@ -54,165 +80,259 @@ function ProductGridPage() {
         name: fileName.replace(/[-_]/g, ' '),
       })
 
-      toast.success('Product created!')
+      notifications.show({
+        title: 'Success',
+        message: 'Product created!',
+        color: 'green',
+      })
       navigate({ to: '/studio/$productId', params: { productId } })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Upload failed')
+      notifications.show({
+        title: 'Upload failed',
+        message: err instanceof Error ? err.message : 'Upload failed',
+        color: 'red',
+      })
     } finally {
       setIsUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
   const hasProducts = products && products.length > 0
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-4xl font-semibold tracking-tight text-slate-900">My Products</h1>
-          <p className="mt-2 text-slate-500 text-lg">
-            Upload product photos and generate ad creatives.
-          </p>
-        </div>
-        <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition cursor-pointer disabled:opacity-50">
-          <UploadIcon />
-          {isUploading ? 'Uploading...' : 'New Product'}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            disabled={isUploading}
-            className="sr-only"
-          />
-        </label>
-      </div>
+    <Container size="lg" py="xl">
+      <Paper
+        radius="xl"
+        p="xl"
+        mb="xl"
+        style={{
+          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.15) 0%, rgba(84, 116, 180, 0.05) 100%)',
+          border: '1px solid var(--mantine-color-dark-5)',
+        }}
+      >
+        <Group justify="space-between" align="center">
+          <Box>
+            <Title order={1} fz={36} fw={600} c="white">
+              My Products
+            </Title>
+            <Text size="lg" c="dark.2" mt={8}>
+              Upload product photos and generate ad creatives.
+            </Text>
+          </Box>
+          <FileButton onChange={handleFileChange} accept="image/*" disabled={isUploading}>
+            {(props) => (
+              <Button
+                {...props}
+                leftSection={<IconUpload size={18} />}
+                size="lg"
+                color="brand"
+                loading={isUploading}
+                style={{
+                  boxShadow: '0 4px 20px rgba(84, 116, 180, 0.3)',
+                }}
+              >
+                {isUploading ? 'Uploading...' : 'New Product'}
+              </Button>
+            )}
+          </FileButton>
+        </Group>
+      </Paper>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600" />
-        </div>
+        <Center py={80}>
+          <Loader size="lg" color="dark.6" />
+        </Center>
       ) : !hasProducts ? (
-        <EmptyState onUpload={() => fileInputRef.current?.click()} isUploading={isUploading} />
+        <EmptyState onUpload={handleFileChange} isUploading={isUploading} />
       ) : (
         <ProductGrid products={products} />
       )}
-    </div>
+    </Container>
   )
 }
 
-function EmptyState({ onUpload, isUploading }: { onUpload: () => void; isUploading: boolean }) {
-  return (
-    <div className="border-2 border-dashed border-slate-200 rounded-xl p-12 text-center">
-      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-        <PackageIcon className="w-8 h-8 text-slate-700" />
-      </div>
-      <h3 className="text-lg font-medium text-slate-900 mb-2">No products yet</h3>
-      <p className="text-slate-500 mb-6 max-w-md mx-auto">
-        Upload your first product photo to get started. We'll analyze it and help you generate
-        stunning ad creatives.
-      </p>
-      <button
-        onClick={onUpload}
-        disabled={isUploading}
-        className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition disabled:opacity-50"
-      >
-        <UploadIcon />
-        {isUploading ? 'Uploading...' : 'Upload Product'}
-      </button>
-    </div>
-  )
-}
-
-function ProductGrid({
-  products,
+function EmptyState({
+  onUpload,
+  isUploading,
 }: {
-  products: Array<{
-    _id: Id<'products'>
-    name: string
-    imageUrl: string
-    status: 'analyzing' | 'ready' | 'failed'
-    category?: string
-    _creationTime: number
-  }>
+  onUpload: (file: File | null) => void
+  isUploading: boolean
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+    <Paper
+      radius="xl"
+      p={64}
+      ta="center"
+      withBorder
+      style={{
+        borderStyle: 'dashed',
+        borderWidth: 2,
+        borderColor: 'var(--mantine-color-dark-4)',
+        background: 'linear-gradient(180deg, rgba(84, 116, 180, 0.08) 0%, transparent 100%)',
+      }}
+    >
+      <ThemeIcon
+        size={80}
+        radius="xl"
+        variant="gradient"
+        gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+        mx="auto"
+        mb="lg"
+        style={{ boxShadow: '0 8px 32px rgba(84, 116, 180, 0.25)' }}
+      >
+        <IconPackage size={40} />
+      </ThemeIcon>
+      <Title order={2} fw={600} c="white" mb={8}>
+        No products yet
+      </Title>
+      <Text c="dark.2" size="lg" maw={440} mx="auto" mb="xl">
+        Upload your first product photo to get started. We'll analyze it and help you generate
+        stunning ad creatives.
+      </Text>
+      <FileButton onChange={onUpload} accept="image/*" disabled={isUploading}>
+        {(props) => (
+          <Button
+            {...props}
+            leftSection={<IconUpload size={18} />}
+            size="lg"
+            color="brand"
+            loading={isUploading}
+            style={{
+              boxShadow: '0 4px 20px rgba(84, 116, 180, 0.3)',
+            }}
+          >
+            {isUploading ? 'Uploading...' : 'Upload Your First Product'}
+          </Button>
+        )}
+      </FileButton>
+    </Paper>
+  )
+}
+
+interface ProductData {
+  _id: Id<'products'>
+  name: string
+  imageUrl: string
+  status: 'analyzing' | 'ready' | 'failed'
+  category?: string
+  _creationTime: number
+  generationCount: number
+}
+
+function ProductGrid({ products }: { products: ProductData[] }) {
+  return (
+    <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
       {products.map((product) => (
         <ProductCard key={product._id} product={product} />
       ))}
-    </div>
+    </SimpleGrid>
   )
 }
 
-function ProductCard({
-  product,
-}: {
-  product: {
-    _id: Id<'products'>
-    name: string
-    imageUrl: string
-    status: 'analyzing' | 'ready' | 'failed'
-    category?: string
-    _creationTime: number
-  }
-}) {
+function capitalizeWords(str: string): string {
+  return str
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
+function formatDate(timestamp: number): string {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return `${diffDays} days ago`
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function ProductCard({ product }: { product: ProductData }) {
   return (
-    <Link
+    <Paper
+      component={Link}
       to="/studio/$productId"
-      params={{ productId: product._id }}
-      className="group block bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 hover:shadow-md transition"
+      params={{ productId: product._id } as any}
+      radius="lg"
+      withBorder
+      className="product-card-hover"
+      style={{
+        overflow: 'hidden',
+        textDecoration: 'none',
+        borderColor: 'var(--mantine-color-dark-5)',
+        backgroundColor: 'var(--mantine-color-dark-7)',
+      }}
     >
-      <div className="aspect-square bg-slate-50 relative overflow-hidden">
-        <img
-          src={product.imageUrl}
-          alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-        />
-        {product.status === 'analyzing' && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" />
-          </div>
-        )}
-        {product.status === 'failed' && (
-          <div className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white text-xs rounded">
-            Failed
-          </div>
-        )}
-      </div>
-      <div className="p-3">
-        <h3 className="font-medium text-slate-900 truncate">{product.name}</h3>
-        {product.category && (
-          <p className="text-sm text-slate-500 truncate">{product.category}</p>
-        )}
-      </div>
-    </Link>
-  )
-}
-
-function UploadIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-      />
-    </svg>
-  )
-}
-
-function PackageIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-      />
-    </svg>
+      <AspectRatio ratio={4 / 3}>
+        <Box
+          pos="relative"
+          p="md"
+          style={{
+            backgroundColor: 'var(--mantine-color-dark-6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          <LoadingOverlay
+            visible={product.status === 'analyzing'}
+            loaderProps={{ type: 'dots', color: 'brand', size: 'md' }}
+            overlayProps={{ blur: 2, backgroundOpacity: 0.5 }}
+          />
+          <Image
+            src={product.imageUrl}
+            alt={product.name}
+            fit="contain"
+            h="100%"
+            w="100%"
+            style={{
+              transition: 'transform 300ms ease',
+            }}
+          />
+          {product.status === 'failed' && (
+            <Badge
+              color="red"
+              variant="filled"
+              size="sm"
+              pos="absolute"
+              top={12}
+              right={12}
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
+            >
+              Failed
+            </Badge>
+          )}
+        </Box>
+      </AspectRatio>
+      <Box p="md">
+        <Text fw={600} size="md" c="white" truncate mb={6}>
+          {capitalizeWords(product.name)}
+        </Text>
+        <Group gap={6} wrap="wrap" mb={10}>
+          {product.category && (
+            <Badge size="xs" variant="light" color="brand" radius="sm">
+              {product.category}
+            </Badge>
+          )}
+          {product.status === 'ready' && (
+            <Badge size="xs" variant="light" color="teal" radius="sm">
+              Ready
+            </Badge>
+          )}
+        </Group>
+        <Group justify="space-between" gap="xs">
+          <Text size="xs" c="dark.2">
+            {formatDate(product._creationTime)}
+          </Text>
+          <Text size="xs" c="dark.2" fw={500}>
+            {product.generationCount} {product.generationCount === 1 ? 'variation' : 'variations'}
+          </Text>
+        </Group>
+      </Box>
+    </Paper>
   )
 }

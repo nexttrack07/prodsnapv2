@@ -1,4 +1,10 @@
 import iconsHref from './icons.svg?url'
+import { Box } from '@mantine/core'
+
+const sizeMap = {
+  md: 16,
+  xl: 32,
+}
 
 export function Icon({
   name,
@@ -9,33 +15,49 @@ export function Icon({
   size?: 'md' | 'xl'
   spin?: boolean
 }) {
-  const classNames = {
-    md: 'w-4 h-4',
-    xl: 'w-8 h-8',
-  }
+  const dimension = sizeMap[size]
   return (
-    <svg
-      className={`${classNames[size]} inline self-center ${
-        spin ? 'animate-spin' : ''
-      }`}
+    <Box
+      component="svg"
+      w={dimension}
+      h={dimension}
+      display="inline"
+      style={{
+        alignSelf: 'center',
+        animation: spin ? 'spin 1s linear infinite' : undefined,
+      }}
     >
       <use href={`${iconsHref}#${name}`} />
-    </svg>
+    </Box>
   )
 }
 
 export function LoginIcon() {
   return (
-    <svg className="inline self-center w-8 h-8 text-white transform scale-x-[-1]">
+    <Box
+      component="svg"
+      w={32}
+      h={32}
+      display="inline"
+      c="white"
+      style={{ alignSelf: 'center', transform: 'scaleX(-1)' }}
+    >
       <use href={`${iconsHref}#login`} />
-    </svg>
+    </Box>
   )
 }
 
 export function LogoutIcon() {
   return (
-    <svg className="inline self-center w-8 h-8 text-white">
+    <Box
+      component="svg"
+      w={32}
+      h={32}
+      display="inline"
+      c="white"
+      style={{ alignSelf: 'center' }}
+    >
       <use href={`${iconsHref}#logout`} />
-    </svg>
+    </Box>
   )
 }

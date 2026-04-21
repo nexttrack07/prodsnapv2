@@ -10,13 +10,62 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import * as React from 'react'
-import { Toaster } from 'react-hot-toast'
+import {
+  MantineProvider,
+  createTheme,
+  AppShell,
+  Container,
+  Group,
+  Anchor,
+  Loader,
+  Box,
+} from '@mantine/core'
+import { Notifications } from '@mantine/notifications'
 import type { QueryClient } from '@tanstack/react-query'
 import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
 import { NotFound } from '~/components/NotFound'
 import { Logo } from '~/components/Logo'
 import appCss from '~/styles/app.css?url'
 import { seo } from '~/utils/seo'
+
+const theme = createTheme({
+  fontFamily: 'Poppins, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+  primaryColor: 'brand',
+  colors: {
+    brand: [
+      '#eef3ff',
+      '#dce4f5',
+      '#b9c7e2',
+      '#94a8d0',
+      '#748ec0',
+      '#5f7db6',
+      '#5474B4',
+      '#4865a2',
+      '#3d5791',
+      '#334b81',
+    ],
+    dark: [
+      '#C1C2C5',
+      '#A6A7AB',
+      '#909296',
+      '#5C5F66',
+      '#373A40',
+      '#2C2E33',
+      '#1a1a1a',
+      '#0d0d0d',
+      '#050505',
+      '#000000',
+    ],
+  },
+  defaultRadius: 'md',
+  components: {
+    Button: {
+      defaultProps: {
+        fw: 500,
+      },
+    },
+  },
+})
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
@@ -64,34 +113,45 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="min-h-screen flex flex-col">
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200/70">
-          <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-16">
-            <div className="flex items-center gap-8">
-              <Link to="/" aria-label="ProdSnap home">
-                <Logo size="md" />
-              </Link>
-              <nav className="hidden sm:flex items-center gap-1">
-                <NavLink to="/">Home</NavLink>
-                <NavLink to="/studio">Studio</NavLink>
-                <NavLink to="/admin">Admin</NavLink>
-              </nav>
-            </div>
-            <LoadingIndicator />
-          </div>
-        </header>
+      <body>
+        <MantineProvider theme={theme} forceColorScheme="dark">
+          <Notifications position="bottom-right" />
+          <AppShell
+            header={{ height: 64 }}
+            padding={0}
+          >
+            <AppShell.Header
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                backdropFilter: 'blur(8px)',
+                borderBottom: '1px solid var(--mantine-color-dark-5)',
+              }}
+            >
+              <Container size="xl" h="100%">
+                <Group h="100%" justify="space-between">
+                  <Group gap="xl">
+                    <Anchor component={Link} to="/" underline="never" aria-label="ProdSnap home">
+                      <Logo size="md" />
+                    </Anchor>
+                    <Group gap={4} visibleFrom="sm">
+                      <NavLink to="/">Home</NavLink>
+                      <NavLink to="/studio">Studio</NavLink>
+                      <NavLink to="/admin">Admin</NavLink>
+                    </Group>
+                  </Group>
+                  <LoadingIndicator />
+                </Group>
+              </Container>
+            </AppShell.Header>
 
-        <main className="flex-1">{children}</main>
+            <AppShell.Main>
+              {children}
+            </AppShell.Main>
+          </AppShell>
 
-        <Toaster
-          position="bottom-right"
-          toastOptions={{
-            style: { fontFamily: 'Poppins, sans-serif', fontSize: '14px' },
-          }}
-        />
-
-        <ReactQueryDevtools />
-        <TanStackRouterDevtools position="bottom-right" />
+          <ReactQueryDevtools />
+          <TanStackRouterDevtools position="bottom-right" />
+        </MantineProvider>
         <Scripts />
       </body>
     </html>
@@ -100,27 +160,47 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   return (
-    <Link
+    <Anchor
+      component={Link}
       to={to}
-      className="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition"
-      activeProps={{ className: 'text-slate-900 bg-slate-100' }}
-      activeOptions={{ exact: true }}
+      underline="never"
+      px="sm"
+      py={6}
+      fz="sm"
+      fw={500}
+      c="dark.1"
+      style={{
+        borderRadius: 'var(--mantine-radius-md)',
+        transition: 'background-color 150ms ease, color 150ms ease',
+      }}
+      styles={{
+        root: {
+          '&:hover': {
+            backgroundColor: 'var(--mantine-color-dark-6)',
+            color: 'white',
+          },
+        },
+      }}
     >
       {children}
-    </Link>
+    </Anchor>
   )
 }
 
 function LoadingIndicator() {
   const isLoading = useRouterState({ select: (s) => s.isLoading })
   return (
-    <div
-      className={`flex items-center gap-2 text-xs text-slate-500 transition-opacity duration-300 ${
-        isLoading ? 'opacity-100 delay-200' : 'opacity-0'
-      }`}
+    <Box
+      style={{
+        opacity: isLoading ? 1 : 0,
+        transition: 'opacity 300ms ease',
+        transitionDelay: isLoading ? '200ms' : '0ms',
+      }}
     >
-      <span className="inline-block w-3 h-3 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin" />
-      Loading
-    </div>
+      <Group gap="xs">
+        <Loader size="xs" color="brand" />
+        <Box component="span" fz="xs" c="dark.2">Loading</Box>
+      </Group>
+    </Box>
   )
 }

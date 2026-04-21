@@ -1,19 +1,25 @@
 import { onlineManager } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import toast from 'react-hot-toast'
+import { notifications } from '@mantine/notifications'
 
 export function useOfflineIndicator() {
   useEffect(() => {
     return onlineManager.subscribe(() => {
       if (onlineManager.isOnline()) {
-        toast.success('online', {
+        notifications.show({
           id: 'ReactQuery',
-          duration: 2000,
+          title: 'Connection restored',
+          message: 'You are back online',
+          color: 'green',
+          autoClose: 2000,
         })
       } else {
-        toast.error('offline', {
+        notifications.show({
           id: 'ReactQuery',
-          duration: Infinity,
+          title: 'Connection lost',
+          message: 'You are offline',
+          color: 'red',
+          autoClose: false,
         })
       }
     })

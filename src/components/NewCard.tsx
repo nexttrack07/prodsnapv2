@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { invariant } from '../invariant'
+import { Box, Textarea, Group } from '@mantine/core'
 
 import { ItemMutationFields } from '../types'
 import { useCreateItemMutation } from '../queries'
@@ -25,7 +26,11 @@ export function NewCard({
   return (
     <form
       method="post"
-      className="px-2 py-1 border-t-2 border-b-2 border-transparent"
+      style={{
+        padding: '4px 8px',
+        borderTop: '2px solid transparent',
+        borderBottom: '2px solid transparent',
+      }}
       onSubmit={(event) => {
         event.preventDefault()
 
@@ -56,13 +61,22 @@ export function NewCard({
         value={nextOrder}
       />
 
-      <textarea
+      <Textarea
         autoFocus
         required
         ref={textAreaRef}
         name={ItemMutationFields.title.name}
         placeholder="Enter a title for this card"
-        className="outline-hidden shadow-sm text-sm rounded-lg w-full py-1 px-2 resize-none placeholder:text-sm placeholder:text-slate-500 h-14"
+        autosize
+        minRows={2}
+        styles={{
+          input: {
+            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+            fontSize: 'var(--mantine-font-size-sm)',
+            borderRadius: 'var(--mantine-radius-md)',
+            resize: 'none',
+          },
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault()
@@ -73,15 +87,11 @@ export function NewCard({
             onComplete()
           }
         }}
-        onChange={(event) => {
-          const el = event.currentTarget
-          el.style.height = el.scrollHeight + 'px'
-        }}
       />
-      <div className="flex justify-between">
+      <Group justify="space-between" mt="xs">
         <SaveButton ref={buttonRef}>Save Card</SaveButton>
         <CancelButton onClick={onComplete}>Cancel</CancelButton>
-      </div>
+      </Group>
     </form>
   )
 }

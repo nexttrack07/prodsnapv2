@@ -1,9 +1,46 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
-import { useState, useRef, useCallback, useEffect } from 'react'
-import toast from 'react-hot-toast'
+import { useState, useRef, useCallback } from 'react'
+import { notifications } from '@mantine/notifications'
 import { useConvex } from 'convex/react'
+import {
+  Container,
+  Title,
+  Text,
+  Box,
+  Group,
+  Stack,
+  Button,
+  Paper,
+  Image,
+  Badge,
+  Loader,
+  TextInput,
+  Checkbox,
+  Radio,
+  ActionIcon,
+  Overlay,
+  Anchor,
+  UnstyledButton,
+  Modal,
+  Drawer,
+  CloseButton,
+  SegmentedControl,
+  AspectRatio,
+} from '@mantine/core'
+import {
+  IconChevronLeft,
+  IconArrowRight,
+  IconCheck,
+  IconMaximize,
+  IconDownload,
+  IconTrash,
+  IconSparkles,
+  IconAlignLeft,
+  IconPhoto,
+  IconPalette,
+} from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 
@@ -14,16 +51,6 @@ export const Route = createFileRoute('/studio/$productId')({
 type AspectRatio = '1:1' | '4:5' | '9:16'
 type Mode = 'exact' | 'remix'
 type View = 'gallery' | 'generate'
-
-interface MatchedTemplate {
-  _id: Id<'adTemplates'>
-  _score: number
-  imageUrl: string
-  thumbnailUrl: string
-  aspectRatio: string
-  category?: string
-  subcategory?: string
-}
 
 function ProductWorkspacePage() {
   const { productId } = Route.useParams()
@@ -39,24 +66,24 @@ function ProductWorkspacePage() {
 
   if (productLoading) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-10">
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900" />
-        </div>
-      </div>
+      <Container size="lg" py={40}>
+        <Box py={80} ta="center">
+          <Loader size="lg" color="brand" />
+        </Box>
+      </Container>
     )
   }
 
   if (!product) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-10">
-        <div className="text-center py-20">
-          <h2 className="text-xl font-medium text-slate-900 mb-2">Product not found</h2>
-          <Link to="/studio" className="text-blue-600 hover:underline">
+      <Container size="lg" py={40}>
+        <Box py={80} ta="center">
+          <Title order={2} fz="xl" fw={500} c="white" mb="xs">Product not found</Title>
+          <Anchor component={Link} to="/studio" c="blue.6">
             Back to products
-          </Link>
-        </div>
-      </div>
+          </Anchor>
+        </Box>
+      </Container>
     )
   }
 
@@ -64,17 +91,19 @@ function ProductWorkspacePage() {
   const pendingGenerations = generations?.filter((g) => g.status !== 'complete' && g.status !== 'failed') || []
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10">
+    <Container size="lg" py={40}>
       {/* Breadcrumb */}
-      <div className="mb-6">
-        <Link to="/studio" className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1">
-          <ChevronLeftIcon />
-          Back to products
-        </Link>
-      </div>
+      <Box mb="md">
+        <Anchor component={Link} to="/studio" size="sm" c="dark.2">
+          <Group gap={4}>
+            <IconChevronLeft size={16} />
+            Back to products
+          </Group>
+        </Anchor>
+      </Box>
 
-      {/* Product Header */}
-      <ProductHeader product={product} />
+      {/* Product Header - hidden in generate mode */}
+      {view === 'gallery' && <ProductHeader product={product} />}
 
       {/* View Toggle */}
       {view === 'gallery' ? (
@@ -93,8 +122,15 @@ function ProductWorkspacePage() {
           onComplete={() => setView('gallery')}
         />
       )}
-    </div>
+    </Container>
   )
+}
+
+function capitalizeWords(str: string): string {
+  return str
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
 }
 
 function ProductHeader({
@@ -124,57 +160,99 @@ function ProductHeader({
         name: editedName.trim(),
       })
       setIsEditingName(false)
-      toast.success('Name updated')
+      notifications.show({ title: 'Success', message: 'Name updated', color: 'green' })
     } catch {
-      toast.error('Failed to update name')
+      notifications.show({ title: 'Error', message: 'Failed to update name', color: 'red' })
     }
   }
 
   return (
-    <div className="flex items-start gap-6 mb-8 pb-8 border-b border-slate-200">
-      <div className="w-24 h-24 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
-        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-      </div>
-      <div className="flex-1 min-w-0">
-        {isEditingName ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={editedName}
-              onChange={(e) => setEditedName(e.target.value)}
-              className="text-2xl font-semibold border-b-2 border-blue-600 outline-none bg-transparent"
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
-            />
-            <button onClick={handleSaveName} className="text-blue-600 hover:text-blue-800 text-sm">
-              Save
-            </button>
-            <button onClick={() => setIsEditingName(false)} className="text-slate-400 hover:text-slate-600 text-sm">
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <h1
-            className="text-2xl font-semibold text-slate-900 cursor-pointer hover:text-slate-700"
-            onClick={() => {
-              setEditedName(product.name)
-              setIsEditingName(true)
-            }}
-            title="Click to edit"
-          >
-            {product.name}
-          </h1>
-        )}
-        <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
-          {product.category && <span>{product.category}</span>}
-          <span>{product.generationCount} generations</span>
-          <StatusBadge status={product.status} />
-        </div>
-        {product.productDescription && (
-          <p className="mt-2 text-slate-600 text-sm line-clamp-2">{product.productDescription}</p>
-        )}
-      </div>
-    </div>
+    <Paper
+      radius="lg"
+      p="xl"
+      mb="xl"
+      style={{
+        background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
+        border: '1px solid var(--mantine-color-dark-6)',
+      }}
+    >
+      <Group align="flex-start" gap="xl">
+        <Box
+          w={120}
+          h={120}
+          style={{
+            borderRadius: 'var(--mantine-radius-lg)',
+            overflow: 'hidden',
+            flexShrink: 0,
+            border: '1px solid var(--mantine-color-dark-5)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+          }}
+          bg="dark.7"
+        >
+          <Image src={product.imageUrl} alt={product.name} fit="cover" h="100%" w="100%" />
+        </Box>
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          {isEditingName ? (
+            <Group gap="xs">
+              <TextInput
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                size="lg"
+                variant="unstyled"
+                styles={{
+                  input: {
+                    fontSize: '1.5rem',
+                    fontWeight: 700,
+                    borderBottom: '2px solid var(--mantine-color-brand-6)',
+                    color: 'white',
+                  },
+                }}
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+              />
+              <Button size="xs" variant="light" color="brand" onClick={handleSaveName}>
+                Save
+              </Button>
+              <Button size="xs" variant="subtle" color="gray" onClick={() => setIsEditingName(false)}>
+                Cancel
+              </Button>
+            </Group>
+          ) : (
+            <Title
+              order={1}
+              fz={28}
+              fw={700}
+              c="white"
+              mb={4}
+              style={{ cursor: 'pointer', letterSpacing: '-0.02em' }}
+              onClick={() => {
+                setEditedName(product.name)
+                setIsEditingName(true)
+              }}
+              title="Click to edit"
+            >
+              {capitalizeWords(product.name)}
+            </Title>
+          )}
+          <Group gap="sm" mt="sm">
+            {product.category && (
+              <Badge size="sm" variant="light" color="brand" radius="sm">
+                {product.category}
+              </Badge>
+            )}
+            <Badge size="sm" variant="outline" color="gray" radius="sm">
+              {product.generationCount} {product.generationCount === 1 ? 'generation' : 'generations'}
+            </Badge>
+            <StatusBadge status={product.status} />
+          </Group>
+          {product.productDescription && (
+            <Text size="sm" c="dark.1" mt="md" lh={1.6} maw={600}>
+              {product.productDescription}
+            </Text>
+          )}
+        </Box>
+      </Group>
+    </Paper>
   )
 }
 
@@ -216,32 +294,41 @@ function GalleryView({
     if (!confirm('Delete this generation?')) return
     try {
       await deleteMutation.mutateAsync({ generationId: id })
-      toast.success('Deleted')
+      notifications.show({ title: 'Success', message: 'Deleted', color: 'green' })
     } catch {
-      toast.error('Failed to delete')
+      notifications.show({ title: 'Error', message: 'Failed to delete', color: 'red' })
     }
   }
 
   return (
-    <div>
+    <Box>
       {/* Action bar */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-medium text-slate-900">Generations</h2>
-        <button
+      <Group justify="space-between" mb="lg">
+        <Box>
+          <Title order={2} fz="xl" fw={600} c="white" mb={4}>Generations</Title>
+          <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
+        </Box>
+        <Button
           onClick={onGenerateMore}
           disabled={product.status !== 'ready'}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          color="brand"
+          size="md"
+          rightSection={<IconArrowRight size={16} />}
+          styles={{
+            root: {
+              boxShadow: '0 4px 14px rgba(84, 116, 180, 0.25)',
+            },
+          }}
         >
           Generate More
-          <ArrowRightIcon />
-        </button>
-      </div>
+        </Button>
+      </Group>
 
       {/* Pending generations */}
       {pendingGenerations.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-sm font-medium text-slate-500 mb-3">In Progress</h3>
-          <div className="columns-2 sm:columns-3 md:columns-4 [column-gap:1rem]">
+        <Box mb="xl">
+          <Text size="sm" fw={500} c="dark.2" mb="sm">In Progress</Text>
+          <Box style={{ columns: '4', columnGap: '1rem' }}>
             {pendingGenerations.map((gen) => (
               <GenerationCard
                 key={gen._id}
@@ -251,25 +338,46 @@ function GalleryView({
                 onCreateVariations={setVariationTarget}
               />
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {/* Completed generations or empty state */}
       {!hasAny ? (
-        <div className="border-2 border-dashed border-slate-200 rounded-xl p-12 text-center">
-          <p className="text-slate-500 mb-4">No generations yet. Click "Generate More" to create ad variations.</p>
-          <button
+        <Paper
+          radius="lg"
+          p={64}
+          ta="center"
+          withBorder
+          style={{
+            borderStyle: 'dashed',
+            borderWidth: 2,
+            borderColor: 'var(--mantine-color-dark-5)',
+            background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
+          }}
+        >
+          <IconSparkles size={48} style={{ color: 'var(--mantine-color-brand-5)', marginBottom: 16 }} />
+          <Title order={3} fz="lg" fw={600} c="white" mb={8}>No generations yet</Title>
+          <Text c="dark.2" mb="xl" maw={400} mx="auto">
+            Create stunning ad variations from your product photo. Pick templates and let AI do the magic.
+          </Text>
+          <Button
             onClick={onGenerateMore}
             disabled={product.status !== 'ready'}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition disabled:opacity-50"
+            color="brand"
+            size="md"
+            rightSection={<IconArrowRight size={16} />}
+            styles={{
+              root: {
+                boxShadow: '0 4px 14px rgba(84, 116, 180, 0.25)',
+              },
+            }}
           >
             Generate Ads
-            <ArrowRightIcon />
-          </button>
-        </div>
+          </Button>
+        </Paper>
       ) : completedGenerations.length > 0 ? (
-        <div className="columns-2 sm:columns-3 md:columns-4 [column-gap:1rem]">
+        <Box style={{ columns: '4', columnGap: '1rem' }}>
           {completedGenerations.map((gen) => (
             <GenerationCard
               key={gen._id}
@@ -279,69 +387,95 @@ function GalleryView({
               onCreateVariations={setVariationTarget}
             />
           ))}
-        </div>
+        </Box>
       ) : null}
 
-      {/* Lightbox */}
-      {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+      {/* Lightbox Modal */}
+      <Modal
+        opened={!!lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
+        fullScreen
+        withCloseButton={false}
+        padding={0}
+        styles={{
+          body: {
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(0, 0, 0, 0.95)',
+          },
+          content: {
+            backgroundColor: 'transparent',
+          },
+        }}
+      >
+        <CloseButton
+          pos="absolute"
+          top={16}
+          right={16}
+          size="lg"
+          variant="subtle"
+          c="white"
           onClick={() => setLightboxUrl(null)}
-        >
-          <button
-            className="absolute top-4 right-4 text-white/80 hover:text-white"
-            onClick={() => setLightboxUrl(null)}
-          >
-            <XIcon />
-          </button>
-          <img
-            src={lightboxUrl}
-            alt="Full size"
-            className="max-w-full max-h-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <a
-            href={lightboxUrl}
-            download
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-slate-900 rounded-lg font-medium hover:bg-slate-100 transition"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Download
-          </a>
-        </div>
-      )}
-
-      {/* Variation Panel */}
-      {variationTarget && (
-        <VariationPanel
-          generation={variationTarget}
-          productId={productId}
-          productImageUrl={product.imageUrl}
-          onClose={() => setVariationTarget(null)}
-          onComplete={() => setVariationTarget(null)}
         />
-      )}
-    </div>
+        {lightboxUrl && (
+          <>
+            <Image
+              src={lightboxUrl}
+              alt="Full size"
+              fit="contain"
+              maw="90vw"
+              mah="90vh"
+            />
+            <Button
+              component="a"
+              href={lightboxUrl}
+              download
+              pos="absolute"
+              bottom={24}
+              left="50%"
+              style={{ transform: 'translateX(-50%)' }}
+              leftSection={<IconDownload size={16} />}
+            >
+              Download
+            </Button>
+          </>
+        )}
+      </Modal>
+
+      {/* Variation Drawer */}
+      <VariationDrawer
+        opened={!!variationTarget}
+        onClose={() => setVariationTarget(null)}
+        generation={variationTarget}
+        productId={productId}
+        productImageUrl={product.imageUrl}
+        onComplete={() => setVariationTarget(null)}
+      />
+    </Box>
   )
 }
 
-function VariationPanel({
+function VariationDrawer({
+  opened,
+  onClose,
   generation,
   productId,
   productImageUrl,
-  onClose,
   onComplete,
 }: {
-  generation: { _id: Id<'templateGenerations'>; outputUrl: string }
+  opened: boolean
+  onClose: () => void
+  generation: { _id: Id<'templateGenerations'>; outputUrl: string } | null
   productId: Id<'products'>
   productImageUrl: string
-  onClose: () => void
   onComplete: () => void
 }) {
   const [changeText, setChangeText] = useState(false)
   const [changeIcons, setChangeIcons] = useState(false)
   const [changeColors, setChangeColors] = useState(false)
-  const [variationCount, setVariationCount] = useState(2)
+  const [variationCount, setVariationCount] = useState('2')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const generateVariations = useConvexMutation(api.products.generateVariations)
@@ -350,8 +484,9 @@ function VariationPanel({
   const hasSelection = changeText || changeIcons || changeColors
 
   async function handleGenerate() {
+    if (!generation) return
     if (!hasSelection) {
-      toast.error('Select at least one thing to change')
+      notifications.show({ title: 'Error', message: 'Select at least one thing to change', color: 'red' })
       return
     }
     setIsSubmitting(true)
@@ -364,150 +499,142 @@ function VariationPanel({
         changeText,
         changeIcons,
         changeColors,
-        variationCount,
+        variationCount: parseInt(variationCount),
       })
-      toast.success('Variations started!')
+      notifications.show({ title: 'Success', message: 'Variations started!', color: 'green' })
       onComplete()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to start')
+      notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Failed to start', color: 'red' })
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-
-      {/* Panel */}
-      <div className="relative w-full max-w-md bg-white h-full shadow-xl overflow-y-auto">
-        <div className="p-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-slate-900">Create Variations</h2>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-              <XIcon />
-            </button>
-          </div>
-
+    <Drawer
+      opened={opened}
+      onClose={onClose}
+      position="right"
+      size="md"
+      title={<Title order={3} fz="lg" fw={600}>Create Variations</Title>}
+      padding="lg"
+    >
+      {generation && (
+        <Stack gap="lg">
           {/* Source image preview */}
-          <div className="mb-6">
-            <p className="text-sm text-slate-500 mb-2">Source image</p>
-            <img
+          <Box>
+            <Text size="sm" c="dark.2" mb="xs">Source image</Text>
+            <Image
               src={generation.outputUrl}
               alt="Source"
-              className="w-full rounded-lg border border-slate-200"
+              radius="md"
+              style={{ border: '1px solid var(--mantine-color-dark-5)' }}
             />
-          </div>
+          </Box>
 
           {/* What to change */}
-          <div className="mb-6">
-            <p className="text-sm font-medium text-slate-700 mb-3">What would you like to change?</p>
-            <div className="space-y-3">
-              <CheckboxCard
+          <Box>
+            <Text size="sm" fw={500} c="white" mb="sm">What would you like to change?</Text>
+            <Stack gap="sm">
+              <Checkbox
                 checked={changeText}
-                onChange={setChangeText}
-                icon={<TextIcon />}
-                title="Text"
-                description="Generate new headlines, copy, and messaging"
+                onChange={(e) => setChangeText(e.currentTarget.checked)}
+                label={
+                  <Group gap="xs">
+                    <IconAlignLeft size={16} color="var(--mantine-color-gray-6)" />
+                    <Box>
+                      <Text fw={500} size="sm">Text</Text>
+                      <Text size="xs" c="dark.2">Generate new headlines, copy, and messaging</Text>
+                    </Box>
+                  </Group>
+                }
+                styles={{
+                  root: {
+                    padding: 'var(--mantine-spacing-sm)',
+                    border: `2px solid ${changeText ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
+                    borderRadius: 'var(--mantine-radius-md)',
+                    backgroundColor: changeText ? 'var(--mantine-color-gray-0)' : 'transparent',
+                  },
+                  body: { alignItems: 'flex-start' },
+                  labelWrapper: { width: '100%' },
+                }}
               />
-              <CheckboxCard
+              <Checkbox
                 checked={changeIcons}
-                onChange={setChangeIcons}
-                icon={<IconsIcon />}
-                title="Icons & Graphics"
-                description="Replace icons, badges, and decorative elements"
+                onChange={(e) => setChangeIcons(e.currentTarget.checked)}
+                label={
+                  <Group gap="xs">
+                    <IconPhoto size={16} color="var(--mantine-color-gray-6)" />
+                    <Box>
+                      <Text fw={500} size="sm">Icons & Graphics</Text>
+                      <Text size="xs" c="dark.2">Replace icons, badges, and decorative elements</Text>
+                    </Box>
+                  </Group>
+                }
+                styles={{
+                  root: {
+                    padding: 'var(--mantine-spacing-sm)',
+                    border: `2px solid ${changeIcons ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
+                    borderRadius: 'var(--mantine-radius-md)',
+                    backgroundColor: changeIcons ? 'var(--mantine-color-gray-0)' : 'transparent',
+                  },
+                  body: { alignItems: 'flex-start' },
+                  labelWrapper: { width: '100%' },
+                }}
               />
-              <CheckboxCard
+              <Checkbox
                 checked={changeColors}
-                onChange={setChangeColors}
-                icon={<PaletteIcon />}
-                title="Colors"
-                description="Adjust color scheme and tones"
+                onChange={(e) => setChangeColors(e.currentTarget.checked)}
+                label={
+                  <Group gap="xs">
+                    <IconPalette size={16} color="var(--mantine-color-gray-6)" />
+                    <Box>
+                      <Text fw={500} size="sm">Colors</Text>
+                      <Text size="xs" c="dark.2">Adjust color scheme and tones</Text>
+                    </Box>
+                  </Group>
+                }
+                styles={{
+                  root: {
+                    padding: 'var(--mantine-spacing-sm)',
+                    border: `2px solid ${changeColors ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
+                    borderRadius: 'var(--mantine-radius-md)',
+                    backgroundColor: changeColors ? 'var(--mantine-color-gray-0)' : 'transparent',
+                  },
+                  body: { alignItems: 'flex-start' },
+                  labelWrapper: { width: '100%' },
+                }}
               />
-            </div>
-          </div>
+            </Stack>
+          </Box>
 
           {/* Variation count */}
-          <div className="mb-8">
-            <p className="text-sm font-medium text-slate-700 mb-3">Number of variations</p>
-            <div className="flex gap-2">
-              {[1, 2, 3].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setVariationCount(n)}
-                  className={`flex-1 py-2 rounded-lg border font-medium transition ${
-                    variationCount === n
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Box>
+            <Text size="sm" fw={500} c="white" mb="sm">Number of variations</Text>
+            <SegmentedControl
+              value={variationCount}
+              onChange={setVariationCount}
+              data={['1', '2', '3']}
+              fullWidth
+              color="brand"
+            />
+          </Box>
 
           {/* Generate button */}
-          <button
+          <Button
+            fullWidth
+            size="md"
+            color="brand"
             onClick={handleGenerate}
-            disabled={!hasSelection || isSubmitting}
-            className="w-full py-3 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+            disabled={!hasSelection}
+            loading={isSubmitting}
+            leftSection={!isSubmitting && <IconSparkles size={18} />}
           >
-            {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                Starting...
-              </>
-            ) : (
-              <>
-                <SparklesIcon />
-                Generate {variationCount} Variation{variationCount > 1 ? 's' : ''}
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function CheckboxCard({
-  checked,
-  onChange,
-  icon,
-  title,
-  description,
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  icon: React.ReactNode
-  title: string
-  description: string
-}) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`w-full flex items-start gap-3 p-4 rounded-lg border-2 text-left transition ${
-        checked
-          ? 'border-slate-900 bg-slate-50'
-          : 'border-slate-200 hover:border-slate-300'
-      }`}
-    >
-      <div className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition ${
-        checked ? 'border-slate-900 bg-slate-900' : 'border-slate-300'
-      }`}>
-        {checked && <CheckIcon className="w-3 h-3 text-white" />}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-600">{icon}</span>
-          <span className="font-medium text-slate-900">{title}</span>
-        </div>
-        <p className="text-sm text-slate-500 mt-0.5">{description}</p>
-      </div>
-    </button>
+            {isSubmitting ? 'Starting...' : `Generate ${variationCount} Variation${parseInt(variationCount) > 1 ? 's' : ''}`}
+          </Button>
+        </Stack>
+      )}
+    </Drawer>
   )
 }
 
@@ -533,77 +660,141 @@ function GenerationCard({
   const isFailed = generation.status === 'failed'
   const isPending = !isComplete && !isFailed
 
-  // Get aspect ratio style for skeleton (only used when not complete)
-  const getAspectRatioStyle = (): React.CSSProperties => {
+  const getAspectRatioValue = (): number => {
     switch (generation.aspectRatio) {
       case '4:5':
-        return { aspectRatio: '4/5' }
+        return 4 / 5
       case '9:16':
-        return { aspectRatio: '9/16' }
+        return 9 / 16
       default:
-        return { aspectRatio: '1/1' }
+        return 1
     }
   }
 
   return (
-    <div className="group bg-white border border-slate-200 rounded-lg overflow-hidden break-inside-avoid mb-4">
-      {/* Complete: let image display naturally */}
+    <Paper
+      radius="lg"
+      withBorder
+      mb="md"
+      style={{
+        breakInside: 'avoid',
+        overflow: 'hidden',
+        borderColor: 'var(--mantine-color-dark-5)',
+        transition: 'transform 150ms ease, box-shadow 150ms ease',
+      }}
+      styles={{
+        root: {
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+          },
+        },
+      }}
+    >
       {isComplete && generation.outputUrl && (
-        <div className="relative">
-          <img src={generation.outputUrl} alt="Generated ad" className="w-full h-auto block" />
-          {/* Hover overlay with action icons */}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-            <button
+        <Box pos="relative" className="generation-card-hover">
+          <Image src={generation.outputUrl} alt="Generated ad" w="100%" style={{ display: 'block' }} />
+          <Box
+            pos="absolute"
+            top={0}
+            left={0}
+            right={0}
+            bottom={0}
+            className="generation-card-overlay"
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              opacity: 0,
+              transition: 'all 150ms ease',
+            }}
+          >
+            <ActionIcon
+              variant="white"
+              radius="xl"
+              size="lg"
               onClick={() => onExpand(generation.outputUrl!)}
-              className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 transition shadow-sm"
               title="View full size"
             >
-              <ExpandIcon />
-            </button>
-            <button
+              <IconMaximize size={18} />
+            </ActionIcon>
+            <ActionIcon
+              variant="white"
+              radius="xl"
+              size="lg"
               onClick={() => onCreateVariations({ _id: generation._id, outputUrl: generation.outputUrl! })}
-              className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-purple-600 transition shadow-sm"
               title="Create variations"
+              c="violet"
             >
-              <SparklesIcon />
-            </button>
-            <a
+              <IconSparkles size={18} />
+            </ActionIcon>
+            <ActionIcon
+              component="a"
               href={generation.outputUrl}
               download
-              className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 transition shadow-sm"
+              variant="white"
+              radius="xl"
+              size="lg"
               title="Download"
             >
-              <DownloadIcon />
-            </a>
-            <button
+              <IconDownload size={18} />
+            </ActionIcon>
+            <ActionIcon
+              variant="white"
+              radius="xl"
+              size="lg"
               onClick={() => onDelete(generation._id)}
-              className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-red-600 transition shadow-sm"
               title="Delete"
+              c="red"
             >
-              <TrashIcon />
-            </button>
-          </div>
-        </div>
+              <IconTrash size={18} />
+            </ActionIcon>
+          </Box>
+        </Box>
       )}
 
-      {/* Pending: skeleton with correct aspect ratio */}
       {isPending && (
-        <div className="bg-slate-100 animate-pulse flex flex-col items-center justify-center" style={getAspectRatioStyle()}>
-          <div className="animate-spin rounded-full h-6 w-6 border-2 border-slate-400 border-t-transparent mb-2" />
-          <span className="text-xs text-slate-500">{generation.currentStep || 'Processing...'}</span>
-        </div>
+        <AspectRatio ratio={getAspectRatioValue()}>
+          <Box
+            bg="dark.7"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              height: '100%',
+            }}
+          >
+            <Loader size="sm" color="brand" type="dots" mb="xs" />
+            <Text size="xs" c="dark.2">{generation.currentStep || 'Processing...'}</Text>
+          </Box>
+        </AspectRatio>
       )}
 
-      {/* Failed: skeleton with correct aspect ratio */}
       {isFailed && (
-        <div className="bg-red-50 flex flex-col items-center justify-center" style={getAspectRatioStyle()}>
-          <span className="text-red-600 text-sm font-medium">Failed</span>
-          {generation.error && (
-            <span className="text-red-500 text-xs mt-1 px-2 text-center line-clamp-2">{generation.error}</span>
-          )}
-        </div>
+        <AspectRatio ratio={getAspectRatioValue()}>
+          <Box
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              height: '100%',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            }}
+          >
+            <Text size="sm" fw={500} c="red.5">Failed</Text>
+            {generation.error && (
+              <Text size="xs" c="red.4" mt={4} px="xs" ta="center" lineClamp={2}>{generation.error}</Text>
+            )}
+          </Box>
+        </AspectRatio>
       )}
-    </div>
+    </Paper>
   )
 }
 
@@ -621,7 +812,7 @@ function GenerateWizard({
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [mode, setMode] = useState<Mode>('exact')
   const [colorAdapt, setColorAdapt] = useState(false)
-  const [variationsPerTemplate, setVariationsPerTemplate] = useState(2)
+  const [variationsPerTemplate, setVariationsPerTemplate] = useState('2')
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -629,7 +820,6 @@ function GenerateWizard({
   const generateFromProduct = useConvexMutation(api.products.generateFromProduct)
   const generateMutation = useMutation({ mutationFn: generateFromProduct })
 
-  // Infinite scroll for templates
   const {
     data: templatesData,
     isLoading: templatesLoading,
@@ -650,7 +840,6 @@ function GenerateWizard({
 
   const templates = templatesData?.pages.flatMap((page) => page.items) || []
 
-  // Infinite scroll observer
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -670,7 +859,7 @@ function GenerateWizard({
     setPickedIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id)
       if (prev.length >= 3) {
-        toast.error('Max 3 templates')
+        notifications.show({ title: 'Limit', message: 'Max 3 templates', color: 'yellow' })
         return prev
       }
       return [...prev, id]
@@ -679,7 +868,7 @@ function GenerateWizard({
 
   async function handleGenerate() {
     if (pickedIds.length === 0) {
-      toast.error('Pick at least one template')
+      notifications.show({ title: 'Error', message: 'Pick at least one template', color: 'red' })
       return
     }
     setIsSubmitting(true)
@@ -689,57 +878,66 @@ function GenerateWizard({
         templateIds: pickedIds,
         mode,
         colorAdapt,
-        variationsPerTemplate,
+        variationsPerTemplate: parseInt(variationsPerTemplate),
         aspectRatio,
       })
-      toast.success('Generation started!')
+      notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
       onComplete()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Generation failed')
+      notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Generation failed', color: 'red' })
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const totalCount = pickedIds.length * variationsPerTemplate
+  const totalCount = pickedIds.length * parseInt(variationsPerTemplate)
 
   return (
-    <div>
-      {/* Wizard Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="text-slate-500 hover:text-slate-700 flex items-center gap-1"
-          >
-            <ChevronLeftIcon />
-            Back to gallery
-          </button>
-          <span className="text-slate-300">|</span>
-          <h2 className="text-lg font-medium text-slate-900">Pick Templates</h2>
-        </div>
-      </div>
+    <Box>
+      {/* Compact Wizard Header */}
+      <Group
+        justify="space-between"
+        mb="md"
+        py="sm"
+        px="md"
+        style={{
+          borderBottom: '1px solid var(--mantine-color-dark-6)',
+        }}
+      >
+        <Group gap="md">
+          <Anchor c="dark.2" onClick={onBack} style={{ cursor: 'pointer' }}>
+            <Group gap={4}>
+              <IconChevronLeft size={16} />
+              Back
+            </Group>
+          </Anchor>
+          <Text fw={600} size="lg" c="white">Pick Templates</Text>
+          <Text size="sm" c="dark.3">·</Text>
+          <Text size="sm" c="dark.3">{templates.length} available</Text>
+        </Group>
+        <Group gap="sm">
+          {/* Placeholder for future filters */}
+          <Badge size="md" variant="light" color="brand" radius="md">
+            {pickedIds.length}/3 selected
+          </Badge>
+        </Group>
+      </Group>
 
-      <div className="grid lg:grid-cols-[1fr_320px] gap-8">
+      <Box style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 'var(--mantine-spacing-lg)' }}>
         {/* Template Grid */}
-        <div className="max-h-[70vh] overflow-y-auto pr-2">
-          <p className="text-sm text-slate-500 mb-4">
-            {templates.length} templates · Pick up to 3
-          </p>
+        <Box mah="calc(100vh - 180px)" style={{ overflowY: 'auto', paddingRight: 'var(--mantine-spacing-sm)' }}>
 
-          {/* Templates */}
           {templatesLoading && templates.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-900 border-t-transparent" />
-            </div>
+            <Box py={48} ta="center">
+              <Loader size="lg" color="brand" />
+            </Box>
           ) : templates.length === 0 ? (
-            <p className="text-slate-500 text-center py-12">No templates available.</p>
+            <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
           ) : (
             <>
-              <div className="columns-3 sm:columns-4 [column-gap:0.75rem]">
+              <Box style={{ columns: '4', columnGap: '0.75rem' }}>
                 {templates.map((tpl) => {
                   const picked = pickedIds.includes(tpl._id)
-                  // Get aspect ratio style
                   const getAspectStyle = (): React.CSSProperties => {
                     switch (tpl.aspectRatio) {
                       case '4:5': return { aspectRatio: '4/5' }
@@ -748,269 +946,223 @@ function GenerateWizard({
                     }
                   }
                   return (
-                    <button
+                    <UnstyledButton
                       key={tpl._id}
                       onClick={() => toggleTemplate(tpl._id)}
-                      className={`relative rounded-lg overflow-hidden border-2 transition mb-3 break-inside-avoid block w-full ${
-                        picked ? 'border-slate-900 ring-2 ring-slate-200' : 'border-transparent hover:border-slate-300'
-                      }`}
+                      w="100%"
+                      mb="md"
+                      style={{
+                        borderRadius: 'var(--mantine-radius-lg)',
+                        overflow: 'hidden',
+                        border: `2px solid ${picked ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
+                        boxShadow: picked ? '0 0 0 3px rgba(84, 116, 180, 0.3)' : 'none',
+                        position: 'relative',
+                        breakInside: 'avoid',
+                        display: 'block',
+                        transition: 'all 200ms ease',
+                        transform: picked ? 'scale(1.02)' : 'scale(1)',
+                      }}
                     >
-                      <div style={getAspectStyle()}>
-                        <img src={tpl.thumbnailUrl} alt="" className="w-full h-full object-cover" />
-                      </div>
-                      {/* Aspect ratio badge */}
-                      <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-black/60 text-white text-[10px] font-medium rounded">
+                      <Box style={getAspectStyle()}>
+                        <Image src={tpl.thumbnailUrl} alt="" fit="cover" h="100%" w="100%" />
+                      </Box>
+                      <Badge
+                        size="xs"
+                        variant="filled"
+                        color="brand"
+                        pos="absolute"
+                        bottom={6}
+                        left={6}
+                        style={{ opacity: 0.8 }}
+                      >
                         {tpl.aspectRatio}
-                      </div>
+                      </Badge>
                       {picked && (
-                        <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-slate-900 rounded-full flex items-center justify-center">
-                          <CheckIcon className="w-3 h-3 text-white" />
-                        </div>
+                        <Box
+                          pos="absolute"
+                          top={8}
+                          right={8}
+                          w={24}
+                          h={24}
+                          bg="brand"
+                          style={{
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(84, 116, 180, 0.4)',
+                          }}
+                        >
+                          <IconCheck size={14} color="white" strokeWidth={3} />
+                        </Box>
                       )}
-                    </button>
+                    </UnstyledButton>
                   )
                 })}
-              </div>
-              {/* Infinite scroll trigger */}
+              </Box>
               {hasNextPage && (
-                <div ref={loadMoreRef} className="flex justify-center py-6">
+                <Box ref={loadMoreRef} py="md" ta="center">
                   {isFetchingNextPage ? (
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-slate-900 border-t-transparent" />
+                    <Loader size="sm" color="brand" />
                   ) : (
-                    <span className="text-sm text-slate-400">Scroll for more</span>
+                    <Text size="sm" c="dark.3">Scroll for more</Text>
                   )}
-                </div>
+                </Box>
               )}
             </>
           )}
-        </div>
+        </Box>
 
         {/* Sidebar - Settings */}
-        <div className="lg:border-l lg:pl-8 border-slate-200">
+        <Paper
+          p="md"
+          radius="lg"
+          style={{
+            border: '1px solid var(--mantine-color-dark-6)',
+            background: 'rgba(26, 26, 26, 0.5)',
+            alignSelf: 'flex-start',
+            position: 'sticky',
+            top: 80,
+          }}
+        >
           {/* Product preview */}
-          <div className="mb-6 p-4 bg-slate-50 rounded-lg">
-            <div className="flex items-center gap-3">
-              <img src={product.imageUrl} alt="" className="w-12 h-12 rounded object-cover" />
-              <div>
-                <div className="text-sm font-medium text-slate-900">{product.name}</div>
-                <div className="text-xs text-slate-500">Your product</div>
-              </div>
-            </div>
-          </div>
+          <Paper p="xs" mb="md" bg="dark.7" radius="md" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
+            <Group gap="xs">
+              <Image src={product.imageUrl} alt="" w={40} h={40} radius="sm" fit="cover" style={{ border: '1px solid var(--mantine-color-dark-5)' }} />
+              <Box>
+                <Text size="sm" fw={600} c="white" lineClamp={1}>{capitalizeWords(product.name)}</Text>
+                <Text size="xs" c="dark.3">Your product</Text>
+              </Box>
+            </Group>
+          </Paper>
 
           {/* Output Aspect Ratio */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-700 mb-2">Output size</label>
-            <div className="flex gap-2">
-              {(['1:1', '4:5', '9:16'] as AspectRatio[]).map((ar) => (
-                <button
-                  key={ar}
-                  onClick={() => setAspectRatio(ar)}
-                  className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition ${
-                    aspectRatio === ar
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  {ar}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Box mb="md">
+            <Text size="sm" fw={600} c="white" mb="xs">Output size</Text>
+            <SegmentedControl
+              value={aspectRatio}
+              onChange={(val) => setAspectRatio(val as AspectRatio)}
+              data={['1:1', '4:5', '9:16']}
+              fullWidth
+              color="brand"
+            />
+          </Box>
 
           {/* Mode */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-700 mb-2">Mode</label>
-            <div className="space-y-2">
-              <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
-                <input
-                  type="radio"
-                  name="mode"
-                  checked={mode === 'exact'}
-                  onChange={() => setMode('exact')}
-                  className="mt-0.5"
+          <Box mb="md">
+            <Text size="sm" fw={500} c="white" mb="xs">Mode</Text>
+            <Radio.Group value={mode} onChange={(val) => setMode(val as Mode)}>
+              <Stack gap="xs">
+                <Radio
+                  value="exact"
+                  label={
+                    <Box>
+                      <Text fw={500} size="sm">Exact</Text>
+                      <Text size="xs" c="dark.2">Swap the product into the template scene</Text>
+                    </Box>
+                  }
+                  styles={{
+                    root: {
+                      padding: 'var(--mantine-spacing-sm)',
+                      border: '1px solid var(--mantine-color-dark-5)',
+                      borderRadius: 'var(--mantine-radius-md)',
+                    },
+                    body: { alignItems: 'flex-start' },
+                    labelWrapper: { width: '100%' },
+                  }}
                 />
-                <div>
-                  <div className="font-medium text-slate-900">Exact</div>
-                  <div className="text-sm text-slate-500">Swap the product into the template scene</div>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
-                <input
-                  type="radio"
-                  name="mode"
-                  checked={mode === 'remix'}
-                  onChange={() => setMode('remix')}
-                  className="mt-0.5"
+                <Radio
+                  value="remix"
+                  label={
+                    <Box>
+                      <Text fw={500} size="sm">Remix</Text>
+                      <Text size="xs" c="dark.2">Generate a new scene inspired by the template</Text>
+                    </Box>
+                  }
+                  styles={{
+                    root: {
+                      padding: 'var(--mantine-spacing-sm)',
+                      border: '1px solid var(--mantine-color-dark-5)',
+                      borderRadius: 'var(--mantine-radius-md)',
+                    },
+                    body: { alignItems: 'flex-start' },
+                    labelWrapper: { width: '100%' },
+                  }}
                 />
-                <div>
-                  <div className="font-medium text-slate-900">Remix</div>
-                  <div className="text-sm text-slate-500">Generate a new scene inspired by the template</div>
-                </div>
-              </label>
-            </div>
+              </Stack>
+            </Radio.Group>
             {mode === 'exact' && (
-              <label className="flex items-center gap-2 mt-3 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={colorAdapt}
-                  onChange={(e) => setColorAdapt(e.target.checked)}
-                />
-                Adapt colors to product
-              </label>
+              <Checkbox
+                mt="sm"
+                label="Adapt colors to product"
+                checked={colorAdapt}
+                onChange={(e) => setColorAdapt(e.currentTarget.checked)}
+              />
             )}
-          </div>
+          </Box>
 
           {/* Variations */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+          <Box mb="md">
+            <Text size="sm" fw={500} c="white" mb="xs">
               Variations per template
-            </label>
-            <div className="flex items-center gap-3">
-              {[1, 2, 3, 4].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setVariationsPerTemplate(n)}
-                  className={`w-10 h-10 rounded-lg border font-medium ${
-                    variationsPerTemplate === n
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
+            </Text>
+            <SegmentedControl
+              value={variationsPerTemplate}
+              onChange={setVariationsPerTemplate}
+              data={['1', '2', '3', '4']}
+              fullWidth
+              color="brand"
+            />
+          </Box>
 
           {/* Summary & Submit */}
-          <div className="pt-6 border-t border-slate-200">
-            <div className="text-sm text-slate-600 mb-4">
-              {pickedIds.length === 0 ? (
-                'Select templates to continue'
-              ) : (
-                <>
-                  <span className="font-medium text-slate-900">{pickedIds.length}</span> template
-                  {pickedIds.length > 1 ? 's' : ''} ×{' '}
-                  <span className="font-medium text-slate-900">{variationsPerTemplate}</span> variation
-                  {variationsPerTemplate > 1 ? 's' : ''} ={' '}
-                  <span className="font-medium text-slate-900">{totalCount}</span> image
-                  {totalCount > 1 ? 's' : ''}
-                </>
-              )}
-            </div>
-            <button
+          <Box pt="lg" mt="lg" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
+            {pickedIds.length === 0 ? (
+              <Text size="sm" c="dark.3" ta="center" mb="md">
+                Select templates to continue
+              </Text>
+            ) : (
+              <Paper p="sm" mb="md" radius="md" bg="dark.7">
+                <Group justify="space-between">
+                  <Text size="sm" c="dark.2">Total images</Text>
+                  <Text size="lg" fw={700} c="white">{totalCount}</Text>
+                </Group>
+                <Text size="xs" c="dark.3" mt={4}>
+                  {pickedIds.length} template{pickedIds.length > 1 ? 's' : ''} × {variationsPerTemplate} variation{parseInt(variationsPerTemplate) > 1 ? 's' : ''}
+                </Text>
+              </Paper>
+            )}
+            <Button
+              fullWidth
+              color="brand"
+              size="lg"
               onClick={handleGenerate}
-              disabled={pickedIds.length === 0 || isSubmitting}
-              className="w-full px-4 py-3 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              disabled={pickedIds.length === 0}
+              loading={isSubmitting}
+              styles={{
+                root: {
+                  boxShadow: pickedIds.length > 0 ? '0 4px 14px rgba(84, 116, 180, 0.3)' : 'none',
+                },
+              }}
             >
-              {isSubmitting ? 'Starting...' : 'Generate'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+              {isSubmitting ? 'Starting...' : `Generate ${totalCount > 0 ? totalCount : ''} Image${totalCount !== 1 ? 's' : ''}`}
+            </Button>
+          </Box>
+        </Paper>
+      </Box>
+    </Box>
   )
 }
 
 function StatusBadge({ status }: { status: 'analyzing' | 'ready' | 'failed' }) {
-  const styles = {
-    analyzing: 'bg-amber-100 text-amber-700',
-    ready: 'bg-emerald-100 text-emerald-700',
-    failed: 'bg-red-100 text-red-700',
+  const colorMap = {
+    analyzing: 'yellow',
+    ready: 'teal',
+    failed: 'red',
   }
   return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[status]}`}>
+    <Badge size="sm" variant="light" color={colorMap[status]} tt="capitalize">
       {status}
-    </span>
-  )
-}
-
-// Icons
-function ChevronLeftIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-  )
-}
-
-function ArrowRightIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  )
-}
-
-function CheckIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-    </svg>
-  )
-}
-
-function ExpandIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-    </svg>
-  )
-}
-
-function DownloadIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-    </svg>
-  )
-}
-
-function TrashIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-    </svg>
-  )
-}
-
-function SparklesIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-    </svg>
-  )
-}
-
-function TextIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
-    </svg>
-  )
-}
-
-function IconsIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-    </svg>
-  )
-}
-
-function PaletteIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-    </svg>
-  )
-}
-
-function XIcon() {
-  return (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
+    </Badge>
   )
 }

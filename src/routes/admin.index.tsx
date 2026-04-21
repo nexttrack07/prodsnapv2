@@ -1,4 +1,6 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { Container, Title, Text, SimpleGrid, Paper, Box, ThemeIcon, Group } from '@mantine/core'
+import { IconLayoutGrid, IconTextCaption, IconArrowRight } from '@tabler/icons-react'
 
 export const Route = createFileRoute('/admin/')({
   component: AdminIndex,
@@ -6,40 +8,39 @@ export const Route = createFileRoute('/admin/')({
 
 function AdminIndex() {
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12">
-      <div className="mb-10">
-        <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Admin</h1>
-        <p className="mt-2 text-slate-500 text-lg">
+    <Container size="lg" py={48}>
+      <Paper
+        radius="xl"
+        p="xl"
+        mb={40}
+        style={{
+          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.12) 0%, rgba(84, 116, 180, 0.04) 100%)',
+          border: '1px solid var(--mantine-color-dark-5)',
+        }}
+      >
+        <Title order={1} fz={36} fw={600} c="white">
+          Admin
+        </Title>
+        <Text size="lg" c="dark.2" mt={8}>
           Manage the template library and the generation prompt config.
-        </p>
-      </div>
+        </Text>
+      </Paper>
 
-      <div className="grid sm:grid-cols-2 gap-6">
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
         <AdminCard
           to="/admin/templates"
           title="Templates"
           description="Upload new ad templates, review ingestion status, retry or delete."
-          icon={
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="7" rx="1.5" />
-              <rect x="14" y="3" width="7" height="7" rx="1.5" />
-              <rect x="3" y="14" width="7" height="7" rx="1.5" />
-              <rect x="14" y="14" width="7" height="7" rx="1.5" />
-            </svg>
-          }
+          icon={<IconLayoutGrid size={24} />}
         />
         <AdminCard
           to="/admin/prompts"
           title="Generation prompts"
           description="Tweak the prompt that the image model sees for exact / remix / color-adapt."
-          icon={
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 6h16M4 12h16M4 18h10" strokeLinecap="round" />
-            </svg>
-          }
+          icon={<IconTextCaption size={24} />}
         />
-      </div>
-    </div>
+      </SimpleGrid>
+    </Container>
   )
 }
 
@@ -55,23 +56,60 @@ function AdminCard({
   icon: React.ReactNode
 }) {
   return (
-    <Link
+    <Paper
+      component={Link}
       to={to}
-      className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-slate-300 transition"
+      radius="xl"
+      p="xl"
+      withBorder
+      style={{
+        textDecoration: 'none',
+        borderColor: 'var(--mantine-color-dark-5)',
+        backgroundColor: 'var(--mantine-color-dark-7)',
+        transition: 'transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease',
+      }}
+      styles={{
+        root: {
+          '&:hover': {
+            transform: 'translateY(-4px)',
+            boxShadow: '0 12px 40px rgba(84, 116, 180, 0.2)',
+            borderColor: 'var(--mantine-color-brand-6)',
+          },
+          '&:hover .admin-card-arrow': {
+            transform: 'translateX(4px)',
+          },
+        },
+      }}
     >
-      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-700 flex items-center justify-center mb-4">
+      <ThemeIcon
+        size={52}
+        radius="xl"
+        variant="gradient"
+        gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+        mb="lg"
+        style={{ boxShadow: '0 4px 16px rgba(84, 116, 180, 0.25)' }}
+      >
         {icon}
-      </div>
-      <div className="font-semibold text-slate-900 text-lg group-hover:text-slate-700 transition">
+      </ThemeIcon>
+      <Text fw={600} size="xl" c="white">
         {title}
-      </div>
-      <div className="mt-1 text-sm text-slate-500">{description}</div>
-      <div className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-slate-700">
-        Open
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:translate-x-0.5 transition">
-          <path d="M5 12h14M13 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-    </Link>
+      </Text>
+      <Text size="sm" c="dark.2" mt={6} mb="lg">
+        {description}
+      </Text>
+      <Group gap={6}>
+        <Text size="sm" fw={600} c="brand.5">
+          Open
+        </Text>
+        <IconArrowRight
+          size={16}
+          className="admin-card-arrow"
+          style={{
+            transition: 'transform 200ms ease',
+            color: 'var(--mantine-color-brand-5)',
+          }}
+        />
+      </Group>
+    </Paper>
   )
 }

@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react'
 import { invariant } from '../invariant'
+import { Box, Paper, TextInput, Group, ActionIcon } from '@mantine/core'
+import { IconPlus } from '@tabler/icons-react'
 
 import { Icon } from '../icons/icons'
 import { useCreateColumnMutation } from '../queries'
@@ -21,8 +23,15 @@ export function NewColumn({
   const newColumnMutation = useCreateColumnMutation()
 
   return editing ? (
-    <form
-      className="ml-2 p-2 shrink-0 flex flex-col gap-5 overflow-hidden max-h-full w-80 border rounded-xl shadow-sm bg-slate-100"
+    <Paper
+      component="form"
+      ml="sm"
+      p="sm"
+      w={320}
+      shadow="sm"
+      radius="lg"
+      bg="dark.7"
+      style={{ flexShrink: 0, maxHeight: '100%', overflow: 'hidden' }}
       onSubmit={(event) => {
         event.preventDefault()
         invariant(inputRef.current, 'missing input ref')
@@ -42,29 +51,40 @@ export function NewColumn({
         }
       }}
     >
-      <input
+      <TextInput
         autoFocus
         required
         ref={inputRef}
         type="text"
         name="columnName"
         autoComplete="off"
-        className="border border-slate-400 w-full rounded-lg py-1 px-2 font-medium text-black"
+        styles={{
+          input: {
+            border: '1px solid var(--mantine-color-dark-4)',
+            fontWeight: 500,
+          },
+        }}
       />
-      <div className="flex justify-between">
+      <Group justify="space-between" mt="md">
         <SaveButton>Save Column</SaveButton>
         <CancelButton onClick={() => setEditing(false)}>Cancel</CancelButton>
-      </div>
-    </form>
+      </Group>
+    </Paper>
   ) : (
-    <button
-      onClick={() => {
-        setEditing(true)
-      }}
+    <ActionIcon
+      onClick={() => setEditing(true)}
       aria-label="Add new column"
-      className="ml-2 shrink-0 flex justify-center h-16 w-16 bg-black hover:bg-white bg-opacity-10 hover:bg-opacity-5 rounded-xl"
+      variant="subtle"
+      color="brand"
+      size={64}
+      radius="lg"
+      ml="sm"
+      style={{
+        flexShrink: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+      }}
     >
-      <Icon name="plus" size="xl" />
-    </button>
+      <IconPlus size={32} />
+    </ActionIcon>
   )
 }

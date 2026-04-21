@@ -1,25 +1,40 @@
 import { Link } from '@tanstack/react-router'
+import { Container, Title, Text, Button, Stack, Center, Group } from '@mantine/core'
 
-export function NotFound({ children }: { children?: any }) {
+export function NotFound({ children }: { children?: React.ReactNode }) {
   return (
-    <div className="space-y-2 p-2">
-      <div className="text-gray-600 dark:text-gray-400">
-        {children || <p>The page you are looking for does not exist.</p>}
-      </div>
-      <p className="flex items-center gap-2 flex-wrap">
-        <button
-          onClick={() => window.history.back()}
-          className="bg-emerald-500 text-white px-2 py-1 rounded-sm uppercase font-black text-sm"
-        >
-          Go back
-        </button>
-        <Link
-          to="/"
-          className="bg-cyan-600 text-white px-2 py-1 rounded-sm uppercase font-black text-sm"
-        >
-          Start Over
-        </Link>
-      </p>
-    </div>
+    <Center py="xl" mih={400}>
+      <Container size="sm">
+        <Stack align="center" gap="md">
+          <Title order={1}>Page not found</Title>
+          <Text c="dimmed" ta="center">
+            {children || 'The page you are looking for does not exist.'}
+          </Text>
+          <Group>
+            <Button
+              onClick={() => window.history.back()}
+              variant="filled"
+              color="teal"
+              tt="uppercase"
+              fw={800}
+              size="sm"
+            >
+              Go back
+            </Button>
+            <Button
+              component={Link}
+              to="/"
+              variant="filled"
+              color="cyan"
+              tt="uppercase"
+              fw={800}
+              size="sm"
+            >
+              Start Over
+            </Button>
+          </Group>
+        </Stack>
+      </Container>
+    </Center>
   )
 }

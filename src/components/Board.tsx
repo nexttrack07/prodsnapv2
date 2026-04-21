@@ -8,6 +8,7 @@ import { NewColumn } from './NewColumn.js'
 import { Column as ColumnComponent } from './Column.js'
 import type { Column } from 'convex/schema.js'
 import { EditableText } from '~/components/EditableText.js'
+import { Box, Flex, Title, ScrollArea } from '@mantine/core'
 
 export function Board({ boardId }: { boardId: string }) {
   const newColumnAddedRef = useRef(false)
@@ -55,12 +56,17 @@ export function Board({ boardId }: { boardId: string }) {
   }, [board.columns, itemsById])
 
   return (
-    <div
-      className="grow min-h-0 flex flex-col overflow-x-scroll"
+    <Flex
+      direction="column"
       ref={scrollContainerRef}
-      style={{ backgroundColor: board.color }}
+      style={{
+        flexGrow: 1,
+        minHeight: 0,
+        overflowX: 'auto',
+        backgroundColor: board.color,
+      }}
     >
-      <h1>
+      <Title order={1} mx="xl" my="md">
         <EditableText
           value={
             // optimistic update
@@ -69,8 +75,6 @@ export function Board({ boardId }: { boardId: string }) {
               : board.name
           }
           fieldName="name"
-          inputClassName="mx-8 my-4 text-2xl font-medium border border-slate-400 rounded-lg py-1 px-2 text-black"
-          buttonClassName="mx-8 my-4 text-2xl font-medium block rounded-lg text-left border border-transparent py-1 px-2 text-slate-800"
           buttonLabel={`Edit board "${board.name}" name`}
           inputLabel="Edit board name"
           onChange={(value) => {
@@ -80,9 +84,15 @@ export function Board({ boardId }: { boardId: string }) {
             })
           }}
         />
-      </h1>
+      </Title>
 
-      <div className="flex grow min-h-0 h-full items-start px-8 pb-4 w-fit">
+      <Flex
+        gap={0}
+        align="flex-start"
+        px="xl"
+        pb="md"
+        style={{ flexGrow: 1, minHeight: 0, height: '100%', width: 'fit-content' }}
+      >
         {columns.map((col, index) => {
           return (
             <ColumnComponent
@@ -107,10 +117,10 @@ export function Board({ boardId }: { boardId: string }) {
             newColumnAddedRef.current = true
           }}
         />
-      </div>
+      </Flex>
 
       {/* trolling you to add some extra margin to the right of the container with a whole dang div */}
-      <div data-lol className="w-8 h-1 shrink-0" />
-    </div>
+      <Box data-lol w={32} h={4} style={{ flexShrink: 0 }} />
+    </Flex>
   )
 }

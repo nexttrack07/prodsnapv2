@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
+import { TextInput, UnstyledButton, Text } from '@mantine/core'
 
 export function EditableText({
   fieldName,
@@ -13,9 +14,9 @@ export function EditableText({
 }: {
   fieldName: string
   value: string
-  inputClassName: string
+  inputClassName?: string
   inputLabel: string
-  buttonClassName: string
+  buttonClassName?: string
   buttonLabel: string
   onChange: (value: string) => void
   editState?: [boolean, (value: boolean) => void]
@@ -39,14 +40,21 @@ export function EditableText({
         buttonRef.current?.focus()
       }}
     >
-      <input
+      <TextInput
         required
         ref={inputRef}
         type="text"
         aria-label={inputLabel}
         name={fieldName}
         defaultValue={value}
-        className={inputClassName}
+        styles={{
+          input: {
+            border: '1px solid var(--mantine-color-gray-5)',
+            borderRadius: 'var(--mantine-radius-md)',
+            padding: '4px 8px',
+            fontWeight: 500,
+          },
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             flushSync(() => {
@@ -67,7 +75,7 @@ export function EditableText({
       />
     </form>
   ) : (
-    <button
+    <UnstyledButton
       aria-label={buttonLabel}
       type="button"
       ref={buttonRef}
@@ -77,9 +85,17 @@ export function EditableText({
         })
         inputRef.current?.select()
       }}
-      className={buttonClassName}
+      style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        borderRadius: 'var(--mantine-radius-md)',
+        padding: '4px 8px',
+        fontWeight: 500,
+        border: '1px solid transparent',
+      }}
     >
-      {value || <span className="text-slate-400 italic">Edit</span>}
-    </button>
+      {value || <Text c="gray.5" fs="italic">Edit</Text>}
+    </UnstyledButton>
   )
 }

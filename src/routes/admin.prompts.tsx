@@ -3,7 +3,26 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAction } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useEffect, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { notifications } from '@mantine/notifications'
+import {
+  Container,
+  Title,
+  Text,
+  Box,
+  Group,
+  Button,
+  Textarea,
+  Paper,
+  Breadcrumbs,
+  Anchor,
+  Badge,
+  Loader,
+  ActionIcon,
+  Collapse,
+  ThemeIcon,
+  Accordion,
+} from '@mantine/core'
+import { IconSparkles, IconX } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 
 export const Route = createFileRoute('/admin/prompts')({
@@ -61,9 +80,17 @@ function AdminPromptsPage() {
         remixPrompt,
         colorAdaptSuffix,
       })
-      toast.success('Composer settings saved')
+      notifications.show({
+        title: 'Success',
+        message: 'Composer settings saved',
+        color: 'green',
+      })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Save failed')
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Save failed',
+        color: 'red',
+      })
     }
   }
 
@@ -71,95 +98,181 @@ function AdminPromptsPage() {
     if (!confirm('Reset composer settings to defaults?')) return
     try {
       await resetMutation.mutateAsync({})
-      toast.success('Reset to defaults')
+      notifications.show({
+        title: 'Success',
+        message: 'Reset to defaults',
+        color: 'green',
+      })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Reset failed')
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Reset failed',
+        color: 'red',
+      })
     }
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10 space-y-8">
-      <div>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <Link to="/admin" className="hover:text-slate-700">Admin</Link>
-          <span>/</span>
-          <span>Prompt composer</span>
-        </div>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+    <Container size="md" py={40}>
+      <Paper
+        radius="xl"
+        p="xl"
+        mb="xl"
+        style={{
+          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.1) 0%, rgba(84, 116, 180, 0.03) 100%)',
+          border: '1px solid var(--mantine-color-dark-5)',
+        }}
+      >
+        <Breadcrumbs mb={8}>
+          <Anchor component={Link} to="/admin" size="sm" c="dark.2">
+            Admin
+          </Anchor>
+          <Text size="sm" c="dark.1">Prompt composer</Text>
+        </Breadcrumbs>
+        <Title order={1} fz={30} fw={600} c="white">
           Prompt composer settings
-        </h1>
-        <p className="mt-1 text-slate-500">
+        </Title>
+        <Text c="dark.2" mt={4}>
           The composer LLM crafts a fresh prompt for every (product × template) pair using these
           instructions. Tweak these to change how aggressive the text / icon rewrite is, or how
           faithful the scene reproduction should be.
-        </p>
-        <div className="mt-3 rounded-lg bg-amber-50/70 border border-amber-200 px-3 py-2 text-xs text-amber-900">
-          The composer sees both images plus the user's product analysis. Reference the template
-          as <em>"the first image"</em> and the product as <em>"the second image"</em>.
-        </div>
-      </div>
+        </Text>
+        <Paper
+          radius="md"
+          p="sm"
+          mt="md"
+          withBorder
+          style={{
+            backgroundColor: 'rgba(234, 179, 8, 0.1)',
+            borderColor: 'rgba(234, 179, 8, 0.3)',
+          }}
+        >
+          <Text size="xs" c="yellow.4">
+            The composer sees both images plus the user's product analysis. Reference the template
+            as <em>"the first image"</em> and the product as <em>"the second image"</em>.
+          </Text>
+        </Paper>
+      </Paper>
 
-      <PromptField
-        label="Core instructions"
-        description="Always applied. Defines what the composer LLM is for and what constraints always hold."
-        value={coreInstructions}
-        onChange={setCoreInstructions}
-        rows={10}
-      />
+      <Accordion
+        multiple
+        defaultValue={['core']}
+        variant="separated"
+        radius="lg"
+        styles={{
+          item: {
+            backgroundColor: 'var(--mantine-color-dark-7)',
+            borderColor: 'var(--mantine-color-dark-5)',
+            '&[data-active]': {
+              backgroundColor: 'var(--mantine-color-dark-7)',
+            },
+          },
+          control: {
+            '&:hover': {
+              backgroundColor: 'var(--mantine-color-dark-6)',
+            },
+          },
+          chevron: {
+            color: 'var(--mantine-color-dark-2)',
+          },
+        }}
+      >
+        <Accordion.Item value="core">
+          <Accordion.Control>
+            <Group gap="sm">
+              <Text fw={600} c="white">Core instructions</Text>
+              <Badge size="xs" variant="light" color="brand">Required</Badge>
+            </Group>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Text size="xs" c="dark.2" mb="sm">
+              Always applied. Defines what the composer LLM is for and what constraints always hold.
+            </Text>
+            <PromptFieldContent
+              value={coreInstructions}
+              onChange={setCoreInstructions}
+              rows={10}
+            />
+          </Accordion.Panel>
+        </Accordion.Item>
 
-      <PromptField
-        label="Exact-mode addendum"
-        description="Appended when the user selects Exact mode. Keep it short — just the mode-specific hint."
-        value={exactPrompt}
-        onChange={setExactPrompt}
-        rows={3}
-      />
+        <Accordion.Item value="exact">
+          <Accordion.Control>
+            <Text fw={600} c="white">Exact-mode addendum</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Text size="xs" c="dark.2" mb="sm">
+              Appended when the user selects Exact mode. Keep it short — just the mode-specific hint.
+            </Text>
+            <PromptFieldContent
+              value={exactPrompt}
+              onChange={setExactPrompt}
+              rows={3}
+            />
+          </Accordion.Panel>
+        </Accordion.Item>
 
-      <PromptField
-        label="Remix-mode addendum"
-        description="Appended when the user selects Remix mode."
-        value={remixPrompt}
-        onChange={setRemixPrompt}
-        rows={3}
-      />
+        <Accordion.Item value="remix">
+          <Accordion.Control>
+            <Text fw={600} c="white">Remix-mode addendum</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Text size="xs" c="dark.2" mb="sm">
+              Appended when the user selects Remix mode.
+            </Text>
+            <PromptFieldContent
+              value={remixPrompt}
+              onChange={setRemixPrompt}
+              rows={3}
+            />
+          </Accordion.Panel>
+        </Accordion.Item>
 
-      <PromptField
-        label="Color-adapt addendum"
-        description="Appended when the user enables Adapt Palette."
-        value={colorAdaptSuffix}
-        onChange={setColorAdaptSuffix}
-        rows={3}
-      />
+        <Accordion.Item value="color">
+          <Accordion.Control>
+            <Text fw={600} c="white">Color-adapt addendum</Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Text size="xs" c="dark.2" mb="sm">
+              Appended when the user enables Adapt Palette.
+            </Text>
+            <PromptFieldContent
+              value={colorAdaptSuffix}
+              onChange={setColorAdaptSuffix}
+              rows={3}
+            />
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
 
-      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-        <button
-          type="button"
+      <Group justify="space-between" pt="lg" mt="xl" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
+        <Button
+          variant="subtle"
+          color="gray"
           onClick={handleReset}
-          disabled={resetMutation.isPending}
-          className="text-sm font-medium text-slate-500 hover:text-slate-800 transition disabled:opacity-50"
+          loading={resetMutation.isPending}
         >
           Reset to defaults
-        </button>
-        <div className="flex items-center gap-3">
+        </Button>
+        <Group gap="md">
           {cfg?.updatedAt ? (
-            <span className="text-xs text-slate-400">
+            <Text size="xs" c="dark.3">
               Last saved {new Date(cfg.updatedAt).toLocaleString()}
-            </span>
+            </Text>
           ) : (
-            <span className="text-xs text-slate-400">Using built-in defaults</span>
+            <Text size="xs" c="dark.3">Using built-in defaults</Text>
           )}
-          <button
-            type="button"
+          <Button
+            color="brand"
             onClick={handleSave}
-            disabled={!dirty || saveMutation.isPending}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={!dirty}
+            loading={saveMutation.isPending}
           >
-            {saveMutation.isPending && <Spinner size={14} light />}
             Save settings
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Group>
+      </Group>
+    </Container>
   )
 }
 
@@ -185,7 +298,11 @@ function PromptField({
   async function handleEnhance() {
     const trimmed = instructions.trim()
     if (!trimmed) {
-      toast.error('Describe what to change')
+      notifications.show({
+        title: 'Error',
+        message: 'Describe what to change',
+        color: 'red',
+      })
       return
     }
     setEnhancing(true)
@@ -193,9 +310,17 @@ function PromptField({
       const { enhanced } = await enhance({ original: value, instructions: trimmed })
       setPrevious(value)
       onChange(enhanced)
-      toast.success('Prompt updated — review and save')
+      notifications.show({
+        title: 'Success',
+        message: 'Prompt updated — review and save',
+        color: 'green',
+      })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'AI enhance failed')
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'AI enhance failed',
+        color: 'red',
+      })
     } finally {
       setEnhancing(false)
     }
@@ -208,76 +333,84 @@ function PromptField({
   }
 
   return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-semibold text-slate-900">{label}</label>
-          <button
-            type="button"
+    <Box>
+      <Group justify="space-between" mb={4}>
+        <Group gap="xs">
+          <Text size="sm" fw={600} c="white">{label}</Text>
+          <Badge
+            size="sm"
+            variant={enhanceOpen ? 'filled' : 'light'}
+            color="brand"
+            radius="xl"
+            leftSection={<IconSparkles size={10} />}
+            style={{ cursor: 'pointer' }}
             onClick={() => setEnhanceOpen((v) => !v)}
-            aria-expanded={enhanceOpen}
-            aria-label="Enhance with AI"
-            className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition ${
-              enhanceOpen
-                ? 'bg-indigo-100 text-indigo-800'
-                : 'bg-gradient-to-br from-blue-50 to-indigo-100 text-indigo-700 hover:from-blue-100 hover:to-indigo-200'
-            }`}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2l1.9 5.7 5.7 1.9-5.7 1.9L12 17.2l-1.9-5.7-5.7-1.9 5.7-1.9L12 2zm6 12l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3zM5 14l.7 2.3 2.3.7-2.3.7L5 20l-.7-2.3L2 17l2.3-.7L5 14z" />
-            </svg>
             Enhance with AI
-          </button>
+          </Badge>
           {previous !== null && !enhancing && (
-            <button
-              type="button"
+            <Button
+              variant="subtle"
+              size="xs"
+              color="gray"
               onClick={handleUndo}
-              className="text-[11px] font-medium text-slate-500 hover:text-slate-800 transition"
             >
               Undo
-            </button>
+            </Button>
           )}
-        </div>
-        <span className="text-xs text-slate-400">{value.length} chars</span>
-      </div>
-      <p className="text-xs text-slate-500 mb-2">{description}</p>
-      <textarea
+        </Group>
+        <Text size="xs" c="dark.3">{value.length} chars</Text>
+      </Group>
+      <Text size="xs" c="dark.2" mb="xs">{description}</Text>
+      <Textarea
         value={value}
         onChange={(e) => {
           onChange(e.currentTarget.value)
           if (previous !== null) setPrevious(null)
         }}
         rows={rows}
-        className="w-full rounded-lg border border-slate-200 p-3 text-sm text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-slate-400 transition resize-y"
+        autosize
+        minRows={rows}
+        styles={{
+          input: {
+            fontFamily: 'monospace',
+          },
+        }}
       />
 
-      {enhanceOpen && (
-        <div className="mt-2 rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-blue-50/50 p-3 space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="text-xs font-semibold text-indigo-900">Enhance with AI</div>
-              <div className="text-[11px] text-indigo-700/80">
+      <Collapse expanded={enhanceOpen}>
+        <Paper
+          radius="md"
+          p="md"
+          mt="sm"
+          withBorder
+          style={{
+            backgroundColor: 'rgba(84, 116, 180, 0.1)',
+            borderColor: 'rgba(84, 116, 180, 0.3)',
+          }}
+        >
+          <Group justify="space-between" align="flex-start" mb="xs">
+            <Box>
+              <Text size="xs" fw={600} c="brand.4">Enhance with AI</Text>
+              <Text size="xs" c="dark.2">
                 Describe what to change — e.g. "make it more specific about lighting" or "add an instruction to preserve the logo".
-              </div>
-            </div>
-            <button
-              type="button"
+              </Text>
+            </Box>
+            <ActionIcon
+              variant="subtle"
+              color="brand"
+              size="sm"
               onClick={() => setEnhanceOpen(false)}
-              className="text-indigo-400 hover:text-indigo-700"
-              aria-label="Close"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M6 6l12 12M6 18L18 6" strokeLinecap="round" />
-              </svg>
-            </button>
-          </div>
-          <textarea
+              <IconX size={14} />
+            </ActionIcon>
+          </Group>
+          <Textarea
             value={instructions}
             onChange={(e) => setInstructions(e.currentTarget.value)}
             placeholder="What would you like to change?"
             rows={2}
             disabled={enhancing}
-            className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition disabled:opacity-60 resize-y"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault()
@@ -285,33 +418,177 @@ function PromptField({
               }
             }}
           />
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-indigo-600">⌘/Ctrl+Enter to submit</span>
-            <button
-              type="button"
+          <Group justify="space-between" mt="sm">
+            <Text size="xs" c="dark.3">⌘/Ctrl+Enter to submit</Text>
+            <Button
+              size="xs"
+              color="brand"
               onClick={handleEnhance}
-              disabled={enhancing || !instructions.trim()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 transition disabled:opacity-50"
+              disabled={!instructions.trim()}
+              loading={enhancing}
+              leftSection={enhancing ? undefined : <IconSparkles size={12} />}
             >
-              {enhancing && (
-                <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-              )}
               {enhancing ? 'Rewriting…' : 'Rewrite prompt'}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+            </Button>
+          </Group>
+        </Paper>
+      </Collapse>
+    </Box>
   )
 }
 
-function Spinner({ size = 14, light }: { size?: number; light?: boolean }) {
+function PromptFieldContent({
+  value,
+  onChange,
+  rows,
+}: {
+  value: string
+  onChange: (v: string) => void
+  rows: number
+}) {
+  const enhance = useAction(api.ai.enhancePrompt)
+  const [enhanceOpen, setEnhanceOpen] = useState(false)
+  const [instructions, setInstructions] = useState('')
+  const [enhancing, setEnhancing] = useState(false)
+  const [previous, setPrevious] = useState<string | null>(null)
+
+  async function handleEnhance() {
+    const trimmed = instructions.trim()
+    if (!trimmed) {
+      notifications.show({
+        title: 'Error',
+        message: 'Describe what to change',
+        color: 'red',
+      })
+      return
+    }
+    setEnhancing(true)
+    try {
+      const { enhanced } = await enhance({ original: value, instructions: trimmed })
+      setPrevious(value)
+      onChange(enhanced)
+      notifications.show({
+        title: 'Success',
+        message: 'Prompt updated — review and save',
+        color: 'green',
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'AI enhance failed',
+        color: 'red',
+      })
+    } finally {
+      setEnhancing(false)
+    }
+  }
+
+  function handleUndo() {
+    if (previous === null) return
+    onChange(previous)
+    setPrevious(null)
+  }
+
   return (
-    <span
-      className={`inline-block rounded-full animate-spin border-2 ${
-        light ? 'border-white/40 border-t-white' : 'border-slate-200 border-t-slate-600'
-      }`}
-      style={{ width: size, height: size }}
-    />
+    <Box>
+      <Group justify="space-between" mb="xs">
+        <Group gap="xs">
+          <Badge
+            size="sm"
+            variant={enhanceOpen ? 'filled' : 'light'}
+            color="brand"
+            radius="xl"
+            leftSection={<IconSparkles size={10} />}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setEnhanceOpen((v) => !v)}
+          >
+            Enhance with AI
+          </Badge>
+          {previous !== null && !enhancing && (
+            <Button
+              variant="subtle"
+              size="xs"
+              color="gray"
+              onClick={handleUndo}
+            >
+              Undo
+            </Button>
+          )}
+        </Group>
+        <Text size="xs" c="dark.3">{value.length} chars</Text>
+      </Group>
+      <Textarea
+        value={value}
+        onChange={(e) => {
+          onChange(e.currentTarget.value)
+          if (previous !== null) setPrevious(null)
+        }}
+        rows={rows}
+        autosize
+        minRows={rows}
+        styles={{
+          input: {
+            fontFamily: 'monospace',
+            backgroundColor: 'var(--mantine-color-dark-6)',
+          },
+        }}
+      />
+
+      <Collapse expanded={enhanceOpen}>
+        <Paper
+          radius="md"
+          p="md"
+          mt="sm"
+          withBorder
+          style={{
+            backgroundColor: 'rgba(84, 116, 180, 0.1)',
+            borderColor: 'rgba(84, 116, 180, 0.3)',
+          }}
+        >
+          <Group justify="space-between" align="flex-start" mb="xs">
+            <Box>
+              <Text size="xs" fw={600} c="brand.4">Enhance with AI</Text>
+              <Text size="xs" c="dark.2">
+                Describe what to change — e.g. "make it more specific about lighting"
+              </Text>
+            </Box>
+            <ActionIcon
+              variant="subtle"
+              color="brand"
+              size="sm"
+              onClick={() => setEnhanceOpen(false)}
+            >
+              <IconX size={14} />
+            </ActionIcon>
+          </Group>
+          <Textarea
+            value={instructions}
+            onChange={(e) => setInstructions(e.currentTarget.value)}
+            placeholder="What would you like to change?"
+            rows={2}
+            disabled={enhancing}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                handleEnhance()
+              }
+            }}
+          />
+          <Group justify="space-between" mt="sm">
+            <Text size="xs" c="dark.3">⌘/Ctrl+Enter to submit</Text>
+            <Button
+              size="xs"
+              color="brand"
+              onClick={handleEnhance}
+              disabled={!instructions.trim()}
+              loading={enhancing}
+              leftSection={enhancing ? undefined : <IconSparkles size={12} />}
+            >
+              {enhancing ? 'Rewriting…' : 'Rewrite prompt'}
+            </Button>
+          </Group>
+        </Paper>
+      </Collapse>
+    </Box>
   )
 }

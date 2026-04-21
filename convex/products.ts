@@ -141,6 +141,7 @@ export const getProductInternal = internalQuery({
 
 /**
  * Lists all non-archived products, newest first.
+ * Includes generation count for each product.
  */
 export const listProducts = query({
   args: {},
@@ -150,7 +151,22 @@ export const listProducts = query({
       .filter((q) => q.eq(q.field('archivedAt'), undefined))
       .order('desc')
       .collect()
-    return products
+
+    // Fetch generation counts for each product
+    const productsWithCounts = await Promise.all(
+      products.map(async (product) => {
+        const generations = await ctx.db
+          .query('templateGenerations')
+          .withIndex('by_product', (q) => q.eq('productId', product._id))
+          .collect()
+        return {
+          ...product,
+          generationCount: generations.length,
+        }
+      })
+    )
+
+    return productsWithCounts
   },
 })
 

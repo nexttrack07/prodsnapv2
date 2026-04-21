@@ -5,7 +5,7 @@ import {
   notifyManager,
 } from '@tanstack/react-query'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
-import toast from 'react-hot-toast'
+import { notifications } from '@mantine/notifications'
 import { ConvexQueryClient } from '@convex-dev/react-query'
 import { ConvexProvider } from 'convex/react'
 import { routeTree } from './routeTree.gen'
@@ -32,7 +32,11 @@ export function getRouter() {
     },
     mutationCache: new MutationCache({
       onError: (error) => {
-        toast(error.message, { className: 'bg-red-500 text-white' })
+        notifications.show({
+          title: 'Error',
+          message: error.message,
+          color: 'red',
+        })
       },
     }),
   })

@@ -1,8 +1,9 @@
 import { invariant } from '../invariant'
 import { forwardRef, useState } from 'react'
+import { Box, Paper, Text, ActionIcon } from '@mantine/core'
+import { IconTrash } from '@tabler/icons-react'
 
 import { CONTENT_TYPES } from '../types'
-import { Icon } from '../icons/icons'
 import { useDeleteCardMutation, useUpdateCardMutation } from '../queries'
 import { deleteItemSchema } from '../db/schema'
 
@@ -30,7 +31,8 @@ export const Card = forwardRef<HTMLLIElement, CardProps>(
     const moveCard = useUpdateCardMutation()
 
     return (
-      <li
+      <Box
+        component="li"
         ref={ref}
         onDragOver={(event) => {
           if (event.dataTransfer.types.includes(CONTENT_TYPES.card)) {
@@ -71,18 +73,24 @@ export const Card = forwardRef<HTMLLIElement, CardProps>(
 
           setAcceptDrop('none')
         }}
-        className={
-          'border-t-2 border-b-2 -mb-[2px] last:mb-0 cursor-grab active:cursor-grabbing px-2 py-1 ' +
-          (acceptDrop === 'top'
-            ? 'border-t-red-500 border-b-transparent'
-            : acceptDrop === 'bottom'
-              ? 'border-b-red-500 border-t-transparent'
-              : 'border-t-transparent border-b-transparent')
-        }
+        style={{
+          borderTop: `2px solid ${acceptDrop === 'top' ? 'var(--mantine-color-red-5)' : 'transparent'}`,
+          borderBottom: `2px solid ${acceptDrop === 'bottom' ? 'var(--mantine-color-red-5)' : 'transparent'}`,
+          marginBottom: -2,
+          cursor: 'grab',
+          padding: '4px 8px',
+        }}
+        mod={{ 'last-child': { marginBottom: 0 } }}
       >
-        <div
+        <Paper
           draggable
-          className="bg-white shadow-sm shadow-slate-300 border-slate-300 text-sm rounded-lg w-full py-1 px-2 relative"
+          shadow="xs"
+          p="xs"
+          radius="md"
+          pos="relative"
+          style={{
+            border: '1px solid var(--mantine-color-gray-3)',
+          }}
           onDragStart={(event) => {
             event.dataTransfer.effectAllowed = 'move'
             event.dataTransfer.setData(
@@ -92,8 +100,8 @@ export const Card = forwardRef<HTMLLIElement, CardProps>(
             event.stopPropagation()
           }}
         >
-          <h3>{title}</h3>
-          <div className="mt-2">{content || <>&nbsp;</>}</div>
+          <Text size="sm" fw={500}>{title}</Text>
+          <Text size="sm" mt="xs">{content || '\u00A0'}</Text>
           <form
             onSubmit={(event) => {
               event.preventDefault()
@@ -106,17 +114,25 @@ export const Card = forwardRef<HTMLLIElement, CardProps>(
               )
             }}
           >
-            <button
-              aria-label="Delete card"
-              className="absolute top-4 right-4 hover:text-red-500 flex gap-2 items-center"
+            <ActionIcon
               type="submit"
+              variant="subtle"
+              color="gray"
+              size="sm"
+              aria-label="Delete card"
+              pos="absolute"
+              top={16}
+              right={16}
+              style={{
+                '&:hover': { color: 'var(--mantine-color-red-5)' },
+              }}
             >
-              <div className="opacity-50 text-xs">{order}</div>
-              <Icon name="trash" />
-            </button>
+              <Text size="xs" c="dimmed" mr={4}>{order}</Text>
+              <IconTrash size={14} />
+            </ActionIcon>
           </form>
-        </div>
-      </li>
+        </Paper>
+      </Box>
     )
   },
 )

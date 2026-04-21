@@ -1,19 +1,19 @@
 import { forwardRef } from 'react'
+import { Button } from '@mantine/core'
 
 export const SaveButton = forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement>
->((props, ref) => {
+>(({ children, ...props }, ref) => {
   return (
-    <button
+    <Button
       ref={ref}
-      // this makes it so the button takes focus on clicks in safari I can't
-      // remember if this is the proper workaround or not, it's been a while!
-      // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#clicking_and_focus
-      // https://bugs.webkit.org/show_bug.cgi?id=22261
       tabIndex={0}
+      size="sm"
+      color="blue"
       {...props}
-      className="text-sm rounded-lg text-left p-2 font-medium text-white bg-blue-500"
-    />
+    >
+      {children}
+    </Button>
   )
 })

@@ -3,7 +3,26 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAction } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useState } from 'react'
-import toast from 'react-hot-toast'
+import { notifications } from '@mantine/notifications'
+import {
+  Container,
+  Title,
+  Text,
+  Paper,
+  Box,
+  Group,
+  Badge,
+  Button,
+  ThemeIcon,
+  Image,
+  Loader,
+  Breadcrumbs,
+  Anchor,
+  AspectRatio,
+  Indicator,
+  Chip,
+} from '@mantine/core'
+import { IconUpload, IconRefresh, IconTrash } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 
@@ -41,35 +60,47 @@ function AdminTemplatesPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <Link to="/admin" className="hover:text-slate-700">Admin</Link>
-            <span>/</span>
-            <span>Templates</span>
-          </div>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Templates</h1>
-          <p className="mt-1 text-slate-500">
-            Upload ad templates. The system auto-computes a CLIP embedding and visual tags for each.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <StatPill label="Total" value={counts.total} />
-          <StatPill label="Published" value={counts.published} tone="emerald" />
-          <StatPill label="Ingesting" value={counts.pending} tone="blue" />
-          <StatPill label="Failed" value={counts.failed} tone="red" />
-        </div>
-      </div>
+    <Container size="lg" py={40}>
+      <Paper
+        radius="xl"
+        p="xl"
+        mb="xl"
+        style={{
+          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.1) 0%, rgba(84, 116, 180, 0.03) 100%)',
+          border: '1px solid var(--mantine-color-dark-5)',
+        }}
+      >
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+          <Box>
+            <Breadcrumbs mb={8}>
+              <Anchor component={Link} to="/admin" size="sm" c="dark.2">
+                Admin
+              </Anchor>
+              <Text size="sm" c="dark.1">Templates</Text>
+            </Breadcrumbs>
+            <Title order={1} fz={30} fw={600} c="white">
+              Templates
+            </Title>
+            <Text c="dark.2" mt={4}>
+              Upload ad templates. The system auto-computes a CLIP embedding and visual tags for each.
+            </Text>
+          </Box>
+          <Group gap="xs">
+            <StatPill label="Total" value={counts.total} />
+            <StatPill label="Published" value={counts.published} color="teal" />
+            <StatPill label="Ingesting" value={counts.pending} color="brand" />
+            <StatPill label="Failed" value={counts.failed} color="red" />
+          </Group>
+        </Group>
+      </Paper>
 
       <UploadArea />
 
       <TemplatesTable rows={rows} />
-    </div>
+    </Container>
   )
 }
 
-// ─── Upload ───────────────────────────────────────────────────────────────
 function UploadArea() {
   const uploadTemplate = useAction(api.r2.uploadTemplateImage)
   const createTemplate = useConvexMutation(api.templates.createTemplate)
@@ -109,71 +140,99 @@ function UploadArea() {
           ok++
         } catch (err) {
           failed++
-          toast.error(
-            `${file.name}: ${err instanceof Error ? err.message : 'Upload failed'}`,
-          )
+          notifications.show({
+            title: file.name,
+            message: err instanceof Error ? err.message : 'Upload failed',
+            color: 'red',
+          })
         } finally {
           setInFlight((n) => n - 1)
         }
       }),
     )
 
-    if (ok > 0) toast.success(`Uploaded ${ok} file${ok === 1 ? '' : 's'}`)
-    if (failed === 0 && ok === 0) toast.error('No files uploaded')
+    if (ok > 0) {
+      notifications.show({
+        title: 'Upload complete',
+        message: `Uploaded ${ok} file${ok === 1 ? '' : 's'}`,
+        color: 'green',
+      })
+    }
+    if (failed === 0 && ok === 0) {
+      notifications.show({
+        title: 'Upload failed',
+        message: 'No files uploaded',
+        color: 'red',
+      })
+    }
   }
 
   return (
-    <div>
-      <label
-        onDragOver={(e) => {
-          e.preventDefault()
-          setDragging(true)
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setDragging(false)
-          handleFiles(e.dataTransfer.files)
-        }}
-        className={`block cursor-pointer rounded-2xl border-2 border-dashed transition p-10 text-center ${
-          dragging
-            ? 'border-blue-500 bg-blue-50/60'
-            : 'border-slate-300 bg-white hover:border-slate-400'
-        }`}
+    <Paper
+      component="label"
+      radius="xl"
+      p={48}
+      mb="xl"
+      ta="center"
+      withBorder
+      style={{
+        borderWidth: 2,
+        borderStyle: 'dashed',
+        cursor: 'pointer',
+        borderColor: dragging ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-4)',
+        backgroundColor: dragging ? 'rgba(84, 116, 180, 0.1)' : 'var(--mantine-color-dark-7)',
+        transition: 'border-color 200ms ease, background-color 200ms ease, transform 200ms ease',
+        transform: dragging ? 'scale(1.01)' : 'scale(1)',
+      }}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragging(false)
+        handleFiles(e.dataTransfer.files)
+      }}
+    >
+      <input
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => handleFiles(e.currentTarget.files)}
+      />
+      <ThemeIcon
+        size={64}
+        radius="xl"
+        variant="gradient"
+        gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+        mx="auto"
+        mb="md"
+        style={{ boxShadow: '0 4px 20px rgba(84, 116, 180, 0.25)' }}
       >
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => handleFiles(e.currentTarget.files)}
-        />
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mb-3">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-500">
-            <path d="M12 15V3m0 0l-4 4m4-4l4 4M3 15v4a2 2 0 002 2h14a2 2 0 002-2v-4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-        <div className="font-semibold text-slate-800">
-          {inFlight > 0
-            ? `Uploading ${inFlight} file${inFlight === 1 ? '' : 's'}…`
-            : (
-                <>
-                  Drop ad templates or <span className="text-blue-600">browse</span>
-                </>
-              )}
-        </div>
-        <div className="mt-1 text-sm text-slate-500">
-          Multiple images OK. 1:1, 4:5, 9:16, or 16:9 (±5%). Up to 20 MB each.
-        </div>
-      </label>
-    </div>
+        <IconUpload size={28} />
+      </ThemeIcon>
+      <Text fw={600} size="lg" c="white">
+        {inFlight > 0
+          ? `Uploading ${inFlight} file${inFlight === 1 ? '' : 's'}…`
+          : (
+              <>
+                Drop ad templates or <Text component="span" c="brand.4" inherit>browse</Text>
+              </>
+            )}
+      </Text>
+      <Text size="sm" c="dark.2" mt={8}>
+        Multiple images OK. 1:1, 4:5, 9:16, or 16:9 (±5%). Up to 20 MB each.
+      </Text>
+    </Paper>
   )
 }
 
 function measureImage(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
-    const img = new Image()
+    const img = new window.Image()
     img.onload = () => {
       URL.revokeObjectURL(url)
       resolve({ width: img.naturalWidth, height: img.naturalHeight })
@@ -195,160 +254,224 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-// ─── Templates table ──────────────────────────────────────────────────────
 function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   const retryMutation = useMutation({ mutationFn: useConvexMutation(api.templates.retryTemplateIngest) })
   const deleteMutation = useMutation({ mutationFn: useConvexMutation(api.templates.deleteTemplate) })
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center text-slate-500">
-        No templates yet. Drop some images above to seed the library.
-      </div>
+      <Paper
+        radius="xl"
+        p={64}
+        ta="center"
+        withBorder
+        style={{
+          borderColor: 'var(--mantine-color-dark-5)',
+          borderStyle: 'dashed',
+          background: 'linear-gradient(180deg, rgba(84, 116, 180, 0.05) 0%, transparent 100%)',
+        }}
+      >
+        <Text c="dark.2" size="lg">No templates yet. Drop some images above to seed the library.</Text>
+      </Paper>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-900">Library</h2>
-      <div className="columns-1 sm:columns-2 lg:columns-3 gap-4 [column-fill:_balance]">
+    <Box>
+      <Title order={2} size="lg" fw={600} c="white" mb="md">
+        Library
+      </Title>
+      <Box
+        style={{
+          columns: '3',
+          columnGap: '1rem',
+        }}
+      >
         {rows
           .slice()
           .sort((a, b) => b._creationTime - a._creationTime)
           .map((t) => (
-            <div
+            <Paper
               key={t._id}
-              className="mb-4 break-inside-avoid rounded-2xl border border-slate-200 bg-white overflow-hidden"
+              radius="lg"
+              withBorder
+              mb="md"
+              style={{
+                breakInside: 'avoid',
+                overflow: 'hidden',
+                borderColor: 'var(--mantine-color-dark-5)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                transition: 'border-color 200ms ease, box-shadow 200ms ease',
+              }}
+              styles={{
+                root: {
+                  '&:hover': {
+                    borderColor: 'var(--mantine-color-dark-4)',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+                  },
+                },
+              }}
             >
-              <div
-                className="relative bg-slate-50"
-                style={{ aspectRatio: aspectRatioCss(t.aspectRatio) }}
-              >
-                <img src={t.thumbnailUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                <StatusBadge status={t.status} />
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
+              <AspectRatio ratio={getAspectRatioValue(t.aspectRatio)}>
+                <Box pos="relative" bg="dark.6" w="100%" h="100%">
+                  <Image src={t.thumbnailUrl} alt="" fit="cover" h="100%" w="100%" loading="lazy" />
+                  <StatusBadge status={t.status} />
+                </Box>
+              </AspectRatio>
+              <Box p="md">
+                <Group gap={8} wrap="wrap" mb={8}>
                   {t.category && (
-                    <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                    <Badge size="xs" variant="light" color="gray" tt="uppercase">
                       {t.category}
-                    </span>
+                    </Badge>
                   )}
                   {t.subcategory && (
-                    <span className="text-[10px] tracking-wider text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                    <Badge size="xs" variant="light" color="gray">
                       {t.subcategory}
-                    </span>
+                    </Badge>
                   )}
-                  <span className="text-[10px] tracking-wider text-slate-500">
+                  <Text size="xs" c="dark.3">
                     {t.aspectRatio} · {t.width}×{t.height}
-                  </span>
-                </div>
-                {(t.sceneTypes?.length || t.moods?.length) && (
-                  <div className="flex flex-wrap gap-1">
-                    {t.sceneTypes?.map((s) => (
-                      <span key={`s-${s}`} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
-                        {s}
-                      </span>
-                    ))}
-                    {t.moods?.map((m) => (
-                      <span key={`m-${m}`} className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">
-                        {m}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                  </Text>
+                </Group>
+                {(t.sceneTypes?.length || t.moods?.length) ? (
+                  <Chip.Group multiple>
+                    <Group gap={4} wrap="wrap" mb={8}>
+                      {t.sceneTypes?.map((s) => (
+                        <Chip
+                          key={`s-${s}`}
+                          size="xs"
+                          variant="light"
+                          color="brand"
+                          checked={false}
+                          styles={{
+                            label: {
+                              cursor: 'default',
+                              paddingLeft: 8,
+                              paddingRight: 8,
+                            },
+                          }}
+                        >
+                          {s}
+                        </Chip>
+                      ))}
+                      {t.moods?.map((m) => (
+                        <Chip
+                          key={`m-${m}`}
+                          size="xs"
+                          variant="light"
+                          color="violet"
+                          checked={false}
+                          styles={{
+                            label: {
+                              cursor: 'default',
+                              paddingLeft: 8,
+                              paddingRight: 8,
+                            },
+                          }}
+                        >
+                          {m}
+                        </Chip>
+                      ))}
+                    </Group>
+                  </Chip.Group>
+                ) : null}
                 {t.status === 'failed' && t.ingestError && (
-                  <div className="text-xs text-red-700 line-clamp-2">{t.ingestError}</div>
+                  <Text size="xs" c="red.7" lineClamp={2} mb={8}>
+                    {t.ingestError}
+                  </Text>
                 )}
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    type="button"
+                <Group justify="flex-end" gap={8} mt={4}>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="gray"
+                    leftSection={<IconRefresh size={14} />}
                     onClick={() => retryMutation.mutate({ id: t._id })}
-                    disabled={retryMutation.isPending}
-                    className="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition disabled:opacity-50"
+                    loading={retryMutation.isPending}
                   >
                     Re-tag
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="red"
+                    leftSection={<IconTrash size={14} />}
                     onClick={() => {
                       if (confirm('Delete this template?')) deleteMutation.mutate({ id: t._id })
                     }}
-                    disabled={deleteMutation.isPending}
-                    className="text-xs px-2.5 py-1 rounded-md bg-red-50 text-red-700 hover:bg-red-100 transition disabled:opacity-50"
+                    loading={deleteMutation.isPending}
                   >
                     Delete
-                  </button>
-                </div>
-              </div>
-            </div>
+                  </Button>
+                </Group>
+              </Box>
+            </Paper>
           ))}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
 function StatusBadge({ status }: { status: TemplateRow['status'] }) {
-  const styles: Record<TemplateRow['status'], string> = {
-    pending: 'bg-amber-100 text-amber-800',
-    ingesting: 'bg-blue-100 text-blue-800',
-    published: 'bg-emerald-100 text-emerald-800',
-    failed: 'bg-red-100 text-red-800',
+  const colorMap: Record<TemplateRow['status'], string> = {
+    pending: 'yellow',
+    ingesting: 'blue',
+    published: 'teal',
+    failed: 'red',
   }
-  const label: Record<TemplateRow['status'], string> = {
+  const labelMap: Record<TemplateRow['status'], string> = {
     pending: 'Pending',
     ingesting: 'Ingesting',
     published: 'Published',
     failed: 'Failed',
   }
   return (
-    <span
-      className={`absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${styles[status]}`}
+    <Badge
+      pos="absolute"
+      top={8}
+      right={8}
+      size="xs"
+      variant="filled"
+      color={colorMap[status]}
+      tt="uppercase"
     >
-      {label[status]}
-    </span>
+      {labelMap[status]}
+    </Badge>
   )
 }
 
 function StatPill({
   label,
   value,
-  tone,
+  color,
 }: {
   label: string
   value: number
-  tone?: 'emerald' | 'blue' | 'red'
+  color?: string
 }) {
-  const cls = tone === 'emerald'
-    ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
-    : tone === 'blue'
-      ? 'bg-blue-50 text-blue-800 ring-blue-200'
-      : tone === 'red'
-        ? 'bg-red-50 text-red-800 ring-red-200'
-        : 'bg-slate-50 text-slate-700 ring-slate-200'
   return (
-    <span className={`inline-flex items-center gap-1.5 ring-1 rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>
-      <span className="text-slate-500">{label}</span>
-      <span className="font-bold">{value}</span>
-    </span>
+    <Badge
+      size="lg"
+      variant="light"
+      color={color || 'gray'}
+      radius="xl"
+      px="sm"
+    >
+      <Group gap={6}>
+        <Text size="xs" c="dark.2">{label}</Text>
+        <Text size="xs" fw={700}>{value}</Text>
+      </Group>
+    </Badge>
   )
 }
 
-function Spinner({ size = 16 }: { size?: number }) {
-  return (
-    <span
-      className="inline-block rounded-full border-2 border-slate-200 border-t-slate-600 animate-spin"
-      style={{ width: size, height: size }}
-    />
-  )
-}
-
-function aspectRatioCss(ar: string) {
+function getAspectRatioValue(ar: string): number {
   switch (ar) {
-    case '1:1': return '1 / 1'
-    case '4:5': return '4 / 5'
-    case '9:16': return '9 / 16'
-    case '16:9': return '16 / 9'
-    default: return '1 / 1'
+    case '1:1': return 1
+    case '4:5': return 4 / 5
+    case '9:16': return 9 / 16
+    case '16:9': return 16 / 9
+    default: return 1
   }
 }

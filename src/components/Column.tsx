@@ -1,10 +1,10 @@
 import { forwardRef, useCallback, useMemo, useRef, useState } from 'react'
-import { twMerge } from 'tailwind-merge'
+import { Box, Paper, ScrollArea, Group, UnstyledButton, ActionIcon, Text } from '@mantine/core'
+import { IconPlus, IconTrash } from '@tabler/icons-react'
 
 import { flushSync } from 'react-dom'
 import { invariant } from '../invariant'
 import { CONTENT_TYPES } from '../types'
-import { Icon } from '../icons/icons'
 import {
   useDeleteColumnMutation,
   useUpdateCardMutation,
@@ -96,7 +96,7 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
     }
 
     return (
-      <div
+      <Box
         ref={ref}
         onDragOver={(event: React.DragEvent) => {
           if (event.dataTransfer.types.includes(CONTENT_TYPES.column)) {
@@ -133,16 +133,19 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
 
           setAcceptColumnDrop('none')
         }}
-        className={twMerge(
-          'border-l-transparent border-r-transparent border-l-2 border-r-2 -mr-[2px] last:mr-0 cursor-grab active:cursor-grabbing px-2 shrink-0 flex flex-col  max-h-full',
-          acceptColumnDrop === 'left'
-            ? 'border-l-red-500 border-r-transparent'
-            : acceptColumnDrop === 'right'
-              ? 'border-r-red-500 border-l-transparent'
-              : '',
-        )}
+        style={{
+          borderLeft: `2px solid ${acceptColumnDrop === 'left' ? 'var(--mantine-color-red-5)' : 'transparent'}`,
+          borderRight: `2px solid ${acceptColumnDrop === 'right' ? 'var(--mantine-color-red-5)' : 'transparent'}`,
+          marginRight: -2,
+          cursor: 'grab',
+          padding: '0 8px',
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: '100%',
+        }}
       >
-        <div
+        <Paper
           draggable={!editState[0]}
           onDragStart={(event: React.DragEvent) => {
             event.dataTransfer.effectAllowed = 'move'
@@ -152,12 +155,21 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
             )
           }}
           {...(!items.length ? cardDndProps : {})}
-          className={twMerge(
-            'shrink-0 flex flex-col max-h-full w-80 border-slate-400 rounded-xl shadow-xs shadow-slate-400 bg-slate-100 relative',
-            acceptCardDrop && `outline-solid outline-2 outline-red-500`,
-          )}
+          shadow="xs"
+          radius="lg"
+          bg="dark.7"
+          w={320}
+          pos="relative"
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: '100%',
+            border: '1px solid var(--mantine-color-dark-5)',
+            outline: acceptCardDrop ? '2px solid var(--mantine-color-red-5)' : 'none',
+          }}
         >
-          <div className="p-2" {...(items.length ? cardDndProps : {})}>
+          <Box p="sm" {...(items.length ? cardDndProps : {})}>
             <EditableText
               fieldName="name"
               editState={editState}
@@ -170,8 +182,6 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
               }
               inputLabel="Edit column name"
               buttonLabel={`Edit column "${name}" name`}
-              inputClassName="border border-slate-400 w-full rounded-lg py-1 px-2 font-medium text-black"
-              buttonClassName="block rounded-lg text-left w-full border border-transparent py-1 px-2 font-medium text-slate-600"
               onChange={(value) => {
                 updateColumnMutation.mutate({
                   boardId,
@@ -180,9 +190,9 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
                 })
               }}
             />
-          </div>
+          </Box>
 
-          <ul ref={listRef} className="grow overflow-auto">
+          <Box component="ul" ref={listRef} style={{ flexGrow: 1, overflow: 'auto', listStyle: 'none', margin: 0, padding: 0 }}>
             {sortedItems.map((item, index, items) => (
               <Card
                 ref={itemRef}
@@ -199,7 +209,7 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
                 }
               />
             ))}
-          </ul>
+          </Box>
           {edit ? (
             <NewCard
               columnId={columnId}
@@ -210,8 +220,8 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
               onComplete={() => setEdit(false)}
             />
           ) : (
-            <div className="p-2" {...(items.length ? cardDndProps : {})}>
-              <button
+            <Box p="sm" {...(items.length ? cardDndProps : {})}>
+              <UnstyledButton
                 type="button"
                 onClick={() => {
                   flushSync(() => {
@@ -219,11 +229,20 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
                   })
                   scrollList()
                 }}
-                className="flex items-center gap-2 rounded-lg text-left w-full p-2 font-medium text-slate-500 hover:bg-slate-200 focus:bg-slate-200"
+                w="100%"
+                p="sm"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  borderRadius: 'var(--mantine-radius-md)',
+                  fontWeight: 500,
+                  color: 'var(--mantine-color-gray-6)',
+                }}
               >
-                <Icon name="plus" /> Add a card
-              </button>
-            </div>
+                <IconPlus size={16} /> Add a card
+              </UnstyledButton>
+            </Box>
           )}
           <form
             onSubmit={(event) => {
@@ -235,16 +254,21 @@ export const Column = forwardRef<HTMLDivElement, ColumnProps>(
               })
             }}
           >
-            <button
-              aria-label="Delete column"
-              className="absolute top-4 right-4 hover:text-red-500 flex gap-2 items-center"
+            <ActionIcon
               type="submit"
+              variant="subtle"
+              color="gray"
+              size="sm"
+              aria-label="Delete column"
+              pos="absolute"
+              top={16}
+              right={16}
             >
-              <Icon name="trash" />
-            </button>
+              <IconTrash size={16} />
+            </ActionIcon>
           </form>
-        </div>
-      </div>
+        </Paper>
+      </Box>
     )
   },
 )

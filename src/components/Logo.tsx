@@ -1,46 +1,63 @@
-import { twMerge } from 'tailwind-merge'
+import { Group, Box, Text } from '@mantine/core'
 
 type Size = 'sm' | 'md' | 'lg'
 type Variant = 'light' | 'dark'
 
-const sizeClasses: Record<Size, string> = {
-  sm: 'text-xs tracking-[0.18em] border p-0.5',
-  md: 'text-sm tracking-[0.18em] border p-1',
-  lg: 'text-base tracking-[0.2em] border-2 p-1.5',
-}
-
-const blockPadding: Record<Size, string> = {
-  sm: 'px-1.5 py-1',
-  md: 'px-2 py-1',
-  lg: 'px-2.5 py-1.5',
+const sizeStyles: Record<Size, { fontSize: string; padding: string; borderWidth: number }> = {
+  sm: { fontSize: '10px', padding: '4px 6px', borderWidth: 1 },
+  md: { fontSize: '12px', padding: '4px 8px', borderWidth: 1 },
+  lg: { fontSize: '14px', padding: '6px 10px', borderWidth: 2 },
 }
 
 export function Logo({
   size = 'md',
-  variant = 'light',
-  className,
+  variant = 'dark',
 }: {
   size?: Size
   variant?: Variant
-  className?: string
 }) {
-  const borderClr = variant === 'light' ? 'border-slate-900' : 'border-white'
-  const solidBlock =
-    variant === 'light'
-      ? 'bg-slate-900 text-white'
-      : 'bg-white text-slate-900'
-  const outlineBlock = variant === 'light' ? 'text-slate-900' : 'text-white'
+  const styles = sizeStyles[size]
+  const borderColor = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
+  const solidBg = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
+  const solidText = variant === 'light' ? 'white' : 'var(--mantine-color-dark-9)'
+  const outlineText = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
+
   return (
-    <div
-      className={twMerge(
-        'inline-flex items-stretch rounded-sm font-bold leading-none select-none',
-        sizeClasses[size],
-        borderClr,
-        className,
-      )}
+    <Group
+      gap={0}
+      style={{
+        border: `${styles.borderWidth}px solid ${borderColor}`,
+        borderRadius: 'var(--mantine-radius-sm)',
+        overflow: 'hidden',
+      }}
     >
-      <span className={twMerge('rounded-sm', blockPadding[size], solidBlock)}>PROD</span>
-      <span className={twMerge('rounded-sm', blockPadding[size], outlineBlock)}>SNAP</span>
-    </div>
+      <Box
+        component="span"
+        style={{
+          backgroundColor: solidBg,
+          color: solidText,
+          padding: styles.padding,
+          fontSize: styles.fontSize,
+          fontWeight: 700,
+          letterSpacing: '0.18em',
+          lineHeight: 1,
+        }}
+      >
+        PROD
+      </Box>
+      <Box
+        component="span"
+        style={{
+          color: outlineText,
+          padding: styles.padding,
+          fontSize: styles.fontSize,
+          fontWeight: 700,
+          letterSpacing: '0.18em',
+          lineHeight: 1,
+        }}
+      >
+        SNAP
+      </Box>
+    </Group>
   )
 }
