@@ -14,8 +14,9 @@ fal.config({ credentials: process.env.FAL_KEY })
 // Model constants
 const VISION_MODEL = 'google/gemini-2.5-flash'
 
-// SAM3 embeddings - dimensions TBD, we'll detect from first response
-// CLIP was 768, SAM3 may differ
+// Image embedding dimensions
+// SAM3 embeddings may differ from CLIP's 768 - will be validated at runtime
+// Exported as CLIP_EMBEDDING_DIMS for backward compatibility with schema.ts
 export const CLIP_EMBEDDING_DIMS = 768
 
 // ─── Structured Tag Taxonomy ──────────────────────────────────────────────
@@ -128,7 +129,8 @@ async function callVision(opts: {
       temperature: 0.3,
     },
   })
-  const data = result.data as { output?: string }
+  const data = result.data as { output?: string; error?: string }
+  if (data.error) throw new Error(`Vision model error: ${data.error}`)
   if (!data.output) throw new Error('Vision model returned no output')
   return data.output
 }
@@ -146,7 +148,8 @@ async function callText(opts: {
       temperature: 0.3,
     },
   })
-  const data = result.data as { output?: string }
+  const data = result.data as { output?: string; error?: string }
+  if (data.error) throw new Error(`Text model error: ${data.error}`)
   if (!data.output) throw new Error('Text model returned no output')
   return data.output
 }
@@ -156,16 +159,13 @@ async function getImageEmbedding(imageUrl: string): Promise<number[]> {
   const result = await fal.subscribe('fal-ai/sam-3/image/embed', {
     input: { image_url: imageUrl },
   })
-  const data = result.data as { embedding_b64?: string }
+  const data = result.data as { embedding_b64?: string; error?: string }
+  if (data.error) throw new Error(`Embedding model error: ${data.error}`)
   if (!data.embedding_b64) throw new Error('SAM3 returned no embedding')
 
-  // Decode base64 to float32 array
-  const binaryStr = atob(data.embedding_b64)
-  const bytes = new Uint8Array(binaryStr.length)
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i)
-  }
-  const floats = new Float32Array(bytes.buffer)
+  // Decode base64 to float32 array using Node.js Buffer
+  const buffer = Buffer.from(data.embedding_b64, 'base64')
+  const floats = new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4)
   return Array.from(floats)
 }
 
@@ -186,8 +186,15 @@ function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
     jsonStr = jsonMatch[0]
   }
 
-  const parsed = JSON.parse(jsonStr)
-  return schema.parse(parsed)
+  try {
+    const parsed = JSON.parse(jsonStr)
+    return schema.parse(parsed)
+  } catch (err) {
+    const preview = response.slice(0, 200)
+    throw new Error(
+      `Failed to parse LLM response as JSON: ${err instanceof Error ? err.message : String(err)}\nResponse preview: ${preview}`,
+    )
+  }
 }
 
 // ─── Product analysis (vision + embedding, parallel) ───────────────────────
