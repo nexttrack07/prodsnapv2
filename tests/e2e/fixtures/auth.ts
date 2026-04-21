@@ -38,16 +38,16 @@ export const test = base.extend<{ authenticatedPage: Page }>({
         await page.waitForSelector('input[name="identifier"], input[type="email"]', { timeout: 10000 })
 
         // Fill email
-        await page.fill('input[name="identifier"], input[type="email"]', email)
-        await page.click('button[type="submit"], button:has-text("Continue")')
+        await page.getByPlaceholder('Enter your email address').fill(email)
 
-        // Wait for password field
-        await page.waitForSelector('input[type="password"]', { timeout: 10000 })
-        await page.fill('input[type="password"]', password)
-        await page.click('button[type="submit"], button:has-text("Continue")')
+        // Fill password (Clerk shows both fields at once)
+        await page.getByPlaceholder('Enter your password').fill(password)
 
-        // Wait for redirect to studio
-        await page.waitForURL(/\/studio/, { timeout: 15000 })
+        // Click the visible Continue button
+        await page.getByRole('button', { name: 'Continue' }).click()
+
+        // Wait for sign-in modal to close (successful auth)
+        await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 15000 })
       }
     }
 

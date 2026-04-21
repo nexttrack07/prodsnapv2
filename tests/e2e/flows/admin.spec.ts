@@ -21,14 +21,11 @@ test.describe('Admin Template Management', () => {
   test('can view template grid', async ({ authenticatedPage }) => {
     const page = authenticatedPage
 
-    // Wait for templates to load
-    await page.waitForSelector('[data-testid^="template-card"], .shimmer, [class*="loading"]', {
-      timeout: 10000,
-    })
+    // Wait for Library section heading to appear
+    await expect(page.getByText('Library')).toBeVisible({ timeout: 10000 })
 
-    // Either templates are visible or loading state
-    const templateCards = page.locator('[data-testid^="template-card"]')
-    const count = await templateCards.count()
+    // Verify templates are loaded by checking for PUBLISHED badges (visible on each template)
+    await expect(page.getByText('PUBLISHED').first()).toBeVisible({ timeout: 10000 })
 
     // Just verify no error state
     await expect(page.getByText(/error|failed to load/i)).not.toBeVisible()
