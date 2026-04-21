@@ -325,6 +325,50 @@ export const generateFromTemplateWorkflow = workflow.define({
   },
 })
 
+/**
+ * Workflow for generating variations from an existing generated image.
+ * Changes text, icons, and/or colors based on user selection.
+ */
+export const generateVariationWorkflow = workflow.define({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (step, { generationId }) => {
+    const gen = await step.runQuery(internal.studio.getGenerationInternal, { generationId })
+    if (!gen || !gen.variationSource) return
+
+    await step.runMutation(internal.studio.markGenerationRunning, { generationId })
+    try {
+      // Step 1 — compose the variation prompt
+      await step.runMutation(internal.studio.setGenerationStep, {
+        generationId,
+        currentStep: 'Processing',
+      })
+      const { prompt } = await step.runAction(internal.ai.composeVariationPrompt, { generationId })
+      await step.runMutation(internal.studio.saveDynamicPrompt, {
+        generationId,
+        dynamicPrompt: prompt,
+      })
+
+      // Step 2 — generate the variation image
+      await step.runMutation(internal.studio.setGenerationStep, {
+        generationId,
+        currentStep: 'Generating',
+      })
+      const { outputUrl } = await step.runAction(internal.ai.generateVariation, {
+        generationId,
+      })
+      await step.runMutation(internal.studio.markGenerationComplete, {
+        generationId,
+        outputUrl,
+      })
+    } catch (err) {
+      await step.runMutation(internal.studio.markGenerationFailed, {
+        generationId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  },
+})
+
 export const getGenerationInternal = internalQuery({
   args: { generationId: v.id('templateGenerations') },
   handler: async (ctx, { generationId }) => ctx.db.get(generationId),

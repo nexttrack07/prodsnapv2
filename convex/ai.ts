@@ -273,6 +273,107 @@ export const generateFromTemplate = internalAction({
   },
 })
 
+// ─── Variation generation ─────────────────────────────────────────────────
+
+/**
+ * Composes a prompt for generating variations of an existing image.
+ * Uses the variationSource to determine what to change (text, icons, colors).
+ */
+export const composeVariationPrompt = internalAction({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }): Promise<{ prompt: string }> => {
+    const gen = await ctx.runQuery(internal.studio.getGenerationInternal, { generationId })
+    if (!gen) throw new Error('Generation not found')
+    if (!gen.variationSource) throw new Error('Not a variation generation')
+
+    const { sourceImageUrl, changeText, changeIcons, changeColors } = gen.variationSource
+
+    // Build description of what to change
+    const changes: string[] = []
+    if (changeText) changes.push('different text/headlines/copy')
+    if (changeIcons) changes.push('different icons, badges, or decorative graphics')
+    if (changeColors) changes.push('a different color scheme/palette')
+
+    const changeDescription = changes.join(', ')
+
+    const system = [
+      'You are an expert at writing prompts for image-to-image AI models.',
+      'You will be shown an ad creative image. Your job is to write a prompt that will generate a variation of this image.',
+      'The variation should maintain the overall composition, layout, and product placement.',
+      'The variation should ONLY change what the user requested - nothing else.',
+      'Be specific and descriptive. Reference the original image structure.',
+      'Return ONLY the prompt text - no preamble, no markdown, no explanation.',
+    ].join(' ')
+
+    const userText = [
+      'Here is an ad creative image. Generate a variation that keeps everything the same EXCEPT:',
+      changeDescription,
+      '',
+      'The product shown should remain identical. The layout and composition should be preserved.',
+      'Write a prompt that will generate this variation.',
+    ].join('\n')
+
+    const { text } = await generateText({
+      model: openai('gpt-4o-mini'),
+      system,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: userText },
+            { type: 'image', image: sourceImageUrl },
+            { type: 'image', image: gen.productImageUrl },
+          ],
+        },
+      ],
+    })
+
+    const prompt = text.trim()
+    if (!prompt) throw new Error('Composer returned an empty prompt')
+    return { prompt }
+  },
+})
+
+/**
+ * Generates a variation image using the source image and variation prompt.
+ */
+export const generateVariation = internalAction({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }): Promise<{ outputUrl: string }> => {
+    const gen = await ctx.runQuery(internal.studio.getGenerationInternal, { generationId })
+    if (!gen) throw new Error('Generation not found')
+    if (!gen.dynamicPrompt) throw new Error('Dynamic prompt missing')
+    if (!gen.variationSource) throw new Error('Not a variation generation')
+
+    const aspectRatio = gen.aspectRatio ?? '1:1'
+
+    let output: unknown
+    try {
+      output = await replicate.run(GENERATION_MODEL, {
+        input: {
+          prompt: gen.dynamicPrompt,
+          image_input: [gen.variationSource.sourceImageUrl, gen.productImageUrl],
+          aspect_ratio: aspectRatio,
+          output_format: 'png',
+        },
+      })
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err)
+      if (/Prediction failed:?\s*$/.test(raw)) {
+        throw new Error('Image model rejected the request — try different variation options.')
+      }
+      throw err
+    }
+
+    const generatedUrl = extractOutputUrl(output)
+    if (!generatedUrl) throw new Error('Model did not return an image URL')
+
+    const key = `studio/variations/${gen.productId}/${generationId}-${nanoid(6)}.png`
+    const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
+    return { outputUrl }
+  },
+})
+
 // ─── Prompt enhancer (used by the /admin/prompts editor) ─────────────────
 export const enhancePrompt = action({
   args: {

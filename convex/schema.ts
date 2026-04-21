@@ -164,9 +164,17 @@ const schema = defineSchema({
     })),
     // Generation settings
     aspectRatio: v.optional(aspectRatio), // moved from run to generation
-    mode: v.union(v.literal('exact'), v.literal('remix')),
+    mode: v.union(v.literal('exact'), v.literal('remix'), v.literal('variation')),
     colorAdapt: v.boolean(),
     variationIndex: v.number(),
+    // For variation mode - reference to source generation
+    variationSource: v.optional(v.object({
+      sourceGenerationId: v.id('templateGenerations'),
+      sourceImageUrl: v.string(),
+      changeText: v.boolean(),
+      changeIcons: v.boolean(),
+      changeColors: v.boolean(),
+    })),
     // Execution state
     status: genStatus,
     currentStep: v.optional(v.string()),

@@ -388,3 +388,64 @@ export const listTemplates = query({
     }
   },
 })
+
+/**
+ * Generate variations from an existing generated image.
+ * User can choose to change text, icons, and/or colors.
+ */
+export const generateVariations = mutation({
+  args: {
+    generationId: v.id('templateGenerations'),
+    productId: v.id('products'),
+    sourceImageUrl: v.string(),
+    productImageUrl: v.string(),
+    changeText: v.boolean(),
+    changeIcons: v.boolean(),
+    changeColors: v.boolean(),
+    variationCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    if (args.variationCount < 1 || args.variationCount > 3) {
+      throw new Error('Variation count must be 1-3')
+    }
+    if (!args.changeText && !args.changeIcons && !args.changeColors) {
+      throw new Error('Must select at least one thing to change')
+    }
+
+    // Get the source generation for metadata
+    const sourceGen = await ctx.db.get(args.generationId)
+    if (!sourceGen) throw new Error('Source generation not found')
+
+    const generationIds: string[] = []
+
+    for (let i = 0; i < args.variationCount; i++) {
+      const genId = await ctx.db.insert('templateGenerations', {
+        productId: args.productId,
+        templateId: sourceGen.templateId,
+        productImageUrl: args.productImageUrl,
+        templateImageUrl: args.sourceImageUrl, // Use the generated image as the "template"
+        templateSnapshot: sourceGen.templateSnapshot,
+        aspectRatio: sourceGen.aspectRatio,
+        mode: 'variation' as const,
+        colorAdapt: false,
+        variationIndex: i,
+        status: 'queued',
+        variationSource: {
+          sourceGenerationId: args.generationId,
+          sourceImageUrl: args.sourceImageUrl,
+          changeText: args.changeText,
+          changeIcons: args.changeIcons,
+          changeColors: args.changeColors,
+        },
+      })
+      generationIds.push(genId)
+
+      // Start the variation workflow
+      await workflow.start(ctx, internal.studio.generateVariationWorkflow, {
+        generationId: genId,
+      })
+    }
+
+    return { ok: true, generationIds }
+  },
+})

@@ -80,6 +80,7 @@ function ProductWorkspacePage() {
       {view === 'gallery' ? (
         <GalleryView
           product={product}
+          productId={productId as Id<'products'>}
           completedGenerations={completedGenerations}
           pendingGenerations={pendingGenerations}
           onGenerateMore={() => setView('generate')}
@@ -179,17 +180,20 @@ function ProductHeader({
 
 function GalleryView({
   product,
+  productId,
   completedGenerations,
   pendingGenerations,
   onGenerateMore,
 }: {
-  product: { status: string }
+  product: { status: string; imageUrl: string }
+  productId: Id<'products'>
   completedGenerations: Array<{
     _id: Id<'templateGenerations'>
     status: string
     outputUrl?: string
     currentStep?: string
     error?: string
+    aspectRatio?: string
   }>
   pendingGenerations: Array<{
     _id: Id<'templateGenerations'>
@@ -197,10 +201,12 @@ function GalleryView({
     outputUrl?: string
     currentStep?: string
     error?: string
+    aspectRatio?: string
   }>
   onGenerateMore: () => void
 }) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [variationTarget, setVariationTarget] = useState<{ _id: Id<'templateGenerations'>; outputUrl: string } | null>(null)
   const hasAny = completedGenerations.length > 0 || pendingGenerations.length > 0
 
   const deleteGeneration = useConvexMutation(api.products.deleteGeneration)
@@ -235,13 +241,14 @@ function GalleryView({
       {pendingGenerations.length > 0 && (
         <div className="mb-8">
           <h3 className="text-sm font-medium text-slate-500 mb-3">In Progress</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div className="columns-2 sm:columns-3 md:columns-4 [column-gap:1rem]">
             {pendingGenerations.map((gen) => (
               <GenerationCard
                 key={gen._id}
                 generation={gen}
                 onExpand={setLightboxUrl}
                 onDelete={handleDelete}
+                onCreateVariations={setVariationTarget}
               />
             ))}
           </div>
@@ -262,13 +269,14 @@ function GalleryView({
           </button>
         </div>
       ) : completedGenerations.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        <div className="columns-2 sm:columns-3 md:columns-4 [column-gap:1rem]">
           {completedGenerations.map((gen) => (
             <GenerationCard
               key={gen._id}
               generation={gen}
               onExpand={setLightboxUrl}
               onDelete={handleDelete}
+              onCreateVariations={setVariationTarget}
             />
           ))}
         </div>
@@ -302,7 +310,204 @@ function GalleryView({
           </a>
         </div>
       )}
+
+      {/* Variation Panel */}
+      {variationTarget && (
+        <VariationPanel
+          generation={variationTarget}
+          productId={productId}
+          productImageUrl={product.imageUrl}
+          onClose={() => setVariationTarget(null)}
+          onComplete={() => setVariationTarget(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function VariationPanel({
+  generation,
+  productId,
+  productImageUrl,
+  onClose,
+  onComplete,
+}: {
+  generation: { _id: Id<'templateGenerations'>; outputUrl: string }
+  productId: Id<'products'>
+  productImageUrl: string
+  onClose: () => void
+  onComplete: () => void
+}) {
+  const [changeText, setChangeText] = useState(false)
+  const [changeIcons, setChangeIcons] = useState(false)
+  const [changeColors, setChangeColors] = useState(false)
+  const [variationCount, setVariationCount] = useState(2)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const generateVariations = useConvexMutation(api.products.generateVariations)
+  const generateMutation = useMutation({ mutationFn: generateVariations })
+
+  const hasSelection = changeText || changeIcons || changeColors
+
+  async function handleGenerate() {
+    if (!hasSelection) {
+      toast.error('Select at least one thing to change')
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      await generateMutation.mutateAsync({
+        generationId: generation._id,
+        productId,
+        sourceImageUrl: generation.outputUrl,
+        productImageUrl,
+        changeText,
+        changeIcons,
+        changeColors,
+        variationCount,
+      })
+      toast.success('Variations started!')
+      onComplete()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to start')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+
+      {/* Panel */}
+      <div className="relative w-full max-w-md bg-white h-full shadow-xl overflow-y-auto">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-slate-900">Create Variations</h2>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+              <XIcon />
+            </button>
+          </div>
+
+          {/* Source image preview */}
+          <div className="mb-6">
+            <p className="text-sm text-slate-500 mb-2">Source image</p>
+            <img
+              src={generation.outputUrl}
+              alt="Source"
+              className="w-full rounded-lg border border-slate-200"
+            />
+          </div>
+
+          {/* What to change */}
+          <div className="mb-6">
+            <p className="text-sm font-medium text-slate-700 mb-3">What would you like to change?</p>
+            <div className="space-y-3">
+              <CheckboxCard
+                checked={changeText}
+                onChange={setChangeText}
+                icon={<TextIcon />}
+                title="Text"
+                description="Generate new headlines, copy, and messaging"
+              />
+              <CheckboxCard
+                checked={changeIcons}
+                onChange={setChangeIcons}
+                icon={<IconsIcon />}
+                title="Icons & Graphics"
+                description="Replace icons, badges, and decorative elements"
+              />
+              <CheckboxCard
+                checked={changeColors}
+                onChange={setChangeColors}
+                icon={<PaletteIcon />}
+                title="Colors"
+                description="Adjust color scheme and tones"
+              />
+            </div>
+          </div>
+
+          {/* Variation count */}
+          <div className="mb-8">
+            <p className="text-sm font-medium text-slate-700 mb-3">Number of variations</p>
+            <div className="flex gap-2">
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setVariationCount(n)}
+                  className={`flex-1 py-2 rounded-lg border font-medium transition ${
+                    variationCount === n
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Generate button */}
+          <button
+            onClick={handleGenerate}
+            disabled={!hasSelection || isSubmitting}
+            className="w-full py-3 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                Starting...
+              </>
+            ) : (
+              <>
+                <SparklesIcon />
+                Generate {variationCount} Variation{variationCount > 1 ? 's' : ''}
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CheckboxCard({
+  checked,
+  onChange,
+  icon,
+  title,
+  description,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  icon: React.ReactNode
+  title: string
+  description: string
+}) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={`w-full flex items-start gap-3 p-4 rounded-lg border-2 text-left transition ${
+        checked
+          ? 'border-slate-900 bg-slate-50'
+          : 'border-slate-200 hover:border-slate-300'
+      }`}
+    >
+      <div className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition ${
+        checked ? 'border-slate-900 bg-slate-900' : 'border-slate-300'
+      }`}>
+        {checked && <CheckIcon className="w-3 h-3 text-white" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-600">{icon}</span>
+          <span className="font-medium text-slate-900">{title}</span>
+        </div>
+        <p className="text-sm text-slate-500 mt-0.5">{description}</p>
+      </div>
+    </button>
   )
 }
 
@@ -310,6 +515,7 @@ function GenerationCard({
   generation,
   onExpand,
   onDelete,
+  onCreateVariations,
 }: {
   generation: {
     _id: Id<'templateGenerations'>
@@ -317,62 +523,86 @@ function GenerationCard({
     outputUrl?: string
     currentStep?: string
     error?: string
+    aspectRatio?: string
   }
   onExpand: (url: string) => void
   onDelete: (id: Id<'templateGenerations'>) => void
+  onCreateVariations: (generation: { _id: Id<'templateGenerations'>; outputUrl: string }) => void
 }) {
   const isComplete = generation.status === 'complete' && generation.outputUrl
   const isFailed = generation.status === 'failed'
   const isPending = !isComplete && !isFailed
 
+  // Get aspect ratio style for skeleton (only used when not complete)
+  const getAspectRatioStyle = (): React.CSSProperties => {
+    switch (generation.aspectRatio) {
+      case '4:5':
+        return { aspectRatio: '4/5' }
+      case '9:16':
+        return { aspectRatio: '9/16' }
+      default:
+        return { aspectRatio: '1/1' }
+    }
+  }
+
   return (
-    <div className="group bg-white border border-slate-200 rounded-lg overflow-hidden">
-      <div className="aspect-square bg-slate-50 relative">
-        {isComplete && generation.outputUrl && (
-          <>
-            <img src={generation.outputUrl} alt="Generated ad" className="w-full h-full object-cover" />
-            {/* Hover overlay with action icons */}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-              <button
-                onClick={() => onExpand(generation.outputUrl!)}
-                className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 transition shadow-sm"
-                title="View full size"
-              >
-                <ExpandIcon />
-              </button>
-              <a
-                href={generation.outputUrl}
-                download
-                className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 transition shadow-sm"
-                title="Download"
-              >
-                <DownloadIcon />
-              </a>
-              <button
-                onClick={() => onDelete(generation._id)}
-                className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-red-600 transition shadow-sm"
-                title="Delete"
-              >
-                <TrashIcon />
-              </button>
-            </div>
-          </>
-        )}
-        {isPending && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-slate-900 border-t-transparent mb-2" />
-            <span className="text-xs text-slate-500">{generation.currentStep || 'Processing...'}</span>
+    <div className="group bg-white border border-slate-200 rounded-lg overflow-hidden break-inside-avoid mb-4">
+      {/* Complete: let image display naturally */}
+      {isComplete && generation.outputUrl && (
+        <div className="relative">
+          <img src={generation.outputUrl} alt="Generated ad" className="w-full h-auto block" />
+          {/* Hover overlay with action icons */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+            <button
+              onClick={() => onExpand(generation.outputUrl!)}
+              className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 transition shadow-sm"
+              title="View full size"
+            >
+              <ExpandIcon />
+            </button>
+            <button
+              onClick={() => onCreateVariations({ _id: generation._id, outputUrl: generation.outputUrl! })}
+              className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-purple-600 transition shadow-sm"
+              title="Create variations"
+            >
+              <SparklesIcon />
+            </button>
+            <a
+              href={generation.outputUrl}
+              download
+              className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 transition shadow-sm"
+              title="Download"
+            >
+              <DownloadIcon />
+            </a>
+            <button
+              onClick={() => onDelete(generation._id)}
+              className="w-9 h-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-slate-700 hover:text-red-600 transition shadow-sm"
+              title="Delete"
+            >
+              <TrashIcon />
+            </button>
           </div>
-        )}
-        {isFailed && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50">
-            <span className="text-red-600 text-sm font-medium">Failed</span>
-            {generation.error && (
-              <span className="text-red-500 text-xs mt-1 px-2 text-center line-clamp-2">{generation.error}</span>
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Pending: skeleton with correct aspect ratio */}
+      {isPending && (
+        <div className="bg-slate-100 animate-pulse flex flex-col items-center justify-center" style={getAspectRatioStyle()}>
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-slate-400 border-t-transparent mb-2" />
+          <span className="text-xs text-slate-500">{generation.currentStep || 'Processing...'}</span>
+        </div>
+      )}
+
+      {/* Failed: skeleton with correct aspect ratio */}
+      {isFailed && (
+        <div className="bg-red-50 flex flex-col items-center justify-center" style={getAspectRatioStyle()}>
+          <span className="text-red-600 text-sm font-medium">Failed</span>
+          {generation.error && (
+            <span className="text-red-500 text-xs mt-1 px-2 text-center line-clamp-2">{generation.error}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -506,18 +736,26 @@ function GenerateWizard({
             <p className="text-slate-500 text-center py-12">No templates available.</p>
           ) : (
             <>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              <div className="columns-3 sm:columns-4 [column-gap:0.75rem]">
                 {templates.map((tpl) => {
                   const picked = pickedIds.includes(tpl._id)
+                  // Get aspect ratio style
+                  const getAspectStyle = (): React.CSSProperties => {
+                    switch (tpl.aspectRatio) {
+                      case '4:5': return { aspectRatio: '4/5' }
+                      case '9:16': return { aspectRatio: '9/16' }
+                      default: return { aspectRatio: '1/1' }
+                    }
+                  }
                   return (
                     <button
                       key={tpl._id}
                       onClick={() => toggleTemplate(tpl._id)}
-                      className={`relative rounded-lg overflow-hidden border-2 transition ${
+                      className={`relative rounded-lg overflow-hidden border-2 transition mb-3 break-inside-avoid block w-full ${
                         picked ? 'border-slate-900 ring-2 ring-slate-200' : 'border-transparent hover:border-slate-300'
                       }`}
                     >
-                      <div className="aspect-square">
+                      <div style={getAspectStyle()}>
                         <img src={tpl.thumbnailUrl} alt="" className="w-full h-full object-cover" />
                       </div>
                       {/* Aspect ratio badge */}
@@ -733,6 +971,38 @@ function TrashIcon() {
   return (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  )
+}
+
+function SparklesIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+    </svg>
+  )
+}
+
+function TextIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+    </svg>
+  )
+}
+
+function IconsIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  )
+}
+
+function PaletteIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
     </svg>
   )
 }
