@@ -4,7 +4,7 @@
 feat/clerk-billing (off origin/master @ d32a098)
 
 ## Plan
-.omc/plans/clerk-billing-integration.md (Iteration 4, 990 lines)
+.omc/plans/clerk-billing-integration.md (Iteration 4, ~990 lines)
 
 ## Strategy
 - 18 stories total. 4 are human-gated (US-001 spike, US-004 dashboard, US-017 rollout, + US-018 architect verification).
@@ -14,3 +14,61 @@ feat/clerk-billing (off origin/master @ d32a098)
 
 ## Iteration log
 
+### Session 1 — Backend foundation (completed)
+
+Commits on feat/clerk-billing:
+  0988b48 — Step 1: auth patches on studio + board + PRD + checklists
+  cc50883 — Step 3 foundation: capability registry, plan config, provider seam, billingEvents schema, public helpers, env docs
+  b9d3b07 — US-008: wire enforcement into products/studio/productImages mutations
+
+Stories passing (10/18):
+  US-001  Spike checklist               (human-task doc)
+  US-002  studio.ts auth patch
+  US-003  board.ts auth patch
+  US-004  Dashboard checklist           (human-task doc)
+  US-005  Capability registry + PLAN_CONFIG
+  US-006  Claim extractor + BillingProvider interface + Clerk impl
+  US-007  billingEvents schema + public helpers + getBillingStatus query
+  US-008  Enforcement wired into 7 mutations across 3 Convex files
+  US-016  @clerk/react pinned exact + env.local.example + env-setup.md
+  US-017  Rollout checklist              (human-task doc)
+
+Stories NOT YET done (8/18):
+  US-009  billing-gates.test.ts         — no test framework installed; deferred
+  US-010  custom /pricing route          — UI work, ~0.5 day
+  US-011  custom /checkout route         — UI work, ~1-2 days (biggest remaining)
+  US-012  /account/billing route         — UI work, ~1 day
+  US-013  Post-checkout interstitial     — depends on US-011
+  US-014  Studio credits indicator + gates — ~0.5 day, getBillingStatus already shipped
+  US-015  __root.tsx nav updates         — small, after US-010/012
+  US-018  Architect verification         — final gate
+
+Realistic remaining effort: 3-5 days of focused UI work + 1 day of test setup + verification.
+
+## Handoff notes for next session
+
+Start with:
+  1. Have the user run the Step 0 spike (.omc/human-tasks/step-0-spike-checklist.md)
+     to validate (a) pla/fea JWT claims are exposed and (b) @clerk/react/experimental
+     ships the billing hooks. Record the outcome in this file.
+  2. Confirm US-009 approach: add vitest + write the test, OR rely on TypeScript +
+     runtime verification (the capability registry catches typos at compile time).
+  3. Start US-010 (pricing page). Use usePlans() from @clerk/react/experimental
+     and Mantine Cards. All Clerk experimental imports must stay inside
+     src/components/billing/**.
+
+Backend layer is feature-complete and safe to test independently via Convex
+function calls. E2E flow blocked on UI.
+
+## Key architecture notes for future me / fresh context
+
+- Capability registry: convex/lib/billing/capabilities.ts. Add new caps here first.
+- Plan config: convex/lib/billing/planConfig.ts. Scalar limits (productLimit,
+  monthlyCredits) live here, not in Clerk.
+- Enforcement helpers: convex/lib/billing/index.ts. Mutations call requireCapability
+  / requireCredit / recordCreditUse. All honor BILLING_ENABLED kill switch.
+- billingEvents table: doubles as audit log AND monthly-credit ledger. Rows with
+  context: 'usage' are the ledger; sum units since startOfMonthUtc() for consumption.
+- Counting rule: every generation attempt consumes a credit (retries included).
+- Dual kill switch: VITE_BILLING_ENABLED (client build-time, Netlify) and
+  BILLING_ENABLED (Convex runtime, no rebuild needed for rollback).
