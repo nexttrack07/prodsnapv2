@@ -969,6 +969,7 @@ function GalleryView({
               disabled={product.status !== 'ready' || creditsExhausted}
               color="brand"
               size="md"
+              fz="sm"
               rightSection={<IconArrowRight size={16} />}
               styles={{
                 root: {
@@ -1030,6 +1031,7 @@ function GalleryView({
             disabled={product.status !== 'ready' || creditsExhausted}
             color="brand"
             size="md"
+            fz="sm"
             rightSection={<IconArrowRight size={16} />}
             styles={{
               root: {
@@ -1320,6 +1322,7 @@ function VariationDrawer({
           <Button
             fullWidth
             size="md"
+            fz="sm"
             color="brand"
             onClick={handleGenerate}
             disabled={!hasSelection || creditsExhausted}
@@ -1476,7 +1479,7 @@ function GenerationCard({
 
       {/* Title Row */}
       <Group justify="space-between" mt="md" mx="md" align="center">
-        <Text fw={500} fz="sm" c="white" lineClamp={1}>
+        <Text fw={500} fz="xs" c="white" lineClamp={1}>
           {title}
         </Text>
         <Group gap={6}>
@@ -1530,7 +1533,7 @@ function GenerationCard({
           <ActionIcon
             variant="subtle"
             color="red"
-            size="md"
+            size="sm"
             radius="md"
             onClick={(e) => {
               e.stopPropagation()
@@ -1539,7 +1542,7 @@ function GenerationCard({
             title="Delete"
             aria-label="Delete generation"
           >
-            <IconTrash size={16} />
+            <IconTrash size={13} />
           </ActionIcon>
         </Group>
       )}
@@ -1709,10 +1712,8 @@ function GenerateWizard({
 
           {templatesLoading && templates.length === 0 ? (
             <Box style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
-              gap: '0.75rem',
-              alignItems: 'start',
+              columnCount: isMobile ? 2 : 4,
+              columnGap: '0.5rem',
             }}>
               {Array.from({ length: 8 }).map((_, i) => (
                 <Box
@@ -1721,6 +1722,8 @@ function GenerateWizard({
                   style={{
                     borderRadius: 'var(--mantine-radius-lg)',
                     aspectRatio: i % 3 === 0 ? '4/5' : i % 3 === 1 ? '9/16' : '1/1',
+                    breakInside: 'avoid',
+                    marginBottom: '0.5rem',
                   }}
                 />
               ))}
@@ -1730,10 +1733,8 @@ function GenerateWizard({
           ) : (
             <>
               <Box style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
-                gap: '0.75rem',
-                alignItems: 'start',
+                columnCount: isMobile ? 2 : 4,
+                columnGap: '0.5rem',
               }}>
                 {templates.map((tpl) => {
                   const picked = pickedIds.includes(tpl._id)
@@ -1749,7 +1750,7 @@ function GenerateWizard({
                       key={tpl._id}
                       onClick={() => toggleTemplate(tpl._id)}
                       w="100%"
-                      mb="md"
+                      mb="xs"
                       className="template-card-selectable"
                       data-testid={`template-card-${tpl._id}`}
                       aria-pressed={picked}
@@ -1757,7 +1758,7 @@ function GenerateWizard({
                       style={{
                         borderRadius: 'var(--mantine-radius-lg)',
                         overflow: 'hidden',
-                        border: `2px solid ${picked ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
+                        border: `2px solid ${picked ? 'var(--mantine-color-brand-5)' : 'transparent'}`,
                         boxShadow: picked ? '0 0 0 3px rgba(84, 116, 180, 0.3)' : 'none',
                         position: 'relative',
                         breakInside: 'avoid',
@@ -1940,6 +1941,7 @@ function GenerateWizard({
               fullWidth
               color="brand"
               size="lg"
+              fz="sm"
               onClick={handleGenerate}
               disabled={pickedIds.length === 0 || creditsExhausted}
               loading={isSubmitting}

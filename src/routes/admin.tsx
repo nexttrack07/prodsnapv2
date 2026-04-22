@@ -37,7 +37,7 @@ function AdminLayout() {
         <Stack align="center" gap="md">
           <Text size="lg" fw={500}>Admin Access Required</Text>
           <Text c="dimmed" size="sm">Please sign in to access the admin panel.</Text>
-          <Button onClick={() => navigate({ to: '/' })}>
+          <Button onClick={() => navigate({ to: '/' })} fz="sm">
             Go to Home
           </Button>
         </Stack>

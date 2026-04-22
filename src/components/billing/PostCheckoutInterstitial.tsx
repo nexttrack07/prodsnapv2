@@ -125,6 +125,7 @@ export function PostCheckoutInterstitial({
             <Group gap="sm">
               <Button
                 variant="default"
+                fz="sm"
                 onClick={() => {
                   setTimedOut(false)
                   startedAtRef.current = Date.now()
@@ -137,6 +138,7 @@ export function PostCheckoutInterstitial({
               </Button>
               <Button
                 color="brand"
+                fz="sm"
                 onClick={() => window.location.reload()}
               >
                 Refresh page

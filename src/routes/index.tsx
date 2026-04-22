@@ -92,6 +92,7 @@ function Home() {
             component={Link}
             to="/studio"
             size="xl"
+            fz="md"
             color="brand"
             rightSection={<IconArrowRight size={18} />}
             style={{

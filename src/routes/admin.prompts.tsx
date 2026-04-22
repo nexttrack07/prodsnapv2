@@ -290,6 +290,7 @@ function AdminPromptsPage() {
           )}
           <Button
             color="brand"
+            fz="sm"
             onClick={handleSave}
             disabled={!dirty}
             loading={saveMutation.isPending}

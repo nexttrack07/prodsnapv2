@@ -29,6 +29,7 @@ export function DefaultCatchBoundary({ error }: ErrorComponentProps) {
             tt="uppercase"
             fw={800}
             size="sm"
+            fz="xs"
           >
             Try Again
           </Button>
@@ -41,6 +42,7 @@ export function DefaultCatchBoundary({ error }: ErrorComponentProps) {
               tt="uppercase"
               fw={800}
               size="sm"
+              fz="xs"
             >
               Home
             </Button>
@@ -57,6 +59,7 @@ export function DefaultCatchBoundary({ error }: ErrorComponentProps) {
               tt="uppercase"
               fw={800}
               size="sm"
+              fz="xs"
             >
               Go Back
             </Button>

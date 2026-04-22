@@ -123,6 +123,7 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
           href={`/checkout?planId=${encodeURIComponent(plan.id)}&period=${period}`}
           color="brand"
           size="lg"
+          fz="sm"
           fullWidth
           mt="auto"
           disabled={isCurrent}

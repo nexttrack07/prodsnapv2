@@ -211,6 +211,7 @@ function PaymentSection() {
             type="submit"
             color="brand"
             size="md"
+            fz="sm"
             loading={submitting}
             disabled={disabled}
             fullWidth
