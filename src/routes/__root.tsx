@@ -34,6 +34,7 @@ import { Authenticated, Unauthenticated } from 'convex/react'
 import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
 import { NotFound } from '~/components/NotFound'
 import { Logo } from '~/components/Logo'
+import { BillingSync } from '~/components/billing/BillingSync'
 import appCss from '~/styles/app.css?url'
 import { seo } from '~/utils/seo'
 
@@ -171,6 +172,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                       </SignInButton>
                     </Unauthenticated>
                     <Authenticated>
+                      <BillingSync />
                       <UserButton
                         appearance={{
                           elements: {

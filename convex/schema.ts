@@ -186,6 +186,20 @@ const schema = defineSchema({
     .index('by_status', ['status'])
     .index('by_userId', ['userId']),
 
+  // ─── Billing: synced plan per user ────────────────────────────────────────
+  // Source of truth for the enforcement layer. Populated by the
+  // `billing/syncPlan:syncUserPlan` Convex action, which calls Clerk's
+  // Backend API. Client triggers this action on app mount and after
+  // checkout completes. Future (v2): Clerk webhook also writes this row
+  // on subscription lifecycle events for real-time accuracy.
+  userPlans: defineTable({
+    userId: v.string(),                 // matches identity.tokenIdentifier
+    plan: v.string(),                   // "basic" | "pro" | "" (no active subscription)
+    syncedAt: v.number(),               // Unix ms
+    // Forward-compat: raw subscription snapshot for debugging/audit
+    clerkUserId: v.optional(v.string()),
+  }).index('by_userId', ['userId']),
+
   // ─── Billing audit + credit ledger ───────────────────────────────────────
   // Append-only. Rows with context: 'usage' also serve as the monthly-credit
   // ledger — summing `units` since startOfMonthUtc() gives the user's quota
