@@ -44,14 +44,6 @@ export const PLAN_CONFIG: Record<string, PlanConfig> = {
     monthlyCredits: 500,
     capabilities: ALL_CAPABILITIES,
   },
-  // TEMPORARY — spike-only entry matching the 'test_spike' plan in Clerk
-  // dev dashboard. Delete this once real basic/pro plans exist in Clerk.
-  test_spike: {
-    slug: 'test_spike',
-    productLimit: 3,
-    monthlyCredits: 10,
-    capabilities: ALL_CAPABILITIES,
-  },
 }
 
 export const ALL_PLAN_SLUGS: readonly string[] = Object.keys(PLAN_CONFIG)
