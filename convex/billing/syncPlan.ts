@@ -20,7 +20,8 @@ import { v } from 'convex/values'
 import { createClerkClient } from '@clerk/backend'
 import { action, internalMutation, query } from '../_generated/server'
 import { internal } from '../_generated/api'
-import { isKnownPlan } from '../lib/billing/planConfig'
+import { isKnownPlan, PLAN_CONFIG } from '../lib/billing/planConfig'
+import { countUsageThisMonth } from '../lib/billing'
 
 /**
  * Public Convex action — called from the client.
@@ -146,5 +147,63 @@ export const getMyPlan = query({
       .withIndex('by_userId', (q) => q.eq('userId', identity.tokenIdentifier))
       .unique()
     return row
+  },
+})
+
+/**
+ * Query: UI-facing snapshot of the current user's billing state.
+ * Consumed by studio CreditsIndicator, over-limit banners, and the
+ * post-checkout interstitial's polling loop.
+ */
+export const getBillingStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) {
+      return {
+        signedIn: false,
+        plan: null,
+        productCount: 0,
+        productLimit: 0,
+        creditsUsed: 0,
+        creditsTotal: 0,
+        resetsOn: null,
+      }
+    }
+    const userId = identity.tokenIdentifier
+
+    const row = await ctx.db
+      .query('userPlans')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+
+    const planSlug = row?.plan ?? ''
+    const planConfig = planSlug ? PLAN_CONFIG[planSlug] : undefined
+
+    const productLimit = planConfig?.productLimit ?? 0
+    const creditsTotal = planConfig?.monthlyCredits ?? 0
+
+    const products = await ctx.db
+      .query('products')
+      .withIndex('by_userId_archived', (q) =>
+        q.eq('userId', userId).eq('archivedAt', undefined),
+      )
+      .collect()
+
+    const creditsUsed = await countUsageThisMonth(ctx, userId)
+
+    // Next-month anchor = first of following UTC month.
+    const now = new Date()
+    const nextReset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+
+    return {
+      signedIn: true,
+      plan: planSlug || null,
+      productCount: products.length,
+      productLimit: productLimit === Infinity ? null : productLimit,
+      creditsUsed,
+      creditsTotal,
+      resetsOn: nextReset,
+    }
   },
 })

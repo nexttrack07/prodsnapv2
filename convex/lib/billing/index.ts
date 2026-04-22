@@ -15,8 +15,7 @@
  * 'enforcement'). Every credit consumption appends a row (context: 'usage').
  * The same table doubles as the monthly-credit ledger.
  */
-import { query, type MutationCtx, type QueryCtx } from '../../_generated/server'
-import { v } from 'convex/values'
+import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import type { Capability } from './capabilities'
 import { PLAN_CONFIG } from './planConfig'
 import { ClerkBillingProvider } from './provider.clerk'
@@ -204,7 +203,7 @@ export async function recordCreditUse(
   })
 }
 
-async function countUsageThisMonth(
+export async function countUsageThisMonth(
   ctx: QueryCtx | MutationCtx,
   userId: string,
 ): Promise<number> {
@@ -242,57 +241,6 @@ async function recordDenial(
     context: 'enforcement',
   })
 }
-
-// ─── Status query for UI ──────────────────────────────────────────────────
-
-/**
- * Snapshot of the current user's billing state for UI rendering.
- * Used by the studio credits indicator and the post-checkout interstitial.
- */
-export const getBillingStatus = query({
-  args: {},
-  handler: async (ctx) => {
-    const billing = await billingProvider.getContext(ctx)
-    if (!billing) {
-      return {
-        signedIn: false,
-        plan: null,
-        productCount: 0,
-        productLimit: 0,
-        creditsUsed: 0,
-        creditsTotal: 0,
-        resetsOn: null,
-      }
-    }
-
-    const plan = billing.hasKnownPlan ? PLAN_CONFIG[billing.plan] : null
-    const productLimit = plan?.productLimit ?? 0
-    const creditsTotal = plan?.monthlyCredits ?? 0
-
-    const products = await ctx.db
-      .query('products')
-      .withIndex('by_userId_archived', (q) =>
-        q.eq('userId', billing.userId).eq('archivedAt', undefined),
-      )
-      .collect()
-
-    const creditsUsed = await countUsageThisMonth(ctx, billing.userId)
-
-    // Next-month anchor = first of following UTC month.
-    const now = new Date()
-    const nextReset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
-
-    return {
-      signedIn: true,
-      plan: billing.plan || null,
-      productCount: products.length,
-      productLimit: productLimit === Infinity ? null : productLimit,
-      creditsUsed,
-      creditsTotal,
-      resetsOn: nextReset,
-    }
-  },
-})
 
 // Re-export commonly used types for convenience.
 export { CAPABILITIES, type Capability } from './capabilities'

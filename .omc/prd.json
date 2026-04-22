@@ -1,138 +1,157 @@
 {
-  "task": "Execute Clerk Billing integration plan (Iteration 4 — custom UI path)",
+  "task": "Clerk Billing UI slice — custom pricing/checkout/billing routes + studio enforcement UI",
   "planPath": "/Users/nexttrack/prodsnap/.omc/plans/clerk-billing-integration.md",
   "branch": "feat/clerk-billing",
+  "scope_note": "Backend is complete and verified. Both Basic and Pro grant all capabilities — NO <Show> gates needed. Only volume gates (product count, monthly credits).",
   "stories": [
     {
-      "id": "US-001",
-      "title": "Document Step 0 spike checklist (human-gated)",
+      "id": "US-U01",
+      "title": "Build /pricing route with custom Mantine plan cards (usePlans)",
       "priority": 1,
-      "humanGated": true,
-      "passes": true,
-      "note": "Delivered: .omc/human-tasks/step-0-spike-checklist.md. User must run the checklist against their Clerk dev instance and record the outcome in progress.txt."
+      "acceptanceCriteria": [
+        "src/routes/pricing.tsx exists and registers via createFileRoute",
+        "src/components/billing/PricingPage.tsx renders plans fetched via usePlans({ for: 'user' }) from @clerk/react/experimental",
+        "Shows Mantine SimpleGrid of plan cards with name, monthly/annual price, feature list, and a Subscribe CTA",
+        "Monthly/annual toggle (Mantine SegmentedControl) affects displayed price",
+        "Current plan highlighted with a badge when user has one",
+        "Subscribe CTA routes to /checkout?planId=<id>&period=<month|annual>",
+        "Imports from @clerk/react/experimental live only in src/components/billing/**",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-002",
-      "title": "Add requireAuth() to 5 unguarded mutations in convex/studio.ts",
+      "id": "US-U02",
+      "title": "Build /checkout route with CheckoutProvider + custom form",
       "priority": 2,
-      "passes": true,
-      "note": "Shipped in commit cc50883. Includes ownership checks via assertOwnsIfTracked helper (legacy pre-auth rows with no userId allowed through for backward compat)."
+      "acceptanceCriteria": [
+        "src/routes/checkout.tsx exists, reads planId and period from search params",
+        "src/components/billing/CheckoutForm.tsx wraps <CheckoutProvider> and uses useCheckout + usePaymentElement",
+        "src/lib/billing/stripeAppearance.ts exports stripeAppearance(theme) mapping Mantine tokens to Stripe Elements appearance",
+        "Order summary shows plan name + price + period",
+        "Submit flow: submit() → checkout.confirm(data) → triggers post-checkout interstitial before finalize() navigates",
+        "Errors surface via Mantine Alert, disabled state during submit",
+        "Clerk experimental imports confined to src/components/billing/**",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-003",
-      "title": "Add requireAuth() to 7 unguarded mutations in convex/board.ts",
+      "id": "US-U03",
+      "title": "Post-checkout interstitial component + polling",
       "priority": 3,
-      "passes": true,
-      "note": "Shipped. Auth fence only — board is explicitly out-of-scope for billing gates."
+      "acceptanceCriteria": [
+        "src/components/billing/PostCheckoutInterstitial.tsx exists",
+        "On mount: calls clerk.session?.reload() then calls syncUserPlan action, then polls getBillingStatus every ~500ms",
+        "When getBillingStatus returns a non-empty plan, dismiss and navigate to /studio",
+        "10-second timeout shows 'Still activating — try refreshing' with a retry button (window.location.reload)",
+        "Integrated into CheckoutForm so it appears between confirm() and finalize navigation",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-004",
-      "title": "Document Step 2 Clerk dashboard checklist (human-gated)",
+      "id": "US-U04",
+      "title": "Onboarding redirect for unsubscribed users",
       "priority": 4,
-      "humanGated": true,
-      "passes": true,
-      "note": "Delivered: .omc/human-tasks/step-2-dashboard-checklist.md."
+      "acceptanceCriteria": [
+        "When an authenticated user's userPlans.plan is empty or missing, they are redirected to /pricing from any protected route",
+        "Redirect is implemented without a flash of protected content (gate on data ready, don't render children until we know)",
+        "Logic lives in src/components/billing/SubscriptionRequired.tsx and wraps protected routes",
+        "Studio routes (/studio, /studio/$productId) are wrapped",
+        "/pricing, /checkout, /account/billing and public routes (home, sign-in) are NOT wrapped (no infinite redirect)",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-005",
-      "title": "Create capability registry + plan config + types",
+      "id": "US-U05",
+      "title": "Build /account/billing route with current subscription + manage actions",
       "priority": 5,
-      "passes": true,
-      "note": "convex/lib/billing/capabilities.ts + planConfig.ts. Both Basic and Pro have all 5 capabilities; differentiation is volume (productLimit 5/20, monthlyCredits 100/500)."
+      "acceptanceCriteria": [
+        "src/routes/account.billing.tsx (or src/routes/account/billing.tsx — match TanStack Start file-based routing) exists",
+        "src/components/billing/CurrentSubscriptionCard.tsx displays current plan name, period, next renewal date",
+        "Cancel subscription action uses CheckoutProvider/Clerk experimental hook (or clerk.billing.cancelSubscriptionItem via a Convex action) with a Mantine confirmation modal",
+        "Change plan link routes to /pricing",
+        "Handles the no-subscription case (shouldn't normally happen — redirect to /pricing)",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-006",
-      "title": "Create versioned claim extractor + BillingProvider interface + Clerk impl",
+      "id": "US-U06",
+      "title": "CreditsIndicator component in studio header",
       "priority": 6,
-      "passes": true,
-      "note": "claims.ts + provider.ts + provider.clerk.ts. v1 claim format locked in; add v2 branch if Clerk changes format."
+      "acceptanceCriteria": [
+        "src/components/billing/CreditsIndicator.tsx exists",
+        "Reads api.billing.syncPlan.getBillingStatus (or equivalent status query — verify actual exported name)",
+        "Shows 'N/M credits this month' with 'resets on [date]'",
+        "Visible in studio.index and studio.$productId headers",
+        "Warning style when credits <= 10% remaining",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-007",
-      "title": "Add billingEvents schema + public billing helpers index",
+      "id": "US-U07",
+      "title": "Over-limit banners + disabled generation when credits exhausted",
       "priority": 7,
-      "passes": true,
-      "note": "convex/schema.ts updated. convex/lib/billing/index.ts exports getBillingContext, requireCapability, requireProductLimit, requireCredit (with count param), recordCreditUse, getBillingStatus query. All honor BILLING_ENABLED kill switch."
+      "acceptanceCriteria": [
+        "src/routes/studio.index.tsx and studio.$productId.tsx import getBillingStatus",
+        "When creditsUsed >= creditsTotal, render a Mantine Alert banner: 'You have used all N credits for this month. They reset on DATE.'",
+        "Generation-triggering buttons (Generate, Submit, Retry, Remove Background) are disabled while over-limit",
+        "An 'Upgrade to Pro' link in the banner routes to /pricing",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-008",
-      "title": "Wire billing enforcement into products.ts, studio.ts, productImages.ts",
+      "id": "US-U08",
+      "title": "Product-count indicator with at-limit state",
       "priority": 8,
-      "passes": true,
-      "note": "Committed b9d3b07. createProduct (limit), removeProductBackground (cap, no credit), generateFromProduct (cap + batch + N credits), generateVariations (cap + N credits), submitRun (same as generateFromProduct), retryGeneration (1 credit), removeImageBackground (cap). Build green."
+      "acceptanceCriteria": [
+        "studio.index shows 'N/M products' indicator (via getBillingStatus)",
+        "When productCount >= productLimit, 'New Product' button disabled and a Mantine Alert appears: 'You have N products but your plan allows M. Archive products or upgrade.'",
+        "Upgrade link routes to /pricing",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-009",
-      "title": "Add getBillingStatus Convex query + billing-gates test",
+      "id": "US-U09",
+      "title": "Nav links + __root.tsx updates",
       "priority": 9,
-      "passes": false,
-      "note": "Partial: getBillingStatus query shipped in US-007. billing-gates.test.ts NOT YET written — no test framework in devDependencies (only @playwright/test for E2E). Deferred: add vitest + write consistency test (registry ↔ planConfig ↔ mutation enforcement) in a follow-up session, or rely on TypeScript compile-time catching of CAPABILITIES typos."
+      "acceptanceCriteria": [
+        "src/routes/__root.tsx shows 'Pricing' NavLink between Home and Studio when authenticated (still visible to unauthenticated too so they can see pricing)",
+        "Mobile drawer has matching MobileNavLink",
+        "A 'Billing' link to /account/billing is in the nav or UserButton panel for signed-in users",
+        "pnpm build compiles green"
+      ],
+      "passes": false
     },
     {
-      "id": "US-010",
-      "title": "Build custom /pricing route with usePlans + Mantine plan cards",
+      "id": "US-U10",
+      "title": "CI fence: ensure @clerk/react/experimental imports stay inside src/components/billing/**",
       "priority": 10,
-      "passes": false,
-      "note": "NOT STARTED — significant UI work. Needs its own session. Requires verifying @clerk/react/experimental exports first (Step 0 spike)."
+      "acceptanceCriteria": [
+        "A simple grep-based check (either in package.json or documented in a CI script) fails when any file outside src/components/billing/** imports from '@clerk/react/experimental'",
+        "Current codebase passes the check"
+      ],
+      "passes": false
     },
     {
-      "id": "US-011",
-      "title": "Build custom /checkout route with CheckoutProvider + useCheckout + PaymentElement",
-      "priority": 11,
-      "passes": false,
-      "note": "NOT STARTED — significant UI work. ~1-2 days including Stripe appearance mapping."
-    },
-    {
-      "id": "US-012",
-      "title": "Build /account/billing subscription management route",
-      "priority": 12,
-      "passes": false,
-      "note": "NOT STARTED — ~1 day."
-    },
-    {
-      "id": "US-013",
-      "title": "Post-checkout interstitial + clerk.session.reload() + polling",
-      "priority": 13,
-      "passes": false,
-      "note": "NOT STARTED — depends on US-011."
-    },
-    {
-      "id": "US-014",
-      "title": "Studio UI capability gating + credits indicator",
-      "priority": 14,
-      "passes": false,
-      "note": "NOT STARTED — getBillingStatus query ready; need <CreditsIndicator /> + <Show> wrappers in studio.$productId.tsx and studio.index.tsx."
-    },
-    {
-      "id": "US-015",
-      "title": "Update __root.tsx nav with Pricing + Billing links behind VITE_BILLING_ENABLED",
-      "priority": 15,
-      "passes": false,
-      "note": "NOT STARTED — small change, do after US-010 and US-012 routes exist."
-    },
-    {
-      "id": "US-016",
-      "title": "Pin Clerk packages exact + document env vars",
-      "priority": 16,
-      "passes": true,
-      "note": "@clerk/react pinned to 6.4.2 exact. @clerk/clerk-js is not a direct dep (uses @clerk/clerk-react transitively); pnpm-lock.yaml captures the exact resolved version. .env.local.example and .omc/human-tasks/env-setup.md document the dual kill switch (VITE_BILLING_ENABLED + BILLING_ENABLED)."
-    },
-    {
-      "id": "US-017",
-      "title": "Document Step 6 rollout checklist (human-gated)",
-      "priority": 17,
-      "humanGated": true,
-      "passes": true,
-      "note": "Delivered: .omc/human-tasks/step-6-rollout-checklist.md with Option X (comp Basic) as default."
-    },
-    {
-      "id": "US-018",
+      "id": "US-U11",
       "title": "Final architect verification",
-      "priority": 18,
-      "passes": false,
-      "note": "PENDING — run after all code stories complete. Current backend-only slice (US-002/003/005/006/007/008/016) could get a focused architect pass now, before UI stories resume."
+      "priority": 11,
+      "acceptanceCriteria": [
+        "Architect agent reviews the full UI slice against these acceptance criteria",
+        "pnpm build green",
+        "All prior stories' criteria met",
+        "Architect verdict: PROCEED or PROCEED WITH REFINEMENTS (not BLOCK)"
+      ],
+      "passes": false
     }
   ],
   "completedAt": null,
-  "session_summary": "Backend foundation complete. 10/18 stories passing (5 code + 5 docs/config). UI stories US-010-015 scoped out of this session — they're 3-5 days of focused Mantine + Clerk experimental hooks work. US-009 test deferred (no test framework installed). Next session: verify Step 0 spike passes, then start US-010."
+  "session_summary": "UI slice start. Backend complete (commit 30afad3). 11 stories covering pricing/checkout/billing routes + studio enforcement UI. No <Show> gates per user clarification."
 }

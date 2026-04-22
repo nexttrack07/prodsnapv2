@@ -1,0 +1,3 @@
+{"t":0,"agent":"a2dfc8c","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a9e18e2","agent_type":"Plan","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a7ff5d8","agent_type":"Bash","event":"agent_start","parent_mode":"none"}
