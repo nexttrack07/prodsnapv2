@@ -133,17 +133,22 @@ export function startOfMonthUtc(now = Date.now()): number {
 }
 
 /**
- * Assert the user still has monthly credits remaining. Throws on exhaustion
- * with the reset-on-1st message. Does NOT consume a credit — call
- * `recordCreditUse` immediately after success to stamp the consumption.
+ * Assert the user has at least `count` monthly credits remaining (default 1).
+ * Throws on exhaustion with the reset-on-1st message. Does NOT consume
+ * credits — call `recordCreditUse` for each consumption after success.
  *
  * Counting rule: every generation attempt consumes one credit regardless of
  * success/failure. The caller is expected to call `recordCreditUse` before
  * scheduling downstream API work so retries/failures still count.
+ *
+ * For batched generation (e.g., 3 templates × 4 variations = 12 credits),
+ * call `requireCredit(ctx, name, 12)` once upfront to fail fast, then call
+ * `recordCreditUse` 12 times as the rows are inserted.
  */
 export async function requireCredit(
   ctx: MutationCtx,
   mutationName: string,
+  count = 1,
 ): Promise<BillingContext> {
   const billing = await getBillingContext(ctx)
   if (!billing) throw new Error('Not authenticated')
@@ -157,12 +162,19 @@ export async function requireCredit(
 
   const plan = PLAN_CONFIG[billing.plan]
   const used = await countUsageThisMonth(ctx, billing.userId)
+  const remaining = plan.monthlyCredits - used
 
-  if (used >= plan.monthlyCredits) {
+  if (remaining < count) {
     await recordDenial(ctx, billing, mutationName, 'monthly-credits', billing.plan)
+    if (remaining <= 0) {
+      throw new Error(
+        `You have used all ${plan.monthlyCredits} credits for this month. ` +
+          `Credits reset on the 1st.`,
+      )
+    }
     throw new Error(
-      `You have used all ${plan.monthlyCredits} credits for this month. ` +
-        `Credits reset on the 1st.`,
+      `Not enough credits. This request needs ${count} but you have ${remaining} remaining. ` +
+        `Upgrade or reduce the request size.`,
     )
   }
 

@@ -10,6 +10,7 @@ import {
 } from './_generated/server'
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
+import { CAPABILITIES, requireCapability } from './lib/billing'
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -264,6 +265,9 @@ export const removeImageBackground = mutation({
     if (product.userId && product.userId !== userId) {
       throw new Error('Not authorized')
     }
+
+    // Billing: capability check (no credit consumption in v1 for bg-removal).
+    await requireCapability(ctx, CAPABILITIES.REMOVE_BACKGROUND, 'removeImageBackground')
 
     // Check if bg-removed version already exists
     const existing = await ctx.db

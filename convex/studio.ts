@@ -13,6 +13,12 @@ import { components, internal } from './_generated/api'
 import { WorkflowManager } from '@convex-dev/workflow'
 import { Workpool } from '@convex-dev/workpool'
 import type { Id } from './_generated/dataModel'
+import {
+  CAPABILITIES,
+  recordCreditUse,
+  requireCapability,
+  requireCredit,
+} from './lib/billing'
 
 export const workflow = new WorkflowManager(components.workflow)
 export const imageGenPool = new Workpool(components.imageGenPool, {
@@ -275,6 +281,18 @@ export const submitRun = mutation({
       throw new Error(`Run not ready (status=${run.status})`)
     }
 
+    // Billing: capability + credit enforcement (same gates as generateFromProduct).
+    const billing = await requireCapability(
+      ctx,
+      CAPABILITIES.GENERATE_VARIATIONS,
+      'submitRun',
+    )
+    if (args.variationsPerTemplate > 2) {
+      await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitRun')
+    }
+    const totalCredits = args.templateIds.length * args.variationsPerTemplate
+    await requireCredit(ctx, 'submitRun', totalCredits)
+
     await ctx.db.patch(args.runId, {
       status: 'generating',
       mode: args.mode,
@@ -303,6 +321,7 @@ export const submitRun = mutation({
           status: 'queued',
           userId,
         })
+        await recordCreditUse(ctx, billing, 'submitRun', CAPABILITIES.GENERATE_VARIATIONS)
         await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
           generationId: genId,
         })
@@ -519,6 +538,9 @@ export const retryGeneration = mutation({
     if (!gen) throw new Error('Generation not found')
     assertOwnsIfTracked(gen, userId, 'generation')
     if (gen.status !== 'failed') throw new Error('Only failed generations can be retried')
+    // Billing: retries count against the monthly quota (counting rule).
+    const billing = await requireCredit(ctx, 'retryGeneration', 1)
+    await recordCreditUse(ctx, billing, 'retryGeneration', CAPABILITIES.GENERATE_VARIATIONS)
     await ctx.db.patch(generationId, {
       status: 'queued',
       error: undefined,
