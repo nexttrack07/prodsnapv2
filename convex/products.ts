@@ -49,6 +49,50 @@ const aspectRatioValidator = v.union(
   v.literal('9:16'),
 )
 
+// ─── Rate limiting ─────────────────────────────────────────────────────────
+
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX_CALLS = 20
+
+/**
+ * Simple density check: at most 20 generation calls per user per 60 s.
+ * Records a `rate-limited` billingEvent on denial so operators can audit
+ * abuse patterns.
+ *
+ * For higher-scale throttling see the Convex Rate Limiter component — future work.
+ */
+async function enforceGenerationRateLimit(
+  ctx: MutationCtx,
+  userId: string,
+  mutationName: string,
+): Promise<void> {
+  const since = Date.now() - RATE_LIMIT_WINDOW_MS
+  const recent = await ctx.db
+    .query('billingEvents')
+    .withIndex('by_userId', (q) => q.eq('userId', userId))
+    .filter((q) =>
+      q.and(
+        q.gte(q.field('timestamp'), since),
+        q.or(
+          q.eq(q.field('context'), 'usage'),
+          q.eq(q.field('context'), 'rate-limited'),
+        ),
+      ),
+    )
+    .collect()
+
+  if (recent.length >= RATE_LIMIT_MAX_CALLS) {
+    await ctx.db.insert('billingEvents', {
+      userId,
+      mutationName,
+      allowed: false,
+      timestamp: Date.now(),
+      context: 'rate-limited',
+    })
+    throw new Error('Too many requests — please wait a moment before generating again.')
+  }
+}
+
 // ─── Product lifecycle mutations ──────────────────────────────────────────
 
 /**
@@ -554,6 +598,9 @@ export const generateFromProduct = mutation({
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
 
+    // Rate limit: must run before billing to avoid burning credits on abuse.
+    await enforceGenerationRateLimit(ctx, userId, 'generateFromProduct')
+
     if (args.templateIds.length === 0) throw new Error('No templates selected')
     if (args.templateIds.length > 3) throw new Error('At most 3 templates')
     if (args.variationsPerTemplate < 1 || args.variationsPerTemplate > 4) {
@@ -717,6 +764,9 @@ export const generateVariations = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
+
+    // Rate limit: must run before billing to avoid burning credits on abuse.
+    await enforceGenerationRateLimit(ctx, userId, 'generateVariations')
 
     // Verify product ownership
     const product = await ctx.db.get(args.productId)
