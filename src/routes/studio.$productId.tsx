@@ -1243,7 +1243,7 @@ function VariationDrawer({
                 styles={{
                   root: {
                     padding: 'var(--mantine-spacing-sm)',
-                    border: `2px solid ${changeText ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
+                    border: `2px solid ${changeText ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
                     borderRadius: 'var(--mantine-radius-md)',
                     backgroundColor: changeText ? 'var(--mantine-color-dark-6)' : 'transparent',
                   },
@@ -1266,7 +1266,7 @@ function VariationDrawer({
                 styles={{
                   root: {
                     padding: 'var(--mantine-spacing-sm)',
-                    border: `2px solid ${changeIcons ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
+                    border: `2px solid ${changeIcons ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
                     borderRadius: 'var(--mantine-radius-md)',
                     backgroundColor: changeIcons ? 'var(--mantine-color-dark-6)' : 'transparent',
                   },
@@ -1289,7 +1289,7 @@ function VariationDrawer({
                 styles={{
                   root: {
                     padding: 'var(--mantine-spacing-sm)',
-                    border: `2px solid ${changeColors ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dark-5)'}`,
+                    border: `2px solid ${changeColors ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
                     borderRadius: 'var(--mantine-radius-md)',
                     backgroundColor: changeColors ? 'var(--mantine-color-dark-6)' : 'transparent',
                   },
@@ -1540,14 +1540,6 @@ function GenerationCard({
         </Group>
       )}
 
-      {/* Show minimal footer for pending/failed */}
-      {!isComplete && (
-        <Box mt="md" mb="md" mx="md">
-          <Text fz="xs" c="dimmed">
-            {formatDate(generation._creationTime || Date.now())}
-          </Text>
-        </Box>
-      )}
     </Card>
   )
 }

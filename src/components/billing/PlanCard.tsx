@@ -15,6 +15,7 @@ import {
   Group,
   List,
   Stack,
+  Divider,
   Text,
   Title,
 } from '@mantine/core'
@@ -70,7 +71,7 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
         )}
 
         <Group gap={4} align="baseline">
-          <Text fw={700} fz={40}>
+          <Text fw={800} fz={40}>
             {currencySymbol}
             {priceAmount ?? '—'}
           </Text>
@@ -101,6 +102,10 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
           </List>
         )}
 
+        {limits && plan.features.length > 0 && (
+          <Divider label="Includes" labelPosition="left" />
+        )}
+
         {plan.features.length > 0 && (
           <List
             spacing="xs"
@@ -117,7 +122,7 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
           component="a"
           href={`/checkout?planId=${encodeURIComponent(plan.id)}&period=${period}`}
           color="brand"
-          size="md"
+          size="lg"
           fullWidth
           mt="auto"
           disabled={isCurrent}

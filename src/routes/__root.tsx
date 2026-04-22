@@ -67,11 +67,14 @@ const theme = createTheme({
       '#000000',
     ],
   },
-  defaultRadius: 'md',
+  defaultRadius: 'lg',
+  other: {
+    borderSubtle: 'rgba(255, 255, 255, 0.06)',
+  },
   components: {
     Button: {
       defaultProps: {
-        fw: 500,
+        fw: 600,
       },
     },
   },
