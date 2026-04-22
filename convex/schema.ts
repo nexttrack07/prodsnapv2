@@ -283,6 +283,7 @@ const schema = defineSchema({
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
+    model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
   })
     .index('by_product', ['productId'])
     .index('by_productImage', ['productImageId'])
@@ -319,6 +320,7 @@ const schema = defineSchema({
     generatorImageLabels: v.optional(v.array(v.string())),
     generatorPromptUsed: v.optional(v.string()),
     generatorParams: v.optional(v.any()),
+    model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
 
     // Stage 2: generator outputs
     generatorRawResponse: v.optional(v.any()),

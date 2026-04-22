@@ -377,6 +377,50 @@ export const composePrompt = internalAction({
   },
 })
 
+// ─── Image edit model abstraction ────────────────────────────────────────────
+
+type ImageEditModel = 'nano-banana-2' | 'gpt-image-2'
+
+async function callImageEditModel({
+  model,
+  prompt,
+  imageUrls,
+  aspectRatio,
+}: {
+  model: ImageEditModel
+  prompt: string
+  imageUrls: string[]
+  aspectRatio: string
+}): Promise<{ generatedUrl: string; rawResponse: unknown }> {
+  let result: { data: unknown }
+  try {
+    if (model === 'gpt-image-2') {
+      const image_size =
+        aspectRatio === '9:16' ? 'portrait_16_9'
+        : aspectRatio === '4:5' ? { width: 1024, height: 1280 }
+        : 'square_hd'
+      result = await fal.subscribe('openai/gpt-image-2/edit', {
+        input: { prompt, image_urls: imageUrls, image_size, quality: 'high', output_format: 'png' },
+      })
+    } else {
+      // nano-banana-2 (default)
+      result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
+        input: { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, output_format: 'png', resolution: '1K' },
+      })
+    }
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err)
+    if (/safety|blocked|rejected/i.test(raw)) {
+      throw new Error('Image model rejected the request — try a different template or soften the prompt.')
+    }
+    throw err
+  }
+  const data = result.data as { images?: Array<{ url?: string }> }
+  const generatedUrl = data.images?.[0]?.url
+  if (!generatedUrl) throw new Error('Model did not return an image URL')
+  return { generatedUrl, rawResponse: result.data }
+}
+
 /**
  * Calls nano-banana using the dynamic prompt that composePrompt wrote
  * to the generation row. Uploads the result to R2 and returns the URL.
@@ -404,30 +448,12 @@ export const generateFromTemplate = internalAction({
 
     const aspectRatio = template?.aspectRatio ?? '1:1'
 
-    let result: { data: unknown }
-    try {
-      result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
-        input: {
-          prompt: generation.dynamicPrompt,
-          image_urls: [generation.templateImageUrl, generation.productImageUrl],
-          aspect_ratio: aspectRatio,
-          output_format: 'png',
-          resolution: '1K',
-        },
-      })
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err)
-      if (/safety|blocked|rejected/i.test(raw)) {
-        throw new Error(
-          'Image model rejected the request (often a safety-filter block on brand/logo content — try a different template or soften the prompt in admin).',
-        )
-      }
-      throw err
-    }
-
-    const data = result.data as { images?: Array<{ url?: string }> }
-    const generatedUrl = data.images?.[0]?.url
-    if (!generatedUrl) throw new Error('Model did not return an image URL')
+    const { generatedUrl } = await callImageEditModel({
+      model: (generation.model ?? 'nano-banana-2') as ImageEditModel,
+      prompt: generation.dynamicPrompt,
+      imageUrls: [generation.templateImageUrl, generation.productImageUrl],
+      aspectRatio,
+    })
 
     const key = `studio/outputs/${generation.runId ?? generation.productId}/${generation.variationIndex}-${nanoid(6)}.png`
     const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
@@ -531,10 +557,12 @@ export async function composeVariationPromptCore({
  * Not a Convex action — plain async function, callable from actions directly.
  */
 export async function generateVariationImageCore({
+  model = 'nano-banana-2',
   prompt,
   imageUrls,
   aspectRatio,
 }: {
+  model?: ImageEditModel
   prompt: string
   imageUrls: string[]
   aspectRatio: string
@@ -542,30 +570,7 @@ export async function generateVariationImageCore({
   rawResponse: unknown
   generatedUrl: string
 }> {
-  let result: { data: unknown }
-  try {
-    result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
-      input: {
-        prompt,
-        image_urls: imageUrls,
-        aspect_ratio: aspectRatio,
-        output_format: 'png',
-        resolution: '1K',
-      },
-    })
-  } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err)
-    if (/safety|blocked|rejected/i.test(raw)) {
-      throw new Error('Image model rejected the request — try different variation options.')
-    }
-    throw err
-  }
-
-  const data = result.data as { images?: Array<{ url?: string }> }
-  const generatedUrl = data.images?.[0]?.url
-  if (!generatedUrl) throw new Error('Model did not return an image URL')
-
-  return { rawResponse: result.data, generatedUrl }
+  return callImageEditModel({ model, prompt, imageUrls, aspectRatio })
 }
 
 /**
@@ -619,6 +624,7 @@ export const generateVariation = internalAction({
     const aspectRatio = gen.aspectRatio ?? '1:1'
 
     const { generatedUrl } = await generateVariationImageCore({
+      model: (gen.model ?? 'nano-banana-2') as ImageEditModel,
       prompt: gen.dynamicPrompt,
       imageUrls: [gen.variationSource.sourceImageUrl, gen.productImageUrl],
       aspectRatio,

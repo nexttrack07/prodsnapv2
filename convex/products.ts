@@ -549,6 +549,7 @@ export const generateFromProduct = mutation({
     colorAdapt: v.boolean(),
     variationsPerTemplate: v.number(),
     aspectRatio: aspectRatioValidator,
+    model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
@@ -633,6 +634,7 @@ export const generateFromProduct = mutation({
           colorAdapt: args.colorAdapt,
           variationIndex: variationCounter++,
           status: 'queued',
+          model: args.model ?? 'nano-banana-2',
         })
         generationIds.push(genId)
 
@@ -711,6 +713,7 @@ export const generateVariations = mutation({
     changeIcons: v.boolean(),
     changeColors: v.boolean(),
     variationCount: v.number(),
+    model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
@@ -756,6 +759,7 @@ export const generateVariations = mutation({
         colorAdapt: false,
         variationIndex: i,
         status: 'queued',
+        model: args.model ?? 'nano-banana-2',
         variationSource: {
           sourceGenerationId: args.generationId,
           sourceImageUrl: args.sourceImageUrl,

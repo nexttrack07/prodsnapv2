@@ -73,8 +73,9 @@ export const runGenerator = action({
     editedPrompt: v.optional(v.string()),
     generatorImageUrls: v.array(v.string()),
     generatorImageLabels: v.array(v.string()),
+    model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
   },
-  handler: async (ctx, { runId, editedPrompt, generatorImageUrls, generatorImageLabels }) => {
+  handler: async (ctx, { runId, editedPrompt, generatorImageUrls, generatorImageLabels, model }) => {
     // 1) Fetch run
     const run = await ctx.runQuery(internal.admin.playground.getRunInternal, { runId })
     if (!run) throw new Error('Debug run not found')
@@ -91,6 +92,8 @@ export const runGenerator = action({
 
     const generatorStartedAt = Date.now()
 
+    const resolvedModel = model ?? 'nano-banana-2'
+
     // 4) Mark generating
     await ctx.runMutation(internal.admin.playground.patchRun, {
       runId,
@@ -99,8 +102,9 @@ export const runGenerator = action({
         generatorImageUrls,
         generatorImageLabels,
         generatorPromptUsed: finalPrompt,
-        generatorParams: { aspectRatio },
+        generatorParams: { aspectRatio, model: resolvedModel },
         generatorStartedAt,
+        model: resolvedModel,
         ...(editedPrompt !== undefined ? { editedPrompt } : {}),
       },
     })
@@ -108,6 +112,7 @@ export const runGenerator = action({
     try {
       // 5) Call the core generator helper
       const { rawResponse, generatedUrl } = await generateVariationImageCore({
+        model: resolvedModel,
         prompt: finalPrompt,
         imageUrls: generatorImageUrls,
         aspectRatio,

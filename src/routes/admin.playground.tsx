@@ -35,6 +35,7 @@ import {
 } from '@mantine/core'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import { ModelSelect } from '../components/ModelSelect'
 import {
   IconFlask2,
   IconClipboard,
@@ -74,6 +75,7 @@ type Generation = {
   aspectRatio?: string
   createdAt: number
   productImageUrl?: string
+  model?: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -230,6 +232,9 @@ function GenerationCard({
             </Text>
             {gen.aspectRatio && (
               <Text size="xs" c="dark.3">{gen.aspectRatio}</Text>
+            )}
+            {gen.model && (
+              <Badge size="xs" variant="outline" color="gray">{gen.model}</Badge>
             )}
           </Group>
         </Box>
@@ -826,6 +831,9 @@ function Stage2Generate({
   const [prodChecked, setProdChecked] = useState(true)
   const [lightboxOpen, { open: openLightbox, close: closeLightbox }] = useDisclosure(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [model, setModel] = useState<'nano-banana-2' | 'gpt-image-2'>(
+    () => ((run?.generatorParams as Record<string, unknown> | undefined)?.model as 'nano-banana-2' | 'gpt-image-2' | undefined) ?? 'nano-banana-2'
+  )
 
   const runGenerator = useAction(api.admin.playgroundActions.runGenerator)
 
@@ -858,6 +866,7 @@ function Stage2Generate({
         editedPrompt: editedPromptFromStage1 !== (run.composerPrompt as string | undefined) ? editedPromptFromStage1 : undefined,
         generatorImageUrls: checkedImages.map((i) => i.url),
         generatorImageLabels: checkedImages.map((i) => i.label),
+        model,
       })
     } catch (err) {
       notifications.show({
@@ -927,6 +936,12 @@ function Stage2Generate({
               </Box>
             )}
 
+            {/* Model picker */}
+            <Box>
+              <Text size="xs" fw={500} c="dark.2" mb="xs">Model</Text>
+              <ModelSelect value={model} onChange={setModel} />
+            </Box>
+
             <Button
               color="brand"
               fz="sm"
@@ -959,7 +974,9 @@ function Stage2Generate({
               <Badge size="sm" variant="light" color={generatorError ? 'red' : 'green'}>
                 {msToSecs(run.generatorDurationMs as number | undefined)}
               </Badge>
-              <Text size="xs" c="dark.3">fal-ai/nano-banana-2/edit</Text>
+              <Badge size="xs" variant="outline" color="gray">
+                {(run.generatorParams as Record<string, unknown> | undefined)?.model as string ?? 'nano-banana-2'}
+              </Badge>
             </Group>
 
             {generatorError && (
