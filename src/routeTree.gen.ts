@@ -20,6 +20,7 @@ import { Route as StudioProductIdRouteImport } from './routes/studio.$productId'
 import { Route as BoardsBoardIdRouteImport } from './routes/boards.$boardId'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminPromptsRouteImport } from './routes/admin.prompts'
+import { Route as AdminPlaygroundRouteImport } from './routes/admin.playground'
 import { Route as AccountBillingRouteImport } from './routes/account.billing'
 
 const StudioRoute = StudioRouteImport.update({
@@ -77,6 +78,11 @@ const AdminPromptsRoute = AdminPromptsRouteImport.update({
   path: '/prompts',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminPlaygroundRoute = AdminPlaygroundRouteImport.update({
+  id: '/playground',
+  path: '/playground',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AccountBillingRoute = AccountBillingRouteImport.update({
   id: '/account/billing',
   path: '/account/billing',
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/studio': typeof StudioRouteWithChildren
   '/account/billing': typeof AccountBillingRoute
+  '/admin/playground': typeof AdminPlaygroundRoute
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/pricing': typeof PricingRoute
   '/account/billing': typeof AccountBillingRoute
+  '/admin/playground': typeof AdminPlaygroundRoute
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/studio': typeof StudioRouteWithChildren
   '/account/billing': typeof AccountBillingRoute
+  '/admin/playground': typeof AdminPlaygroundRoute
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/studio'
     | '/account/billing'
+    | '/admin/playground'
     | '/admin/prompts'
     | '/admin/templates'
     | '/boards/$boardId'
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/pricing'
     | '/account/billing'
+    | '/admin/playground'
     | '/admin/prompts'
     | '/admin/templates'
     | '/boards/$boardId'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/studio'
     | '/account/billing'
+    | '/admin/playground'
     | '/admin/prompts'
     | '/admin/templates'
     | '/boards/$boardId'
@@ -256,6 +268,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPromptsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/playground': {
+      id: '/admin/playground'
+      path: '/playground'
+      fullPath: '/admin/playground'
+      preLoaderRoute: typeof AdminPlaygroundRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/account/billing': {
       id: '/account/billing'
       path: '/account/billing'
@@ -267,12 +286,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminPlaygroundRoute: typeof AdminPlaygroundRoute
   AdminPromptsRoute: typeof AdminPromptsRoute
   AdminTemplatesRoute: typeof AdminTemplatesRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminPlaygroundRoute: AdminPlaygroundRoute,
   AdminPromptsRoute: AdminPromptsRoute,
   AdminTemplatesRoute: AdminTemplatesRoute,
   AdminIndexRoute: AdminIndexRoute,

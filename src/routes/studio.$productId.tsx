@@ -63,6 +63,7 @@ import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
 import { CreditsIndicator } from '../components/billing/CreditsIndicator'
+import { ModelSelect } from '../components/ModelSelect'
 
 export const Route = createFileRoute('/studio/$productId')({
   component: ProductWorkspacePage,
@@ -1163,6 +1164,7 @@ function VariationDrawer({
   const [changeIcons, setChangeIcons] = useState(false)
   const [changeColors, setChangeColors] = useState(false)
   const [variationCount, setVariationCount] = useState('2')
+  const [model, setModel] = useState<'nano-banana-2' | 'gpt-image-2'>('nano-banana-2')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Reset state when drawer opens
@@ -1172,6 +1174,7 @@ function VariationDrawer({
       setChangeIcons(false)
       setChangeColors(false)
       setVariationCount('2')
+      setModel('nano-banana-2')
     }
   }, [opened])
 
@@ -1197,6 +1200,7 @@ function VariationDrawer({
         changeIcons,
         changeColors,
         variationCount: parseInt(variationCount, 10),
+        model,
       })
       notifications.show({ title: 'Success', message: 'Variations started!', color: 'green' })
       onComplete()
@@ -1316,6 +1320,12 @@ function VariationDrawer({
               fullWidth
               color="brand"
             />
+          </Box>
+
+          {/* Model picker */}
+          <Box>
+            <Text size="sm" fw={500} c="white" mb="sm">Model</Text>
+            <ModelSelect value={model} onChange={setModel} />
           </Box>
 
           {/* Generate button */}
@@ -1570,6 +1580,7 @@ function GenerateWizard({
   const [mode, setMode] = useState<Mode>('exact')
   const [colorAdapt, setColorAdapt] = useState(false)
   const [variationsPerTemplate, setVariationsPerTemplate] = useState('2')
+  const [wizardModel, setWizardModel] = useState<'nano-banana-2' | 'gpt-image-2'>('nano-banana-2')
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -1640,6 +1651,7 @@ function GenerateWizard({
         colorAdapt,
         variationsPerTemplate: parseInt(variationsPerTemplate, 10),
         aspectRatio,
+        model: wizardModel,
       })
       notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
       onComplete()
@@ -1918,6 +1930,12 @@ function GenerateWizard({
               fullWidth
               color="brand"
             />
+          </Box>
+
+          {/* Model */}
+          <Box mb="md">
+            <Text size="sm" fw={500} c="white" mb="xs">Model</Text>
+            <ModelSelect value={wizardModel} onChange={setWizardModel} />
           </Box>
 
           {/* Summary & Submit */}

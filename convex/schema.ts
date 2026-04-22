@@ -283,12 +283,63 @@ const schema = defineSchema({
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
+    model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
   })
     .index('by_product', ['productId'])
     .index('by_productImage', ['productImageId'])
     .index('by_userId', ['userId'])
     .index('by_run', ['runId']) // legacy, keep for migration
     .index('by_template', ['templateId']),
+  adminDebugRuns: defineTable({
+    adminUserId: v.string(),
+    sourceGenerationId: v.id('templateGenerations'),
+
+    // User config
+    changeText: v.boolean(),
+    changeIcons: v.boolean(),
+    changeColors: v.boolean(),
+
+    // Stage 1: composer inputs
+    composerImageUrls: v.array(v.string()),
+    composerImageLabels: v.array(v.string()),
+
+    // Stage 1: composer outputs
+    composerSystemPrompt: v.optional(v.string()),
+    composerUserPrompt: v.optional(v.string()),
+    composerRawResponse: v.optional(v.string()),
+    composerPrompt: v.optional(v.string()),
+    composerStartedAt: v.optional(v.number()),
+    composerDurationMs: v.optional(v.number()),
+    composerError: v.optional(v.string()),
+
+    // Stage 1.5: optional edit
+    editedPrompt: v.optional(v.string()),
+
+    // Stage 2: generator inputs
+    generatorImageUrls: v.optional(v.array(v.string())),
+    generatorImageLabels: v.optional(v.array(v.string())),
+    generatorPromptUsed: v.optional(v.string()),
+    generatorParams: v.optional(v.any()),
+    model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
+
+    // Stage 2: generator outputs
+    generatorRawResponse: v.optional(v.any()),
+    generatorOutputUrl: v.optional(v.string()),
+    generatorStartedAt: v.optional(v.number()),
+    generatorDurationMs: v.optional(v.number()),
+    generatorError: v.optional(v.string()),
+
+    status: v.union(
+      v.literal('draft'),
+      v.literal('composing'),
+      v.literal('composed'),
+      v.literal('generating'),
+      v.literal('complete'),
+      v.literal('failed'),
+    ),
+    createdAt: v.number(),
+  })
+    .index('by_admin', ['adminUserId', 'createdAt']),
 })
 export default schema
 
