@@ -438,6 +438,137 @@ export const generateFromTemplate = internalAction({
 // ─── Variation generation ─────────────────────────────────────────────────
 
 /**
+ * Core helper: composes a variation prompt by calling the vision model.
+ * Not a Convex action — plain async function, callable from actions directly.
+ */
+export async function composeVariationPromptCore({
+  sourceImageUrl,
+  productImageUrl,
+  changeText,
+  changeIcons,
+  changeColors,
+}: {
+  sourceImageUrl: string
+  productImageUrl?: string
+  changeText: boolean
+  changeIcons: boolean
+  changeColors: boolean
+}): Promise<{
+  systemPrompt: string
+  userPrompt: string
+  imageUrlsPassed: string[]
+  rawResponse: string
+  prompt: string
+}> {
+  // Build description of what to change
+  const changes: string[] = []
+  if (changeText) changes.push('different text/headlines/copy')
+  if (changeIcons) changes.push('different icons, badges, or decorative graphics')
+  if (changeColors) {
+    changes.push('a different color scheme for the BACKGROUND, TEXT, and GRAPHICS ONLY - the product itself must keep its original colors')
+  }
+
+  const changeDescription = changes.join(', ')
+
+  // Extra emphasis when colors are being changed
+  const colorWarning = changeColors
+    ? productImageUrl
+      ? ' CRITICAL: The product\'s actual color and appearance must NOT change. Only change colors of the background, text, icons, and decorative elements. The product in the second reference image shows the exact colors that must be preserved.'
+      : ' CRITICAL: The product\'s actual color and appearance must NOT change. Only change colors of the background, text, icons, and decorative elements.'
+    : ''
+
+  const systemPrompt = [
+    'You are an expert at writing prompts for image-to-image AI models.',
+    'You will be shown an ad creative image and the original product photo.',
+    'Your job is to write a prompt that will generate a variation of the ad while preserving the product exactly as it appears.',
+    'The variation should maintain the overall composition, layout, and product placement.',
+    'The variation should ONLY change what the user requested - nothing else.',
+    'Be specific and descriptive. Reference the original image structure.',
+    'Return ONLY the prompt text - no preamble, no markdown, no explanation.',
+  ].join(' ')
+
+  const imageUrlsPassed = productImageUrl
+    ? [sourceImageUrl, productImageUrl]
+    : [sourceImageUrl]
+
+  const userText = productImageUrl
+    ? [
+        'Here is an ad creative image (first image) and the original product photo (second image).',
+        '',
+        'Generate a variation that keeps everything the same EXCEPT:',
+        changeDescription,
+        '',
+        'IMPORTANT: The product shown must remain EXACTLY identical to how it appears in the original product photo - same color, same appearance, same details.',
+        colorWarning,
+        '',
+        'Write a prompt that will generate this variation.',
+      ].join('\n')
+    : [
+        'Here is an ad creative image.',
+        '',
+        'Generate a variation that keeps everything the same EXCEPT:',
+        changeDescription,
+        colorWarning,
+        '',
+        'Write a prompt that will generate this variation.',
+      ].join('\n')
+
+  const rawResponse = await callVision({
+    imageUrls: imageUrlsPassed,
+    prompt: userText,
+    systemPrompt,
+  })
+
+  const prompt = rawResponse.trim()
+  if (!prompt) throw new Error('Composer returned an empty prompt')
+
+  return { systemPrompt, userPrompt: userText, imageUrlsPassed, rawResponse, prompt }
+}
+
+/**
+ * Core helper: calls fal to generate a variation image.
+ * Does NOT upload to R2 — returns raw fal URL and raw response.
+ * Not a Convex action — plain async function, callable from actions directly.
+ */
+export async function generateVariationImageCore({
+  prompt,
+  imageUrls,
+  aspectRatio,
+}: {
+  prompt: string
+  imageUrls: string[]
+  aspectRatio: string
+}): Promise<{
+  rawResponse: unknown
+  generatedUrl: string
+}> {
+  let result: { data: unknown }
+  try {
+    result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
+      input: {
+        prompt,
+        image_urls: imageUrls,
+        aspect_ratio: aspectRatio,
+        output_format: 'png',
+        resolution: '1K',
+      },
+    })
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err)
+    if (/safety|blocked|rejected/i.test(raw)) {
+      throw new Error('Image model rejected the request — try different variation options.')
+    }
+    throw err
+  }
+
+  const data = result.data as { images?: Array<{ url?: string }> }
+  const generatedUrl = data.images?.[0]?.url
+  if (!generatedUrl) throw new Error('Model did not return an image URL')
+
+  return { rawResponse: result.data, generatedUrl }
+}
+
+/**
  * Composes a prompt for generating variations of an existing image.
  * Uses the variationSource to determine what to change (text, icons, colors).
  */
@@ -456,51 +587,14 @@ export const composeVariationPrompt = internalAction({
 
     const { sourceImageUrl, changeText, changeIcons, changeColors } = gen.variationSource
 
-    // Build description of what to change
-    const changes: string[] = []
-    if (changeText) changes.push('different text/headlines/copy')
-    if (changeIcons) changes.push('different icons, badges, or decorative graphics')
-    if (changeColors) {
-      changes.push('a different color scheme for the BACKGROUND, TEXT, and GRAPHICS ONLY - the product itself must keep its original colors')
-    }
-
-    const changeDescription = changes.join(', ')
-
-    // Extra emphasis when colors are being changed
-    const colorWarning = changeColors
-      ? ' CRITICAL: The product\'s actual color and appearance must NOT change. Only change colors of the background, text, icons, and decorative elements. The product in the second reference image shows the exact colors that must be preserved.'
-      : ''
-
-    const systemPrompt = [
-      'You are an expert at writing prompts for image-to-image AI models.',
-      'You will be shown an ad creative image and the original product photo.',
-      'Your job is to write a prompt that will generate a variation of the ad while preserving the product exactly as it appears.',
-      'The variation should maintain the overall composition, layout, and product placement.',
-      'The variation should ONLY change what the user requested - nothing else.',
-      'Be specific and descriptive. Reference the original image structure.',
-      'Return ONLY the prompt text - no preamble, no markdown, no explanation.',
-    ].join(' ')
-
-    const userText = [
-      'Here is an ad creative image (first image) and the original product photo (second image).',
-      '',
-      'Generate a variation that keeps everything the same EXCEPT:',
-      changeDescription,
-      '',
-      'IMPORTANT: The product shown must remain EXACTLY identical to how it appears in the original product photo - same color, same appearance, same details.',
-      colorWarning,
-      '',
-      'Write a prompt that will generate this variation.',
-    ].join('\n')
-
-    const text = await callVision({
-      imageUrls: [sourceImageUrl, gen.productImageUrl],
-      prompt: userText,
-      systemPrompt,
+    const { prompt } = await composeVariationPromptCore({
+      sourceImageUrl,
+      productImageUrl: gen.productImageUrl,
+      changeText,
+      changeIcons,
+      changeColors,
     })
 
-    const prompt = text.trim()
-    if (!prompt) throw new Error('Composer returned an empty prompt')
     return { prompt }
   },
 })
@@ -524,28 +618,11 @@ export const generateVariation = internalAction({
 
     const aspectRatio = gen.aspectRatio ?? '1:1'
 
-    let result: { data: unknown }
-    try {
-      result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
-        input: {
-          prompt: gen.dynamicPrompt,
-          image_urls: [gen.variationSource.sourceImageUrl, gen.productImageUrl],
-          aspect_ratio: aspectRatio,
-          output_format: 'png',
-          resolution: '1K',
-        },
-      })
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err)
-      if (/safety|blocked|rejected/i.test(raw)) {
-        throw new Error('Image model rejected the request — try different variation options.')
-      }
-      throw err
-    }
-
-    const data = result.data as { images?: Array<{ url?: string }> }
-    const generatedUrl = data.images?.[0]?.url
-    if (!generatedUrl) throw new Error('Model did not return an image URL')
+    const { generatedUrl } = await generateVariationImageCore({
+      prompt: gen.dynamicPrompt,
+      imageUrls: [gen.variationSource.sourceImageUrl, gen.productImageUrl],
+      aspectRatio,
+    })
 
     const key = `studio/variations/${gen.productId}/${generationId}-${nanoid(6)}.png`
     const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')

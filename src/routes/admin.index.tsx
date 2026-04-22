@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { Container, Title, Text, SimpleGrid, Paper, Box, ThemeIcon, Group } from '@mantine/core'
-import { IconLayoutGrid, IconTextCaption, IconArrowRight } from '@tabler/icons-react'
+import { IconLayoutGrid, IconTextCaption, IconArrowRight, IconFlask2 } from '@tabler/icons-react'
 
 export const Route = createFileRoute('/admin/')({
   component: AdminIndex,
@@ -38,6 +38,12 @@ function AdminIndex() {
           title="Generation prompts"
           description="Tweak the prompt that the image model sees for exact / remix / color-adapt."
           icon={<IconTextCaption size={24} />}
+        />
+        <AdminCard
+          to="/admin/playground"
+          title="Variation Playground"
+          description="Re-run any user's variation flow with full visibility into prompts and inputs."
+          icon={<IconFlask2 size={24} />}
         />
       </SimpleGrid>
     </Container>
