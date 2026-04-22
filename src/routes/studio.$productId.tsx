@@ -987,8 +987,10 @@ function GalleryView({
         <Box mb="xl">
           <Text size="sm" fw={500} c="dark.2" mb="sm">In Progress</Text>
           <Box style={{
-            columnCount: isMobile ? 2 : 4,
-            columnGap: '1rem',
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+            gap: '1rem',
+            alignItems: 'start',
           }}>
             {pendingGenerations.map((gen, index) => (
               <GenerationCard
@@ -1040,8 +1042,10 @@ function GalleryView({
         </Paper>
       ) : completedGenerations.length > 0 ? (
         <Box style={{
-          columnCount: isMobile ? 2 : 4,
-          columnGap: '1rem',
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gap: '1rem',
+          alignItems: 'start',
         }}>
           {completedGenerations.map((gen, index) => (
             <GenerationCard
