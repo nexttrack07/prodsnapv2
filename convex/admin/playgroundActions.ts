@@ -5,10 +5,13 @@ import { action } from '../_generated/server'
 import { internal } from '../_generated/api'
 import { composeVariationPromptCore, generateVariationImageCore } from '../ai'
 import { uploadFromUrl } from '../r2'
+import { requireAdmin } from '../lib/admin/requireAdmin'
 
 export const runComposer = action({
   args: { runId: v.id('adminDebugRuns') },
   handler: async (ctx, { runId }) => {
+    await requireAdmin(ctx)
+
     // 1) Fetch the run
     const run = await ctx.runQuery(internal.admin.playground.getRunInternal, { runId })
     if (!run) throw new Error('Debug run not found')
@@ -76,6 +79,8 @@ export const runGenerator = action({
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
   },
   handler: async (ctx, { runId, editedPrompt, generatorImageUrls, generatorImageLabels, model }) => {
+    await requireAdmin(ctx)
+
     // 1) Fetch run
     const run = await ctx.runQuery(internal.admin.playground.getRunInternal, { runId })
     if (!run) throw new Error('Debug run not found')

@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { query, mutation, internalQuery, internalMutation } from '../_generated/server'
+import { requireAdminIdentity } from '../lib/admin/requireAdmin'
 
 // ─── Internal helpers (used by playgroundActions.ts via internal.admin.playground.*) ─
 
@@ -35,6 +36,8 @@ export const getSourceGenAspectRatio = internalQuery({
 export const listAllGenerations = query({
   args: {},
   handler: async (ctx) => {
+    await requireAdminIdentity(ctx)
+
     const generations = await ctx.db
       .query('templateGenerations')
       .withIndex('by_userId')
@@ -81,18 +84,20 @@ export const listAllGenerations = query({
 
 export const getDebugRun = query({
   args: { runId: v.id('adminDebugRuns') },
-  handler: async (ctx, { runId }) => ctx.db.get(runId),
+  handler: async (ctx, { runId }) => {
+    await requireAdminIdentity(ctx)
+    return ctx.db.get(runId)
+  },
 })
 
 export const listMyDebugRuns = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
+    const adminUserId = await requireAdminIdentity(ctx)
 
     return ctx.db
       .query('adminDebugRuns')
-      .withIndex('by_admin', (q) => q.eq('adminUserId', identity.subject))
+      .withIndex('by_admin', (q) => q.eq('adminUserId', adminUserId))
       .order('desc')
       .take(50)
   },
@@ -110,8 +115,7 @@ export const createDebugRun = mutation({
     composerImageLabels: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error('Must be signed in')
+    const adminUserId = await requireAdminIdentity(ctx)
     if (!args.changeText && !args.changeIcons && !args.changeColors) {
       throw new Error('Must select at least one thing to change')
     }
@@ -122,7 +126,7 @@ export const createDebugRun = mutation({
       throw new Error('At least one image must be selected for the composer')
     }
     const runId = await ctx.db.insert('adminDebugRuns', {
-      adminUserId: identity.subject,
+      adminUserId: adminUserId,
       sourceGenerationId: args.sourceGenerationId,
       changeText: args.changeText,
       changeIcons: args.changeIcons,

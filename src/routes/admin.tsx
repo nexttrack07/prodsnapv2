@@ -1,5 +1,5 @@
 import { Outlet, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useAuth } from '@clerk/react'
+import { useUser } from '@clerk/react'
 import { Center, Loader, Stack, Text, Button } from '@mantine/core'
 import { useEffect } from 'react'
 
@@ -8,17 +8,18 @@ export const Route = createFileRoute('/admin')({
 })
 
 function AdminLayout() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, user } = useUser()
   const navigate = useNavigate()
 
-  // Redirect to home if not signed in (after auth loads)
+  const isAdmin = isSignedIn && (user?.publicMetadata as Record<string, unknown>)?.role === 'admin'
+
+  // Redirect non-admins to home once auth loads
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
+    if (isLoaded && !isAdmin) {
       navigate({ to: '/' })
     }
-  }, [isLoaded, isSignedIn, navigate])
+  }, [isLoaded, isAdmin, navigate])
 
-  // Show loading while Clerk initializes
   if (!isLoaded) {
     return (
       <Center h="50vh">
@@ -30,13 +31,12 @@ function AdminLayout() {
     )
   }
 
-  // Not signed in - show message (will redirect via useEffect)
-  if (!isSignedIn) {
+  if (!isAdmin) {
     return (
       <Center h="50vh">
         <Stack align="center" gap="md">
           <Text size="lg" fw={500}>Admin Access Required</Text>
-          <Text c="dimmed" size="sm">Please sign in to access the admin panel.</Text>
+          <Text c="dimmed" size="sm">You do not have permission to access this page.</Text>
           <Button onClick={() => navigate({ to: '/' })} fz="sm">
             Go to Home
           </Button>
