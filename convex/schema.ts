@@ -171,6 +171,8 @@ const schema = defineSchema({
   studioRuns: defineTable({
     productImageUrl: v.string(),
     status: runStatus,
+    // Owner (Clerk user ID). Optional for pre-auth legacy rows.
+    userId: v.optional(v.string()),
     category: v.optional(v.string()),
     productDescription: v.optional(v.string()),
     targetAudience: v.optional(v.string()),
@@ -180,7 +182,9 @@ const schema = defineSchema({
     colorAdapt: v.optional(v.boolean()),
     variationsPerTemplate: v.optional(v.number()),
     error: v.optional(v.string()),
-  }).index('by_status', ['status']),
+  })
+    .index('by_status', ['status'])
+    .index('by_userId', ['userId']),
 
   promptConfigs: defineTable({
     key: v.string(),

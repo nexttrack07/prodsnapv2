@@ -2,6 +2,7 @@ import { invariant } from './invariant'
 import { v } from 'convex/values'
 import {
   type QueryCtx,
+  type MutationCtx,
   internalMutation,
   mutation,
   query,
@@ -14,6 +15,16 @@ import schema, {
   updateColumnSchema,
 } from './schema'
 import type { Doc, Id } from './_generated/dataModel'
+
+// ─── Auth fence ───────────────────────────────────────────────────────────
+// Board is explicitly out-of-scope for billing — these mutations just require
+// an authenticated user. No per-row ownership check since boards are a
+// demo/shared resource that predates user accounts.
+async function requireAuth(ctx: QueryCtx | MutationCtx): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) throw new Error('Not authenticated')
+  return identity.tokenIdentifier
+}
 
 export const seed = internalMutation(async (ctx) => {
   const allBoards = await ctx.db.query('boards').collect()
@@ -120,6 +131,7 @@ async function ensureItemExists(
 export const createColumn = mutation({
   args: newColumnsSchema,
   handler: async (ctx, { boardId, name }) => {
+    await requireAuth(ctx)
     ensureBoardExists(ctx, boardId)
 
     const existingColumns = await ctx.db
@@ -139,6 +151,7 @@ export const createColumn = mutation({
 export const createItem = mutation({
   args: schema.tables.items.validator,
   handler: async (ctx, item) => {
+    await requireAuth(ctx)
     await ensureBoardExists(ctx, item.boardId)
     await ctx.db.insert('items', item)
   },
@@ -147,6 +160,7 @@ export const createItem = mutation({
 export const deleteItem = mutation({
   args: deleteItemSchema,
   handler: async (ctx, { id, boardId }) => {
+    await requireAuth(ctx)
     await ensureBoardExists(ctx, boardId)
     const item = await ensureItemExists(ctx, id)
     await ctx.db.delete(item._id)
@@ -156,6 +170,7 @@ export const deleteItem = mutation({
 export const updateItem = mutation({
   args: schema.tables.items.validator,
   handler: async (ctx, newItem) => {
+    await requireAuth(ctx)
     const { id, boardId } = newItem
     await ensureBoardExists(ctx, boardId)
     const item = await ensureItemExists(ctx, id)
@@ -166,6 +181,7 @@ export const updateItem = mutation({
 export const updateColumn = mutation({
   args: updateColumnSchema,
   handler: async (ctx, newColumn) => {
+    await requireAuth(ctx)
     const { id, boardId } = newColumn
     await ensureBoardExists(ctx, boardId)
     const item = await ensureColumnExists(ctx, id)
@@ -176,6 +192,7 @@ export const updateColumn = mutation({
 export const updateBoard = mutation({
   args: updateBoardSchema,
   handler: async (ctx, boardUpdate) => {
+    await requireAuth(ctx)
     const board = await ensureBoardExists(ctx, boardUpdate.id)
     await ctx.db.patch(board._id, boardUpdate)
   },
@@ -184,6 +201,7 @@ export const updateBoard = mutation({
 export const deleteColumn = mutation({
   args: deleteColumnSchema,
   handler: async (ctx, { boardId, id }) => {
+    await requireAuth(ctx)
     await ensureBoardExists(ctx, boardId)
     const column = await ensureColumnExists(ctx, id)
     const items = await ctx.db

@@ -1,0 +1,236 @@
+{
+  "task": "Execute Clerk Billing integration plan (Iteration 4 — custom UI path)",
+  "planPath": "/Users/nexttrack/prodsnap/.omc/plans/clerk-billing-integration.md",
+  "branch": "feat/clerk-billing",
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Document Step 0 spike checklist (human-gated)",
+      "priority": 1,
+      "humanGated": true,
+      "acceptanceCriteria": [
+        "A .omc/human-tasks/step-0-spike-checklist.md file exists with step-by-step instructions the user must run in their Clerk dashboard to validate: (a) pla/fea JWT claims are exposed in ctx.auth.getUserIdentity(), (b) @clerk/react/experimental exports useCheckout/usePaymentElement/usePlans/CheckoutProvider/PaymentElement/PaymentElementProvider",
+        "The checklist includes concrete commands to run (pnpm test, Convex query inspectIdentity, client-side import smoke test)",
+        "A temp file convex/billing-spike.ts exists for the user to run the inspectIdentity query, with a comment that it must be deleted after spike completes"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Add requireAuth() to 5 unguarded mutations in convex/studio.ts",
+      "priority": 2,
+      "acceptanceCriteria": [
+        "createRun, updateRunAnalysis, reanalyze, submitRun, retryGeneration in convex/studio.ts each call requireAuth() and scope writes by userId where applicable",
+        "Ownership verified on mutations that read/modify existing runs/generations (throw 'Not authorized' on mismatch)",
+        "pnpm build completes without TypeScript errors",
+        "No existing functionality broken — grep confirms no callers pass userId explicitly expecting un-authed behavior"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-003",
+      "title": "Add requireAuth() to 7 unguarded mutations in convex/board.ts",
+      "priority": 3,
+      "acceptanceCriteria": [
+        "createColumn, createItem, deleteItem, updateItem, updateColumn, updateBoard, deleteColumn in convex/board.ts each call requireAuth()",
+        "pnpm build completes without TypeScript errors",
+        "Board is explicitly out-of-scope for billing gates — no requireCapability calls added here"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-004",
+      "title": "Document Step 2 Clerk dashboard checklist (human-gated)",
+      "priority": 4,
+      "humanGated": true,
+      "acceptanceCriteria": [
+        "A .omc/human-tasks/step-2-dashboard-checklist.md file exists with concrete instructions to (a) enable Billing on dev instance with Clerk dev gateway, (b) create Basic and Pro plans with exact slugs 'basic' / 'pro' matching PLAN_CONFIG, (c) set prices $49.99/mo-$39.99-annual for Basic and $129.99/mo-$99-annual for Pro, (d) create 5 capability features with slugs matching CAPABILITIES, (e) assign all 5 capabilities to both Basic and Pro",
+        "The checklist specifies that plan slugs in Clerk dashboard MUST match PLAN_CONFIG keys exactly — drift is caught by billing-gates.test.ts"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-005",
+      "title": "Create capability registry + plan config + types",
+      "priority": 5,
+      "acceptanceCriteria": [
+        "convex/lib/billing/capabilities.ts exists, exports CAPABILITIES const object + Capability type",
+        "convex/lib/billing/planConfig.ts exists, exports PLAN_CONFIG for 'basic' and 'pro' with correct productLimit (5, 20), monthlyCredits (100, 500), all 5 capabilities each",
+        "convex/lib/billing/planConfig.ts exports PlanConfig type",
+        "pnpm build compiles both files without errors",
+        "No raw-string capability slugs used in helpers — all references use CAPABILITIES.*"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-006",
+      "title": "Create versioned claim extractor + BillingProvider interface + Clerk impl",
+      "priority": 6,
+      "acceptanceCriteria": [
+        "convex/lib/billing/claims.ts exports extractBillingClaims(identity, version='v1') with a v1 branch handling Clerk's 'u:slug'/'o:slug' prefix stripping",
+        "convex/lib/billing/provider.ts exports BillingProvider interface and BillingContext type",
+        "convex/lib/billing/provider.clerk.ts exports ClerkBillingProvider class implementing BillingProvider.getContext",
+        "pnpm build compiles all three files without errors",
+        "No Clerk-specific types leak past provider.clerk.ts — higher layers depend only on BillingContext"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-007",
+      "title": "Add billingEvents schema + public billing helpers index",
+      "priority": 7,
+      "acceptanceCriteria": [
+        "convex/schema.ts includes billingEvents table with fields userId, mutationName, capability (optional), allowed, claimedPlan (optional), timestamp, units (optional), metadata (optional v.any), context (optional union of enforcement/checkout/webhook/usage) and indexes by_userId, by_timestamp, by_capability",
+        "convex/lib/billing/index.ts exports getBillingContext, requireCapability, requireProductLimit, requireCredit, recordCreditUse — all typed against Capability (no raw strings accepted)",
+        "All helpers honor BILLING_ENABLED env var (short-circuit to allow when !== 'true')",
+        "requireCapability throws 'No active subscription — choose a plan at /pricing' when user has no recognized plan",
+        "pnpm build compiles",
+        "npx convex dev --once succeeds (or equivalent schema push validation)"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-008",
+      "title": "Wire billing enforcement into products.ts, studio.ts, productImages.ts",
+      "priority": 8,
+      "acceptanceCriteria": [
+        "convex/products.ts: createProduct calls requireProductLimit; generateFromProduct / generateVariations call requireCapability(CAPABILITIES.GENERATE_VARIATIONS) + requireCredit + recordCreditUse; removeProductBackground calls requireCapability(CAPABILITIES.REMOVE_BACKGROUND) (no credit)",
+        "convex/studio.ts submitRun calls same gates as generateFromProduct; retryGeneration calls requireCredit + recordCreditUse",
+        "convex/productImages.ts removeImageBackground calls requireCapability(CAPABILITIES.REMOVE_BACKGROUND)",
+        "No raw capability strings — all calls use CAPABILITIES.*",
+        "pnpm build compiles"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-009",
+      "title": "Add getBillingStatus Convex query + billing-gates test",
+      "priority": 9,
+      "acceptanceCriteria": [
+        "convex/lib/billing/index.ts exports a getBillingStatus Convex query returning { plan, productCount, productLimit, creditsUsed, creditsTotal, resetsOn }",
+        "tests/billing-gates.test.ts exists and covers: (a) every CAPABILITIES entry appears in PLAN_CONFIG, (b) every PLAN_CONFIG capability is declared in CAPABILITIES, (c) each billing-gated mutation throws when called with free/no-plan mock identity, (d) quota exhaustion on Basic at 100",
+        "pnpm test passes the new test suite (skip in CI if convex-test isn't configured — at minimum test the pure registry/config consistency which has no runtime deps)",
+        "pnpm build compiles"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-010",
+      "title": "Build custom /pricing route with usePlans + Mantine plan cards",
+      "priority": 10,
+      "acceptanceCriteria": [
+        "src/routes/pricing.tsx exists with TanStack Router createFileRoute",
+        "src/components/billing/PlanCard.tsx renders a single plan card using Mantine",
+        "The route uses usePlans({ for: 'user' }) from @clerk/react/experimental — confined inside src/components/billing/**",
+        "Monthly/annual toggle works; highlights current plan if user is subscribed via has({plan})",
+        "Subscribe CTA navigates to /checkout?planId=<id>&period=<month|annual>",
+        "pnpm build compiles"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-011",
+      "title": "Build custom /checkout route with CheckoutProvider + useCheckout + PaymentElement",
+      "priority": 11,
+      "acceptanceCriteria": [
+        "src/routes/checkout.tsx exists and reads planId+period from search params",
+        "src/components/billing/CheckoutForm.tsx uses CheckoutProvider + useCheckout + usePaymentElement + PaymentElement per Clerk's reference example, all imports from @clerk/react/experimental",
+        "src/lib/billing/stripeAppearance.ts exports a function that maps Mantine theme tokens to Stripe Elements appearance config",
+        "Order summary shows plan + price; submit triggers submit() → confirm() → finalize() flow",
+        "Errors surface via Mantine Alert; loading states use Mantine Loader",
+        "pnpm build compiles"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-012",
+      "title": "Build /account/billing subscription management route",
+      "priority": 12,
+      "acceptanceCriteria": [
+        "src/routes/account/billing.tsx exists",
+        "src/components/billing/CurrentSubscriptionCard.tsx displays current plan, payment method (last 4 masked), next renewal date",
+        "Change plan link to /pricing; Cancel subscription action with Mantine Modal confirmation",
+        "pnpm build compiles"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-013",
+      "title": "Post-checkout interstitial + clerk.session.reload() + polling",
+      "priority": 13,
+      "acceptanceCriteria": [
+        "src/components/billing/PostCheckoutInterstitial.tsx exists as a Mantine Modal",
+        "On mount calls clerk.session?.reload() then polls getBillingStatus Convex query every 500ms up to 10s",
+        "Dismisses and navigates to /studio when getBillingStatus returns the just-subscribed plan",
+        "10s timeout shows 'Still activating — try refreshing' with retry button",
+        "CheckoutForm integrates the interstitial into the finalize() flow"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-014",
+      "title": "Studio UI capability gating + credits indicator",
+      "priority": 14,
+      "acceptanceCriteria": [
+        "src/routes/studio.$productId.tsx wraps variation controls with <Show when={{feature: CAPABILITIES.GENERATE_VARIATIONS}}>, background-removal button with CAPABILITIES.REMOVE_BACKGROUND, premium templates with CAPABILITIES.ADVANCED_TEMPLATES",
+        "src/components/billing/CreditsIndicator.tsx displays live credits usage from getBillingStatus query",
+        "src/routes/studio.index.tsx shows product count (N/limit) and credits indicator; disables generation buttons when credits exhausted; shows 'Upgrade' prompt",
+        "No inline capability strings — all refs use CAPABILITIES.*",
+        "pnpm build compiles"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-015",
+      "title": "Update __root.tsx nav with Pricing + Billing links behind VITE_BILLING_ENABLED",
+      "priority": 15,
+      "acceptanceCriteria": [
+        "src/routes/__root.tsx adds NavLink to /pricing between Home and Studio",
+        "Mobile drawer adds equivalent MobileNavLink",
+        "Signed-in user's nav includes a Billing link to /account/billing",
+        "Both links wrapped so they only show when VITE_BILLING_ENABLED is 'true'",
+        "pnpm build compiles"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-016",
+      "title": "Pin Clerk packages exact + document env vars",
+      "priority": 16,
+      "acceptanceCriteria": [
+        "package.json: @clerk/react is pinned to exact version (no ^ or ~)",
+        "package.json: @clerk/clerk-js added as explicit dependency pinned to same minor as @clerk/react",
+        ".env.example updated with VITE_BILLING_ENABLED (client) and notes that BILLING_ENABLED is set in Convex dashboard (server runtime)",
+        ".omc/human-tasks/env-setup.md documents the full env var matrix with where to set each one"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-017",
+      "title": "Document Step 6 rollout checklist (human-gated)",
+      "priority": 17,
+      "humanGated": true,
+      "acceptanceCriteria": [
+        ".omc/human-tasks/step-6-rollout-checklist.md exists with phased deployment instructions",
+        "Default rollout option is X (comp existing users 30-day Basic) as specified in the plan — documents how to issue comp subscriptions via Clerk admin/API",
+        "Concrete rollback steps documented (flip BILLING_ENABLED=false in Convex dashboard)",
+        "Monitoring thresholds + actions listed"
+      ],
+      "passes": false
+    },
+    {
+      "id": "US-018",
+      "title": "Final architect verification",
+      "priority": 18,
+      "acceptanceCriteria": [
+        "Architect agent reviews the full change set (all code stories) against the plan's acceptance criteria",
+        "pnpm build runs green",
+        "tests/billing-gates.test.ts passes",
+        "lsp_diagnostics shows 0 errors on the files touched",
+        "Architect returns PROCEED or PROCEED WITH REFINEMENTS (not BLOCK)"
+      ],
+      "passes": false
+    }
+  ],
+  "completedAt": null
+}

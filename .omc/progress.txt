@@ -1,0 +1,16 @@
+# Clerk Billing Integration — Ralph Progress Log
+
+## Branch
+feat/clerk-billing (off origin/master @ d32a098)
+
+## Plan
+.omc/plans/clerk-billing-integration.md (Iteration 4, 990 lines)
+
+## Strategy
+- 18 stories total. 4 are human-gated (US-001 spike, US-004 dashboard, US-017 rollout, + US-018 architect verification).
+- Code stories execute autonomously. Human-gated stories produce checklists at .omc/human-tasks/*.md.
+- Commits pushed incrementally to feat/clerk-billing. User reviews via PR before merging to master.
+- Branch is feature-gated: master deploys to Netlify, so feat branch stays off prod until explicit merge.
+
+## Iteration log
+
