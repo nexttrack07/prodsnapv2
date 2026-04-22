@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "start": "pnpm dlx srvx --prod -s ../client dist/server/server.js",
     "dev:test": "concurrently -r pnpm:dev:web pnpm:dev:db",
+    "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
