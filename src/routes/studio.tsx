@@ -2,6 +2,7 @@ import { Outlet, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useAuth } from '@clerk/react'
 import { Center, Loader, Stack, Text, Button } from '@mantine/core'
 import { useEffect } from 'react'
+import { SubscriptionRequired } from '~/components/billing/SubscriptionRequired'
 
 export const Route = createFileRoute('/studio')({
   component: StudioLayout,
@@ -45,5 +46,9 @@ function StudioLayout() {
     )
   }
 
-  return <Outlet />
+  return (
+    <SubscriptionRequired>
+      <Outlet />
+    </SubscriptionRequired>
+  )
 }
