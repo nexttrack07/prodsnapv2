@@ -33,7 +33,9 @@ import {
   useCheckout,
   usePaymentElement,
 } from '@clerk/react/experimental'
+import { notifications } from '@mantine/notifications'
 import { stripeAppearance } from '~/lib/billing/stripeAppearance'
+import { mapBillingError } from '~/lib/billing/mapBillingError'
 import { PostCheckoutInterstitial } from './PostCheckoutInterstitial'
 
 export type CheckoutFormProps = {
@@ -167,7 +169,14 @@ function PaymentSection() {
       // Payment confirmed. Show the interstitial while the server syncs.
       setShowInterstitial(true)
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : 'Unknown error')
+      const info = mapBillingError(err)
+      setLocalError(info.message)
+      notifications.show({
+        title: info.title,
+        message: info.message,
+        color: 'red',
+        autoClose: 8000,
+      })
     } finally {
       setSubmitting(false)
     }

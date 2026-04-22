@@ -33,6 +33,7 @@ import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
 import { MAX_PRODUCT_IMAGE_SIZE } from '../utils/constants'
 import { CreditsIndicator } from '../components/billing/CreditsIndicator'
+import { mapBillingError } from '../lib/billing/mapBillingError'
 
 export const Route = createFileRoute('/studio/')({
   component: ProductGridPage,
@@ -108,10 +109,14 @@ function ProductGridPage() {
       navigate({ to: '/studio/$productId', params: { productId } })
     } catch (err) {
       console.error('Upload error:', err)
+      const info = mapBillingError(err)
       notifications.show({
-        title: 'Upload failed',
-        message: err instanceof Error ? err.message : 'Upload failed',
+        title: info.title === 'Something went wrong' ? 'Upload failed' : info.title,
+        message: info.action ? (
+          <>{info.message}{' '}<Anchor component={Link} to={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
+        ) : info.message,
         color: 'red',
+        autoClose: 8000,
       })
     } finally {
       setIsUploading(false)

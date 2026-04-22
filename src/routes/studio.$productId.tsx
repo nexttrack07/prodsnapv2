@@ -64,6 +64,7 @@ import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
 import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 import { ModelSelect } from '../components/ModelSelect'
+import { mapBillingError } from '../lib/billing/mapBillingError'
 
 export const Route = createFileRoute('/studio/$productId')({
   component: ProductWorkspacePage,
@@ -1205,7 +1206,15 @@ function VariationDrawer({
       notifications.show({ title: 'Success', message: 'Variations started!', color: 'green' })
       onComplete()
     } catch (err) {
-      notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Failed to start', color: 'red' })
+      const info = mapBillingError(err)
+      notifications.show({
+        title: info.title,
+        message: info.action ? (
+          <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
+        ) : info.message,
+        color: 'red',
+        autoClose: 8000,
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -1656,7 +1665,15 @@ function GenerateWizard({
       notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
       onComplete()
     } catch (err) {
-      notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Generation failed', color: 'red' })
+      const info = mapBillingError(err)
+      notifications.show({
+        title: info.title,
+        message: info.action ? (
+          <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
+        ) : info.message,
+        color: 'red',
+        autoClose: 8000,
+      })
     } finally {
       setIsSubmitting(false)
     }
