@@ -36,19 +36,24 @@ export function CreditsIndicator() {
     : null
 
   const label = isExhausted
-    ? `0/${total} credits — resets ${resetDate ?? ''}`
-    : `${used}/${total} credits · resets ${resetDate ?? ''}`
+    ? `0/${total} credits`
+    : `${used}/${total} credits`
+
+  const tooltipLabel = [
+    'Monthly generation credits. Each generation uses one credit.',
+    resetDate ? `Resets on ${resetDate}` : null,
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
-    <Tooltip
-      label={`Monthly generation credits. Each generation uses one credit.`}
-      position="bottom"
-    >
+    <Tooltip label={tooltipLabel} position="bottom">
       <Badge
         color={color}
         variant={isExhausted || isLow ? 'filled' : 'light'}
         leftSection={<IconBolt size={12} />}
-        size="md"
+        size="sm"
+        tabIndex={0}
         styles={{ root: { textTransform: 'none', fontWeight: 500 } }}
       >
         <Text component="span" size="xs">

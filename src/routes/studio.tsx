@@ -38,7 +38,7 @@ function StudioLayout() {
         <Stack align="center" gap="md">
           <Text size="lg" fw={500}>Sign In Required</Text>
           <Text c="dimmed" size="sm">Please sign in to access the studio.</Text>
-          <Button onClick={() => navigate({ to: '/' })}>
+          <Button onClick={() => navigate({ to: '/' })} fz="sm">
             Go to Home
           </Button>
         </Stack>

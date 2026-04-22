@@ -63,7 +63,7 @@ export function AccountBillingPage() {
           <Alert color="yellow" variant="light">
             You don't have an active subscription.
           </Alert>
-          <Button component={Link} to="/pricing" color="brand">
+          <Button component={Link} to="/pricing" color="brand" fz="sm">
             Choose a plan
           </Button>
         </Stack>

@@ -149,7 +149,7 @@ function ProductGridPage() {
           <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
             <Box>
               <Group gap="sm" align="center">
-                <Title order={1} fz={isMobile ? 24 : 36} fw={600} c="white">
+                <Title order={1} fz={isMobile ? 20 : 28} fw={600} c="white">
                   My Products
                 </Title>
                 {/* US-U07: product count indicator */}
@@ -159,7 +159,7 @@ function ProductGridPage() {
                   </Badge>
                 )}
               </Group>
-              <Text size={isMobile ? 'md' : 'lg'} c="dark.2" mt={8}>
+              <Text size="sm" c="dark.2" mt={8}>
                 Upload product photos and generate ad creatives.
               </Text>
             </Box>
@@ -182,6 +182,7 @@ function ProductGridPage() {
                 <Button
                   leftSection={<IconUpload size={18} />}
                   size={isMobile ? 'md' : 'lg'}
+                  fz="sm"
                   color="brand"
                   loading={isUploading}
                   disabled={!!atProductLimit}
@@ -285,7 +286,7 @@ function EmptyState({
         <Title order={2} fw={600} c="white">
           {isUploading ? 'Uploading...' : 'No products yet'}
         </Title>
-        <Text c="dark.2" size="lg" maw={440} ta="center">
+        <Text c="dark.2" size="sm" maw={440} ta="center">
           {isUploading
             ? 'Please wait while we process your image'
             : 'Drag & drop a product photo here, or click to browse. We\'ll analyze it and help you generate stunning ad creatives.'}
@@ -297,6 +298,7 @@ function EmptyState({
           <Button
             leftSection={<IconUpload size={18} />}
             size="lg"
+            fz="sm"
             color="brand"
             style={{
               boxShadow: '0 4px 20px rgba(84, 116, 180, 0.3)',
@@ -434,7 +436,7 @@ function ProductCard({ product }: { product: ProductData }) {
         </Box>
       </AspectRatio>
       <Box p="md">
-        <Text fw={600} size="md" c="white" truncate mb={6}>
+        <Text fw={500} size="sm" c="white" truncate mb={6}>
           {capitalizeWords(product.name)}
         </Text>
         <Group gap={6} wrap="wrap" mb={10}>

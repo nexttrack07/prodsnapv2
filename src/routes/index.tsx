@@ -76,8 +76,7 @@ function Home() {
           <Text
             component="span"
             inherit
-            variant="gradient"
-            gradient={{ from: 'brand.4', to: 'brand.7', deg: 135 }}
+            c="brand.4"
           >
             in a snap
           </Text>
@@ -93,6 +92,7 @@ function Home() {
             component={Link}
             to="/studio"
             size="xl"
+            fz="md"
             color="brand"
             rightSection={<IconArrowRight size={18} />}
             style={{
@@ -142,8 +142,8 @@ function Home() {
             >
               <Badge
                 size="sm"
-                variant="gradient"
-                gradient={{ from: 'brand.6', to: 'brand.4', deg: 135 }}
+                variant="light"
+                color="brand"
                 radius="sm"
                 mb="sm"
               >

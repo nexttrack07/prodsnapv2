@@ -18,7 +18,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   margin: 0;
   padding: 0;
-  background-color: #000000;
+  background-color: #080808;
   color: #C1C2C5;
 }
 
@@ -28,8 +28,10 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
+
+h1, h2 { font-weight: 700; }
 
 /* Subtle radial gradient used on empty/hero sections */
 .bg-radial-fade {

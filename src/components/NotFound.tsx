@@ -17,6 +17,7 @@ export function NotFound({ children }: { children?: React.ReactNode }) {
               color="brand"
               fw={600}
               size="md"
+              fz="sm"
             >
               Go back
             </Button>
@@ -27,6 +28,7 @@ export function NotFound({ children }: { children?: React.ReactNode }) {
               color="brand"
               fw={600}
               size="md"
+              fz="sm"
             >
               Start Over
             </Button>
