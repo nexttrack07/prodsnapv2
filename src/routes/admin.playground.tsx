@@ -362,9 +362,11 @@ function HistoryTab({ onOpenRun }: { onOpenRun: (runId: string) => void }) {
 function Stage0Source({
   source,
   onClear,
+  hasActiveRun,
 }: {
   source: Generation | null
   onClear: () => void
+  hasActiveRun: boolean
 }) {
   return (
     <Paper
@@ -378,9 +380,9 @@ function Stage0Source({
     >
       <Group justify="space-between" mb="sm">
         <Text size="sm" fw={500} c="white">Stage 1 — Source generation</Text>
-        {source && (
-          <Button size="xs" variant="subtle" color="gray" onClick={onClear}>
-            Clear
+        {(source || hasActiveRun) && (
+          <Button size="xs" variant="subtle" color="gray" onClick={onClear} fz="xs">
+            Start over
           </Button>
         )}
       </Group>
@@ -1063,7 +1065,7 @@ function RunEditor({
 
   return (
     <Stack gap="md">
-      <Stage0Source source={source} onClear={onClearSource} />
+      <Stage0Source source={source} onClear={onClearSource} hasActiveRun={!!runId} />
       <Stage1Compose
         source={source}
         runId={runId}
@@ -1094,6 +1096,11 @@ function PlaygroundPage() {
 
   function handleOpenRun(id: string) {
     navigate({ search: { runId: id } })
+  }
+
+  function handleClearAll() {
+    setSelectedSource(null)
+    navigate({ search: {} })
   }
 
   return (
@@ -1177,7 +1184,7 @@ function PlaygroundPage() {
         <Box>
           <RunEditor
             source={selectedSource}
-            onClearSource={() => setSelectedSource(null)}
+            onClearSource={handleClearAll}
             runId={runId ?? null}
             onRunCreated={handleRunCreated}
           />
