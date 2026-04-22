@@ -192,8 +192,8 @@
   "hotPaths": [
     {
       "path": "src/routes/studio.$productId.tsx",
-      "accessCount": 130,
-      "lastAccessed": 1776826379584,
+      "accessCount": 138,
+      "lastAccessed": 1776827593574,
       "type": "directory"
     },
     {
@@ -204,8 +204,8 @@
     },
     {
       "path": "src/routes/studio.index.tsx",
-      "accessCount": 42,
-      "lastAccessed": 1776826306078,
+      "accessCount": 43,
+      "lastAccessed": 1776826703089,
       "type": "file"
     },
     {
@@ -215,16 +215,16 @@
       "type": "file"
     },
     {
+      "path": "src",
+      "accessCount": 23,
+      "lastAccessed": 1776827449189,
+      "type": "directory"
+    },
+    {
       "path": "convex/schema.ts",
       "accessCount": 22,
       "lastAccessed": 1776822723747,
       "type": "file"
-    },
-    {
-      "path": "src",
-      "accessCount": 21,
-      "lastAccessed": 1776820845238,
-      "type": "directory"
     },
     {
       "path": "convex/r2.ts",
@@ -245,15 +245,15 @@
       "type": "directory"
     },
     {
-      "path": "convex/productImages.ts",
-      "accessCount": 15,
-      "lastAccessed": 1776819435567,
+      "path": "src/routes/__root.tsx",
+      "accessCount": 16,
+      "lastAccessed": 1776827532563,
       "type": "file"
     },
     {
-      "path": "src/routes/__root.tsx",
-      "accessCount": 14,
-      "lastAccessed": 1776826546636,
+      "path": "convex/productImages.ts",
+      "accessCount": 15,
+      "lastAccessed": 1776819435567,
       "type": "file"
     },
     {
@@ -275,6 +275,12 @@
       "type": "directory"
     },
     {
+      "path": "package.json",
+      "accessCount": 9,
+      "lastAccessed": 1776826695070,
+      "type": "file"
+    },
+    {
       "path": "convex/testing/seed.ts",
       "accessCount": 8,
       "lastAccessed": 1776791395550,
@@ -285,12 +291,6 @@
       "accessCount": 8,
       "lastAccessed": 1776801257291,
       "type": "directory"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 8,
-      "lastAccessed": 1776826607296,
-      "type": "file"
     },
     {
       "path": "tests/e2e/flows/product-upload.spec.ts",
@@ -323,6 +323,12 @@
       "type": "file"
     },
     {
+      "path": "src/routes",
+      "accessCount": 4,
+      "lastAccessed": 1776826702287,
+      "type": "directory"
+    },
+    {
       "path": "tests/e2e/flows/admin.spec.ts",
       "accessCount": 3,
       "lastAccessed": 1776785705174,
@@ -333,12 +339,6 @@
       "accessCount": 3,
       "lastAccessed": 1776786690386,
       "type": "file"
-    },
-    {
-      "path": "src/routes",
-      "accessCount": 3,
-      "lastAccessed": 1776801157801,
-      "type": "directory"
     },
     {
       "path": "convex/auth.config.ts",

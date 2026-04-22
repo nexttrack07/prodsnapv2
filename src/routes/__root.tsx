@@ -174,6 +174,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                     </Unauthenticated>
                     <Authenticated>
                       <BillingSync />
+                      <NavLink to="/account/billing">Billing</NavLink>
                       <UserButton
                         appearance={{
                           elements: {

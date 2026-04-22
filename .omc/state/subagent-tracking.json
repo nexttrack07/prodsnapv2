@@ -146,10 +146,19 @@
       "status": "completed",
       "completed_at": "2026-04-22T02:53:32.553Z",
       "duration_ms": 152613
+    },
+    {
+      "agent_id": "ae0e869fa344c0d6b",
+      "agent_type": "architect",
+      "started_at": "2026-04-22T02:58:00.123Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-04-22T03:11:59.377Z",
+      "duration_ms": 839254
     }
   ],
-  "total_spawned": 16,
-  "total_completed": 14,
+  "total_spawned": 17,
+  "total_completed": 15,
   "total_failed": 0,
-  "last_updated": "2026-04-22T02:53:32.657Z"
+  "last_updated": "2026-04-22T03:11:59.480Z"
 }

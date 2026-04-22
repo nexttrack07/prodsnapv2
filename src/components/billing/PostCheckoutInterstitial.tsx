@@ -45,6 +45,9 @@ export function PostCheckoutInterstitial({
   )
   const [timedOut, setTimedOut] = useState(false)
   const startedAtRef = useRef<number | null>(null)
+  // Guards against re-firing onPlanActive / checkout.finalize when Convex's
+  // reactive query re-resolves after the plan goes non-empty.
+  const hasResolvedRef = useRef(false)
 
   // On open, trigger a fresh JWT + sync + start the polling timer.
   useEffect(() => {
@@ -78,10 +81,20 @@ export function PostCheckoutInterstitial({
     return () => clearInterval(interval)
   }, [open, timedOut, syncUserPlan])
 
-  // When the server reports a plan, resolve.
+  // When the server reports a plan, resolve — but only once per "open"
+  // cycle. Without this guard, Convex's reactive `status` query would
+  // re-fire onPlanActive (and therefore checkout.finalize) every time the
+  // userPlans row changes after the initial activation.
   useEffect(() => {
-    if (!open) return
-    if (status && status.plan) onPlanActive()
+    if (!open) {
+      hasResolvedRef.current = false
+      return
+    }
+    if (hasResolvedRef.current) return
+    if (status && status.plan) {
+      hasResolvedRef.current = true
+      onPlanActive()
+    }
   }, [open, status, onPlanActive])
 
   return (

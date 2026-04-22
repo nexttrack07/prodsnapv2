@@ -1107,6 +1107,7 @@ function GalleryView({
         productId={productId}
         productImageUrl={primaryImageUrl || ''}
         onComplete={() => setVariationTarget(null)}
+        creditsExhausted={creditsExhausted}
       />
 
       {/* Delete Confirmation Modal */}
@@ -1141,6 +1142,7 @@ function VariationDrawer({
   productId,
   productImageUrl,
   onComplete,
+  creditsExhausted = false,
 }: {
   opened: boolean
   onClose: () => void
@@ -1148,6 +1150,7 @@ function VariationDrawer({
   productId: Id<'products'>
   productImageUrl: string
   onComplete: () => void
+  creditsExhausted?: boolean
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [changeText, setChangeText] = useState(false)
@@ -1315,7 +1318,7 @@ function VariationDrawer({
             size="md"
             color="brand"
             onClick={handleGenerate}
-            disabled={!hasSelection}
+            disabled={!hasSelection || creditsExhausted}
             loading={isSubmitting}
             leftSection={!isSubmitting && <IconSparkles size={18} />}
           >
