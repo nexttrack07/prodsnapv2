@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { useAction } from 'convex/react'
+import { useAction, useQuery as useConvexQuery } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useState } from 'react'
 import { notifications } from '@mantine/notifications'
@@ -23,13 +23,16 @@ import {
   AspectRatio,
   LoadingOverlay,
   Skeleton,
+  Alert,
+  Anchor,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
-import { IconUpload, IconPhoto, IconX } from '@tabler/icons-react'
+import { IconUpload, IconPhoto, IconX, IconBolt } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
 import { MAX_PRODUCT_IMAGE_SIZE } from '../utils/constants'
+import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 
 export const Route = createFileRoute('/studio/')({
   component: ProductGridPage,
@@ -39,12 +42,31 @@ function ProductGridPage() {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const navigate = useNavigate()
   const { data: products, isLoading } = useQuery(convexQuery(api.products.listProducts, {}))
+  const billingStatus = useConvexQuery(api.billing.syncPlan.getBillingStatus)
 
   const uploadAction = useAction(api.r2.uploadProductImage)
   const createProduct = useConvexMutation(api.products.createProduct)
   const createProductMutation = useMutation({ mutationFn: createProduct })
 
   const [isUploading, setIsUploading] = useState(false)
+
+  const creditsExhausted =
+    billingStatus &&
+    billingStatus.creditsTotal > 0 &&
+    billingStatus.creditsUsed >= billingStatus.creditsTotal
+
+  const atProductLimit =
+    billingStatus &&
+    billingStatus.productLimit !== null &&
+    billingStatus.productCount >= billingStatus.productLimit
+
+  const resetDate =
+    billingStatus?.resetsOn
+      ? new Date(billingStatus.resetsOn).toLocaleDateString(undefined, {
+          month: 'long',
+          day: 'numeric',
+        })
+      : null
 
   async function handleFileDrop(files: File[]) {
     const file = files[0]
@@ -100,6 +122,20 @@ function ProductGridPage() {
 
   return (
     <Container size="lg" py="xl">
+      {/* US-U06: Credits exhausted banner */}
+      {creditsExhausted && (
+        <Alert
+          color="red"
+          icon={<IconBolt size={16} />}
+          mb="md"
+          title="Credits exhausted"
+        >
+          You have used all {billingStatus!.creditsTotal} credits for this month.
+          {resetDate ? ` They reset on ${resetDate}.` : ''}{' '}
+          <Anchor component={Link} to="/pricing" fw={500}>Upgrade to Pro</Anchor> for 5× more.
+        </Alert>
+      )}
+
       <Paper
         radius="lg"
         p={isMobile ? 'md' : 'xl'}
@@ -112,44 +148,69 @@ function ProductGridPage() {
         <Stack gap={isMobile ? 'md' : 'sm'}>
           <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
             <Box>
-              <Title order={1} fz={isMobile ? 24 : 36} fw={600} c="white">
-                My Products
-              </Title>
+              <Group gap="sm" align="center">
+                <Title order={1} fz={isMobile ? 24 : 36} fw={600} c="white">
+                  My Products
+                </Title>
+                {/* US-U07: product count indicator */}
+                {billingStatus && billingStatus.productLimit !== null && (
+                  <Badge variant="light" color="gray" size="md">
+                    {billingStatus.productCount}/{billingStatus.productLimit} products
+                  </Badge>
+                )}
+              </Group>
               <Text size={isMobile ? 'md' : 'lg'} c="dark.2" mt={8}>
                 Upload product photos and generate ad creatives.
               </Text>
             </Box>
-            <Dropzone
-              onDrop={handleFileDrop}
-              accept={IMAGE_MIME_TYPE}
-              maxSize={MAX_PRODUCT_IMAGE_SIZE}
-              multiple={false}
-              disabled={isUploading}
-              data-testid="upload-dropzone"
-              style={{
-                border: 'none',
-                background: 'none',
-                padding: 0,
-                minHeight: 'auto',
-              }}
-            >
-              <Button
-                leftSection={<IconUpload size={18} />}
-                size={isMobile ? 'md' : 'lg'}
-                color="brand"
-                loading={isUploading}
-                fullWidth={isMobile}
+            <Group gap="sm" align="center">
+              <CreditsIndicator />
+              <Dropzone
+                onDrop={handleFileDrop}
+                accept={IMAGE_MIME_TYPE}
+                maxSize={MAX_PRODUCT_IMAGE_SIZE}
+                multiple={false}
+                disabled={isUploading || !!atProductLimit}
+                data-testid="upload-dropzone"
                 style={{
-                  boxShadow: '0 4px 20px rgba(84, 116, 180, 0.3)',
-                  pointerEvents: 'none',
+                  border: 'none',
+                  background: 'none',
+                  padding: 0,
+                  minHeight: 'auto',
                 }}
               >
-                {isUploading ? 'Uploading...' : 'New Product'}
-              </Button>
-            </Dropzone>
+                <Button
+                  leftSection={<IconUpload size={18} />}
+                  size={isMobile ? 'md' : 'lg'}
+                  color="brand"
+                  loading={isUploading}
+                  disabled={!!atProductLimit}
+                  fullWidth={isMobile}
+                  style={{
+                    boxShadow: '0 4px 20px rgba(84, 116, 180, 0.3)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {isUploading ? 'Uploading...' : 'New Product'}
+                </Button>
+              </Dropzone>
+            </Group>
           </Group>
         </Stack>
       </Paper>
+
+      {/* US-U07: product limit banner */}
+      {atProductLimit && (
+        <Alert
+          color="yellow"
+          mb="md"
+          title="Product limit reached"
+        >
+          You have {billingStatus!.productCount} products but your plan allows {billingStatus!.productLimit}.
+          Archive products or{' '}
+          <Anchor component={Link} to="/pricing" fw={500}>upgrade to Pro</Anchor>.
+        </Alert>
+      )}
 
       {isLoading ? (
         <ProductGridSkeleton />
