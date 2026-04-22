@@ -3,14 +3,30 @@
 import { v } from 'convex/values'
 import { action } from '../_generated/server'
 import { internal } from '../_generated/api'
+import type { ActionCtx } from '../_generated/server'
 import { composeVariationPromptCore, generateVariationImageCore } from '../ai'
 import { uploadFromUrl } from '../r2'
 import { requireAdmin } from '../lib/admin/requireAdmin'
 
+async function logAction(
+  ctx: ActionCtx,
+  adminUserId: string,
+  opts: { action: string; targetUserId?: string; targetId?: string; details?: unknown },
+) {
+  await ctx.runMutation(internal.admin.audit.insertAuditEvent, {
+    adminUserId,
+    action: opts.action,
+    targetUserId: opts.targetUserId,
+    targetId: opts.targetId,
+    details: opts.details,
+  })
+}
+
 export const runComposer = action({
   args: { runId: v.id('adminDebugRuns') },
   handler: async (ctx, { runId }) => {
-    await requireAdmin(ctx)
+    const adminUserId = await requireAdmin(ctx)
+    await logAction(ctx, adminUserId, { action: 'playground.runComposer', targetId: runId })
 
     // 1) Fetch the run
     const run = await ctx.runQuery(internal.admin.playground.getRunInternal, { runId })
@@ -79,7 +95,8 @@ export const runGenerator = action({
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
   },
   handler: async (ctx, { runId, editedPrompt, generatorImageUrls, generatorImageLabels, model }) => {
-    await requireAdmin(ctx)
+    const adminUserId = await requireAdmin(ctx)
+    await logAction(ctx, adminUserId, { action: 'playground.runGenerator', targetId: runId })
 
     // 1) Fetch run
     const run = await ctx.runQuery(internal.admin.playground.getRunInternal, { runId })

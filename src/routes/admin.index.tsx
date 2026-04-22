@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { Container, Title, Text, SimpleGrid, Paper, Box, ThemeIcon, Group } from '@mantine/core'
-import { IconLayoutGrid, IconTextCaption, IconArrowRight, IconFlask2 } from '@tabler/icons-react'
+import { IconLayoutGrid, IconTextCaption, IconArrowRight, IconFlask2, IconClipboardList } from '@tabler/icons-react'
 
 export const Route = createFileRoute('/admin/')({
   component: AdminIndex,
@@ -44,6 +44,12 @@ function AdminIndex() {
           title="Variation Playground"
           description="Re-run any user's variation flow with full visibility into prompts and inputs."
           icon={<IconFlask2 size={24} />}
+        />
+        <AdminCard
+          to="/admin/audit"
+          title="Audit Log"
+          description="View the last 100 admin actions — who did what and when."
+          icon={<IconClipboardList size={24} />}
         />
       </SimpleGrid>
     </Container>

@@ -306,6 +306,18 @@ const schema = defineSchema({
     .index('by_eventId', ['eventId'])
     .index('by_receivedAt', ['receivedAt']),
 
+  // ─── Admin audit log ─────────────────────────────────────────────────────
+  adminAuditEvents: defineTable({
+    adminUserId: v.string(),
+    action: v.string(),
+    targetUserId: v.optional(v.string()),
+    targetId: v.optional(v.string()),
+    details: v.optional(v.any()),
+    at: v.number(),
+  })
+    .index('by_admin_at', ['adminUserId', 'at'])
+    .index('by_at', ['at']),
+
   adminDebugRuns: defineTable({
     adminUserId: v.string(),
     sourceGenerationId: v.id('templateGenerations'),

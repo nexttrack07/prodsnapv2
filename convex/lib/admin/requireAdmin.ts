@@ -19,7 +19,7 @@
  * dashboard. See docs/admin-access.md for the runbook.
  */
 
-import { createClerkClient } from "@clerk/backend";
+import { getClerkClient } from "../billing/provider.clerk";
 import type { ActionCtx, MutationCtx, QueryCtx } from "../../_generated/server";
 
 export async function requireAdmin(ctx: ActionCtx): Promise<string> {
@@ -28,9 +28,7 @@ export async function requireAdmin(ctx: ActionCtx): Promise<string> {
     throw new Error("Admin access required: not authenticated");
   }
 
-  const clerk = createClerkClient({
-    secretKey: process.env.CLERK_SECRET_KEY,
-  });
+  const clerk = getClerkClient();
 
   // identity.subject is the Clerk user ID (e.g. "user_abc123")
   const clerkUserId = identity.subject;
@@ -62,4 +60,24 @@ export async function requireAdminIdentity(
   }
 
   return identity.subject;
+}
+
+export async function logAdminAction(
+  ctx: MutationCtx,
+  adminUserId: string,
+  opts: {
+    action: string;
+    targetUserId?: string;
+    targetId?: string;
+    details?: unknown;
+  },
+): Promise<void> {
+  await ctx.db.insert('adminAuditEvents', {
+    adminUserId,
+    action: opts.action,
+    targetUserId: opts.targetUserId,
+    targetId: opts.targetId,
+    details: opts.details,
+    at: Date.now(),
+  });
 }

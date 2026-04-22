@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { query, mutation, internalQuery, internalMutation } from '../_generated/server'
-import { requireAdminIdentity } from '../lib/admin/requireAdmin'
+import { requireAdminIdentity, logAdminAction } from '../lib/admin/requireAdmin'
 
 // ─── Internal helpers (used by playgroundActions.ts via internal.admin.playground.*) ─
 
@@ -135,6 +135,16 @@ export const createDebugRun = mutation({
       composerImageLabels: args.composerImageLabels,
       status: 'draft',
       createdAt: Date.now(),
+    })
+    await logAdminAction(ctx, adminUserId, {
+      action: 'playground.createDebugRun',
+      targetId: runId,
+      details: {
+        sourceGenerationId: args.sourceGenerationId,
+        changeText: args.changeText,
+        changeIcons: args.changeIcons,
+        changeColors: args.changeColors,
+      },
     })
     return { runId }
   },
