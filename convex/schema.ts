@@ -186,6 +186,33 @@ const schema = defineSchema({
     .index('by_status', ['status'])
     .index('by_userId', ['userId']),
 
+  // ─── Billing audit + credit ledger ───────────────────────────────────────
+  // Append-only. Rows with context: 'usage' also serve as the monthly-credit
+  // ledger — summing `units` since startOfMonthUtc() gives the user's quota
+  // consumption for the current period.
+  billingEvents: defineTable({
+    userId: v.string(),
+    mutationName: v.string(),
+    capability: v.optional(v.string()),
+    allowed: v.boolean(),
+    claimedPlan: v.optional(v.string()),
+    timestamp: v.number(),
+    // Forward-compat (populated when metered billing / webhooks land):
+    units: v.optional(v.number()),
+    metadata: v.optional(v.any()),
+    context: v.optional(
+      v.union(
+        v.literal('enforcement'),
+        v.literal('checkout'),
+        v.literal('webhook'),
+        v.literal('usage'),
+      ),
+    ),
+  })
+    .index('by_userId', ['userId'])
+    .index('by_timestamp', ['timestamp'])
+    .index('by_capability', ['capability']),
+
   promptConfigs: defineTable({
     key: v.string(),
     // Core instructions — always applied as part of the composer LLM's
