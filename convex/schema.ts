@@ -213,7 +213,14 @@ const schema = defineSchema({
     timestamp: v.number(),
     // Forward-compat (populated when metered billing / webhooks land):
     units: v.optional(v.number()),
-    metadata: v.optional(v.any()),
+    metadata: v.optional(v.union(
+      // malformed-clerk-response: subscriptionItems was not an array
+      v.object({ receivedType: v.string(), preservedPlan: v.string() }),
+      // unknown-plan-slug: Clerk returned a slug not in PLAN_CONFIG
+      v.object({ receivedSlug: v.string(), preservedPlan: v.string() }),
+      // clerk-api-error: Clerk API threw a network/5xx error
+      v.object({ error: v.string(), preservedPlan: v.string() }),
+    )),
     context: v.optional(
       v.union(
         v.literal('enforcement'),

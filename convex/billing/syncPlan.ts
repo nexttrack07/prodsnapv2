@@ -25,7 +25,7 @@
  *   - Empty subscriptionItems: legitimately no subscription → plan = ''.
  */
 import { v } from 'convex/values'
-import { createClerkClient } from '@clerk/backend'
+import { getClerkClient } from '../lib/billing/provider.clerk'
 import { action, internalAction, internalMutation, internalQuery, query } from '../_generated/server'
 import type { ActionCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
@@ -47,17 +47,8 @@ export const syncUserPlan = action({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
 
-    const secretKey = process.env.CLERK_SECRET_KEY
-    if (!secretKey) {
-      console.error(
-        '[billing/syncPlan] CLERK_SECRET_KEY not set in Convex env. ' +
-          'Set it in the Convex dashboard → Settings → Environment Variables.',
-      )
-      throw new Error('Server billing misconfiguration — contact support')
-    }
-
     const clerkUserId = identity.subject
-    const clerk = createClerkClient({ secretKey })
+    const clerk = getClerkClient()
 
     // Read the existing cached plan row first — needed for cache-on-failure.
     const existingRow = (await ctx.runQuery(
@@ -71,7 +62,11 @@ export const syncUserPlan = action({
       | 'unknown-plan-slug'
       | 'malformed-clerk-response'
       | null = null
-    let billingEventMetadata: Record<string, unknown> | undefined = undefined
+    let billingEventMetadata:
+      | { receivedType: string; preservedPlan: string }
+      | { receivedSlug: string; preservedPlan: string }
+      | { error: string; preservedPlan: string }
+      | undefined = undefined
 
     try {
       // Canonical Clerk Billing Backend API call. Returns the full subscription
@@ -174,7 +169,11 @@ export const writePlan = internalMutation({
         v.literal('malformed-clerk-response'),
       ),
     ),
-    billingEventMetadata: v.optional(v.any()),
+    billingEventMetadata: v.optional(v.union(
+      v.object({ receivedType: v.string(), preservedPlan: v.string() }),
+      v.object({ receivedSlug: v.string(), preservedPlan: v.string() }),
+      v.object({ error: v.string(), preservedPlan: v.string() }),
+    )),
   },
   handler: async (ctx, { userId, clerkUserId, plan, billingEventContext, billingEventMetadata }) => {
     const existing = await ctx.db
@@ -262,9 +261,7 @@ export const cancelMySubscription = action({
   handler: async (ctx, { endNow }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
-    const secretKey = process.env.CLERK_SECRET_KEY
-    if (!secretKey) throw new Error('Server billing misconfiguration')
-    const clerk = createClerkClient({ secretKey })
+    const clerk = getClerkClient()
     const clerkUserId = identity.subject
 
     let canceled: string[] = []
@@ -371,10 +368,7 @@ export const syncUserPlanInternal = internalAction({
   },
   returns: v.object({ plan: v.string(), synced: v.boolean() }),
   handler: async (ctx: ActionCtx, { userId, clerkUserId }) => {
-    const secretKey = process.env.CLERK_SECRET_KEY
-    if (!secretKey) throw new Error('Server billing misconfiguration')
-
-    const clerk = createClerkClient({ secretKey })
+    const clerk = getClerkClient()
 
     const existingRow = (await ctx.runQuery(
       internal.billing.syncPlan.getMyPlanByUserId,
@@ -387,7 +381,11 @@ export const syncUserPlanInternal = internalAction({
       | 'unknown-plan-slug'
       | 'malformed-clerk-response'
       | null = null
-    let billingEventMetadata: Record<string, unknown> | undefined = undefined
+    let billingEventMetadata:
+      | { receivedType: string; preservedPlan: string }
+      | { receivedSlug: string; preservedPlan: string }
+      | { error: string; preservedPlan: string }
+      | undefined = undefined
 
     try {
       const subscription = await clerk.billing.getUserBillingSubscription(clerkUserId)
@@ -448,10 +446,7 @@ export const assertPlanConfigMatchesClerk = internalAction({
   args: {},
   returns: v.object({ ok: v.boolean(), message: v.string() }),
   handler: async (_ctx: ActionCtx) => {
-    const secretKey = process.env.CLERK_SECRET_KEY
-    if (!secretKey) throw new Error('CLERK_SECRET_KEY not set')
-
-    const clerk = createClerkClient({ secretKey })
+    const clerk = getClerkClient()
 
     // Clerk SDK exposes plan listing under billing.getPlans / billing.listPlans.
     // Try both common shapes defensively.
