@@ -38,6 +38,7 @@ export class ClerkBillingProvider implements BillingProvider {
       capabilities,
       hasCapability: (slug: string) => capSet.has(slug),
       hasKnownPlan: Boolean(planConfig),
+      syncedAt: row?.syncedAt,
     }
   }
 }

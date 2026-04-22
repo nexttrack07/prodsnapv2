@@ -15,10 +15,19 @@
  * active subscription item. The plan slug comes from
  * `subscriptionItem.plan.slug`. No publicMetadata / webhook required — this
  * is the canonical Clerk Billing Backend API.
+ *
+ * Resilience:
+ *   - Clerk API throws (network/5xx): preserve existing cached plan,
+ *     set billingStatus signal, write 'clerk-api-error' event.
+ *   - Unknown plan slug returned: preserve cache, write 'unknown-plan-slug' event.
+ *   - Malformed response (subscriptionItems missing/not array): preserve cache,
+ *     write 'malformed-clerk-response' event.
+ *   - Empty subscriptionItems: legitimately no subscription → plan = ''.
  */
 import { v } from 'convex/values'
 import { createClerkClient } from '@clerk/backend'
-import { action, internalMutation, query } from '../_generated/server'
+import { action, internalAction, internalMutation, internalQuery, query } from '../_generated/server'
+import type { ActionCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
 import { isKnownPlan, PLAN_CONFIG } from '../lib/billing/planConfig'
 import { countUsageThisMonth } from '../lib/billing'
@@ -50,7 +59,20 @@ export const syncUserPlan = action({
     const clerkUserId = identity.subject
     const clerk = createClerkClient({ secretKey })
 
+    // Read the existing cached plan row first — needed for cache-on-failure.
+    const existingRow = (await ctx.runQuery(
+      internal.billing.syncPlan.getMyPlanByUserId,
+      { userId: identity.tokenIdentifier },
+    )) as { plan: string; syncedAt: number } | null
+
     let plan = ''
+    let billingEventContext:
+      | 'clerk-api-error'
+      | 'unknown-plan-slug'
+      | 'malformed-clerk-response'
+      | null = null
+    let billingEventMetadata: Record<string, unknown> | undefined = undefined
+
     try {
       // Canonical Clerk Billing Backend API call. Returns the full subscription
       // with all items; we pick the active (or past_due) item and read its
@@ -60,30 +82,66 @@ export const syncUserPlan = action({
         clerkUserId,
       )
 
-      // Find the item that's currently billed. 'past_due' is a grace window
-      // where the card retry is in flight — user still has access.
-      const billedItem = subscription.subscriptionItems.find(
-        (item) => item.status === 'active' || item.status === 'past_due',
-      )
-
-      const raw = billedItem?.plan?.slug ?? ''
-      plan = isKnownPlan(raw) ? raw : ''
-      if (raw && !plan) {
-        // Useful signal when Clerk dashboard drifts from PLAN_CONFIG.
-        console.warn(
-          `[billing/syncPlan] Clerk returned slug "${raw}" which is not in PLAN_CONFIG. ` +
-            `User will be treated as having no plan until config is updated.`,
+      // P0.4: Response-shape guard — assert subscriptionItems is an array.
+      if (!Array.isArray(subscription?.subscriptionItems)) {
+        console.error(
+          '[billing/syncPlan] Clerk response missing subscriptionItems array. ' +
+            `Got: ${JSON.stringify(subscription?.subscriptionItems)}. ` +
+            'Preserving cached plan.',
         )
-      }
-    } catch (err) {
-      // getUserBillingSubscription throws if the user has no subscription.
-      // That's a valid state for a pre-checkout user — treat as no plan.
-      const msg = err instanceof Error ? err.message : String(err)
-      if (/not found|no.*subscription/i.test(msg)) {
+        plan = existingRow?.plan ?? ''
+        billingEventContext = 'malformed-clerk-response'
+        billingEventMetadata = {
+          receivedType: typeof subscription?.subscriptionItems,
+          preservedPlan: plan,
+        }
+      } else if (subscription.subscriptionItems.length === 0) {
+        // Legitimately no subscription — user has no active plan.
         plan = ''
       } else {
-        console.error('[billing/syncPlan] Clerk call failed:', msg)
-        throw new Error('Could not sync plan from Clerk')
+        // Find the item that's currently billed. 'past_due' is a grace window
+        // where the card retry is in flight — user still has access.
+        const billedItem = subscription.subscriptionItems.find(
+          (item) => item.status === 'active' || item.status === 'past_due',
+        )
+
+        const raw = billedItem?.plan?.slug ?? ''
+
+        if (raw && !isKnownPlan(raw)) {
+          // P0.4: Unknown slug — preserve cache and log loudly.
+          console.error(
+            `[billing/syncPlan] Clerk returned unknown plan slug "${raw}". ` +
+              'PLAN_CONFIG is out of sync with Clerk dashboard. ' +
+              `Preserving existing plan "${existingRow?.plan ?? ''}". ` +
+              'Update PLAN_CONFIG to include this slug.',
+          )
+          plan = existingRow?.plan ?? ''
+          billingEventContext = 'unknown-plan-slug'
+          billingEventMetadata = {
+            receivedSlug: raw,
+            preservedPlan: plan,
+          }
+        } else {
+          // Known slug or no active item (non-active/past_due statuses → no plan).
+          plan = isKnownPlan(raw) ? raw : ''
+        }
+      }
+    } catch (err) {
+      // P0.3: Distinguish thrown error (API unreachable) from legitimate no-subscription.
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/not found|no.*subscription/i.test(msg)) {
+        // Clerk throws a "not found" style error for users with no subscription —
+        // this is a valid state for pre-checkout users.
+        plan = ''
+      } else {
+        // Network error, 5xx, timeout — preserve cached plan.
+        console.error('[billing/syncPlan] Clerk API call failed:', msg)
+        plan = existingRow?.plan ?? ''
+        billingEventContext = 'clerk-api-error'
+        billingEventMetadata = {
+          error: msg,
+          preservedPlan: plan,
+        }
       }
     }
 
@@ -91,6 +149,8 @@ export const syncUserPlan = action({
       userId: identity.tokenIdentifier,
       clerkUserId,
       plan,
+      billingEventContext: billingEventContext ?? undefined,
+      billingEventMetadata,
     })
 
     return { plan, synced: true }
@@ -98,16 +158,25 @@ export const syncUserPlan = action({
 })
 
 /**
- * Internal mutation — upserts a row in `userPlans`.
- * Called only from `syncUserPlan` (and future webhook handlers).
+ * Internal mutation — upserts a row in `userPlans` and optionally writes a
+ * billingEvents row for resilience signals (clerk-api-error, unknown-plan-slug,
+ * malformed-clerk-response).
  */
 export const writePlan = internalMutation({
   args: {
     userId: v.string(),
     clerkUserId: v.string(),
     plan: v.string(),
+    billingEventContext: v.optional(
+      v.union(
+        v.literal('clerk-api-error'),
+        v.literal('unknown-plan-slug'),
+        v.literal('malformed-clerk-response'),
+      ),
+    ),
+    billingEventMetadata: v.optional(v.any()),
   },
-  handler: async (ctx, { userId, clerkUserId, plan }) => {
+  handler: async (ctx, { userId, clerkUserId, plan, billingEventContext, billingEventMetadata }) => {
     const existing = await ctx.db
       .query('userPlans')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
@@ -128,6 +197,37 @@ export const writePlan = internalMutation({
         syncedAt: now,
       })
     }
+
+    if (billingEventContext) {
+      await ctx.db.insert('billingEvents', {
+        userId,
+        mutationName: 'billing/syncPlan:syncUserPlan',
+        allowed: true,
+        claimedPlan: plan || undefined,
+        timestamp: now,
+        context: billingEventContext,
+        metadata: billingEventMetadata,
+      })
+    }
+  },
+})
+
+/**
+ * Internal query — look up a userPlans row by tokenIdentifier.
+ */
+export const getMyPlanByUserId = internalQuery({
+  args: { userId: v.string() },
+  returns: v.union(
+    v.object({ plan: v.string(), syncedAt: v.number() }),
+    v.null(),
+  ),
+  handler: async (ctx, { userId }) => {
+    const row = await ctx.db
+      .query('userPlans')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    if (!row) return null
+    return { plan: row.plan, syncedAt: row.syncedAt }
   },
 })
 
@@ -255,5 +355,138 @@ export const getBillingStatus = query({
       creditsTotal,
       resetsOn: nextReset,
     }
+  },
+})
+
+/**
+ * Internal action — called by the webhook handler.
+ * Fetches the user's active billing subscription from Clerk and writes the
+ * resolved plan slug to `userPlans`. Same logic as `syncUserPlan` but takes
+ * explicit userId + clerkUserId instead of reading from auth context.
+ */
+export const syncUserPlanInternal = internalAction({
+  args: {
+    userId: v.string(),
+    clerkUserId: v.string(),
+  },
+  returns: v.object({ plan: v.string(), synced: v.boolean() }),
+  handler: async (ctx: ActionCtx, { userId, clerkUserId }) => {
+    const secretKey = process.env.CLERK_SECRET_KEY
+    if (!secretKey) throw new Error('Server billing misconfiguration')
+
+    const clerk = createClerkClient({ secretKey })
+
+    const existingRow = (await ctx.runQuery(
+      internal.billing.syncPlan.getMyPlanByUserId,
+      { userId },
+    )) as { plan: string; syncedAt: number } | null
+
+    let plan = ''
+    let billingEventContext:
+      | 'clerk-api-error'
+      | 'unknown-plan-slug'
+      | 'malformed-clerk-response'
+      | null = null
+    let billingEventMetadata: Record<string, unknown> | undefined = undefined
+
+    try {
+      const subscription = await clerk.billing.getUserBillingSubscription(clerkUserId)
+
+      if (!Array.isArray(subscription?.subscriptionItems)) {
+        plan = existingRow?.plan ?? ''
+        billingEventContext = 'malformed-clerk-response'
+        billingEventMetadata = {
+          receivedType: typeof subscription?.subscriptionItems,
+          preservedPlan: plan,
+        }
+      } else if (subscription.subscriptionItems.length === 0) {
+        plan = ''
+      } else {
+        const billedItem = subscription.subscriptionItems.find(
+          (item) => item.status === 'active' || item.status === 'past_due',
+        )
+        const raw = billedItem?.plan?.slug ?? ''
+        if (raw && !isKnownPlan(raw)) {
+          plan = existingRow?.plan ?? ''
+          billingEventContext = 'unknown-plan-slug'
+          billingEventMetadata = { receivedSlug: raw, preservedPlan: plan }
+        } else {
+          plan = isKnownPlan(raw) ? raw : ''
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/not found|no.*subscription/i.test(msg)) {
+        plan = ''
+      } else {
+        plan = existingRow?.plan ?? ''
+        billingEventContext = 'clerk-api-error'
+        billingEventMetadata = { error: msg, preservedPlan: plan }
+      }
+    }
+
+    await ctx.runMutation(internal.billing.syncPlan.writePlan, {
+      userId,
+      clerkUserId,
+      plan,
+      billingEventContext: billingEventContext ?? undefined,
+      billingEventMetadata,
+    })
+
+    return { plan, synced: true }
+  },
+})
+
+/**
+ * Internal action: asserts every plan slug returned by Clerk's plan list
+ * exists in PLAN_CONFIG. Run via:
+ *   npx convex run billing/syncPlan:assertPlanConfigMatchesClerk
+ *
+ * Throws with a diff report if drift is detected.
+ */
+export const assertPlanConfigMatchesClerk = internalAction({
+  args: {},
+  returns: v.object({ ok: v.boolean(), message: v.string() }),
+  handler: async (_ctx: ActionCtx) => {
+    const secretKey = process.env.CLERK_SECRET_KEY
+    if (!secretKey) throw new Error('CLERK_SECRET_KEY not set')
+
+    const clerk = createClerkClient({ secretKey })
+
+    // Clerk SDK exposes plan listing under billing.getPlans / billing.listPlans.
+    // Try both common shapes defensively.
+    let clerkSlugs: string[] = []
+    try {
+      const result = await (clerk.billing as any).getPlans?.()
+        ?? await (clerk.billing as any).listPlans?.()
+      const items: unknown[] = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data)
+          ? result.data
+          : []
+      clerkSlugs = items
+        .map((p: any) => p?.slug ?? p?.plan?.slug ?? '')
+        .filter(Boolean)
+    } catch (err) {
+      throw new Error(
+        `[assertPlanConfigMatchesClerk] Failed to fetch plans from Clerk: ${err}`,
+      )
+    }
+
+    const knownSlugs = new Set(Object.keys(PLAN_CONFIG))
+    const unknown = clerkSlugs.filter((s) => !knownSlugs.has(s))
+    const missing = [...knownSlugs].filter((s) => !clerkSlugs.includes(s))
+
+    if (unknown.length > 0 || missing.length > 0) {
+      const parts: string[] = []
+      if (unknown.length > 0)
+        parts.push(`Clerk has slugs not in PLAN_CONFIG: ${unknown.join(', ')}`)
+      if (missing.length > 0)
+        parts.push(`PLAN_CONFIG has slugs not in Clerk: ${missing.join(', ')}`)
+      const message = parts.join(' | ')
+      throw new Error(`[assertPlanConfigMatchesClerk] Drift detected: ${message}`)
+    }
+
+    return { ok: true, message: 'All Clerk plan slugs match PLAN_CONFIG.' }
   },
 })

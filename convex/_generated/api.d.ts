@@ -12,9 +12,12 @@ import type * as admin_playground from "../admin/playground.js";
 import type * as admin_playgroundActions from "../admin/playgroundActions.js";
 import type * as ai from "../ai.js";
 import type * as billing_syncPlan from "../billing/syncPlan.js";
+import type * as billing_webhookHandler from "../billing/webhookHandler.js";
 import type * as board from "../board.js";
 import type * as crons from "../crons.js";
+import type * as http from "../http.js";
 import type * as invariant from "../invariant.js";
+import type * as lib_admin_requireAdmin from "../lib/admin/requireAdmin.js";
 import type * as lib_billing_capabilities from "../lib/billing/capabilities.js";
 import type * as lib_billing_claims from "../lib/billing/claims.js";
 import type * as lib_billing_index from "../lib/billing/index.js";
@@ -29,6 +32,7 @@ import type * as studio from "../studio.js";
 import type * as templates from "../templates.js";
 import type * as testMocks from "../testMocks.js";
 import type * as testing_cleanup from "../testing/cleanup.js";
+import type * as testing_clerkBackendStub from "../testing/clerkBackendStub.js";
 import type * as testing_seed from "../testing/seed.js";
 
 import type {
@@ -42,9 +46,12 @@ declare const fullApi: ApiFromModules<{
   "admin/playgroundActions": typeof admin_playgroundActions;
   ai: typeof ai;
   "billing/syncPlan": typeof billing_syncPlan;
+  "billing/webhookHandler": typeof billing_webhookHandler;
   board: typeof board;
   crons: typeof crons;
+  http: typeof http;
   invariant: typeof invariant;
+  "lib/admin/requireAdmin": typeof lib_admin_requireAdmin;
   "lib/billing/capabilities": typeof lib_billing_capabilities;
   "lib/billing/claims": typeof lib_billing_claims;
   "lib/billing/index": typeof lib_billing_index;
@@ -59,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   templates: typeof templates;
   testMocks: typeof testMocks;
   "testing/cleanup": typeof testing_cleanup;
+  "testing/clerkBackendStub": typeof testing_clerkBackendStub;
   "testing/seed": typeof testing_seed;
 }>;
 
