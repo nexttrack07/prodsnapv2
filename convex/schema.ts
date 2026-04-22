@@ -220,6 +220,10 @@ const schema = defineSchema({
         v.literal('checkout'),
         v.literal('webhook'),
         v.literal('usage'),
+        v.literal('clerk-api-error'),
+        v.literal('unknown-plan-slug'),
+        v.literal('malformed-clerk-response'),
+        v.literal('rate-limited'),
       ),
     ),
   })
@@ -290,6 +294,18 @@ const schema = defineSchema({
     .index('by_userId', ['userId'])
     .index('by_run', ['runId']) // legacy, keep for migration
     .index('by_template', ['templateId']),
+  // ─── Webhook event deduplication log ────────────────────────────────────
+  webhookEvents: defineTable({
+    eventId: v.string(),        // Svix svix-id header, unique per Clerk event
+    type: v.string(),           // e.g. 'subscription.updated'
+    receivedAt: v.number(),
+    handled: v.boolean(),
+    rawBody: v.optional(v.string()),
+    handlerError: v.optional(v.string()),
+  })
+    .index('by_eventId', ['eventId'])
+    .index('by_receivedAt', ['receivedAt']),
+
   adminDebugRuns: defineTable({
     adminUserId: v.string(),
     sourceGenerationId: v.id('templateGenerations'),
