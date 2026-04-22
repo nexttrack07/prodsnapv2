@@ -6,11 +6,19 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
+  type QueryCtx,
 } from './_generated/server'
 import { components, internal } from './_generated/api'
 import { WorkflowManager } from '@convex-dev/workflow'
 import { Workpool } from '@convex-dev/workpool'
 import type { Id } from './_generated/dataModel'
+import {
+  CAPABILITIES,
+  recordCreditUse,
+  requireCapability,
+  requireCredit,
+} from './lib/billing'
 
 export const workflow = new WorkflowManager(components.workflow)
 export const imageGenPool = new Workpool(components.imageGenPool, {
@@ -19,13 +27,33 @@ export const imageGenPool = new Workpool(components.imageGenPool, {
   defaultRetryBehavior: { maxAttempts: 2, initialBackoffMs: 3000, base: 2 },
 })
 
+// ─── Auth helpers ──────────────────────────────────────────────────────────
+async function requireAuth(ctx: QueryCtx | MutationCtx): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) throw new Error('Not authenticated')
+  return identity.tokenIdentifier
+}
+
+/**
+ * Asserts the caller owns `row` when the row has a `userId` field set.
+ * Legacy rows (pre-auth) with no userId are allowed through — intentional for
+ * backward compatibility on deprecated tables. New rows always carry userId.
+ */
+function assertOwnsIfTracked(row: { userId?: string }, userId: string, label: string) {
+  if (row.userId !== undefined && row.userId !== userId) {
+    throw new Error(`Not authorized to access ${label}`)
+  }
+}
+
 // ─── Run lifecycle mutations ──────────────────────────────────────────────
 export const createRun = mutation({
   args: { productImageUrl: v.string() },
   handler: async (ctx, { productImageUrl }) => {
+    const userId = await requireAuth(ctx)
     const runId = await ctx.db.insert('studioRuns', {
       productImageUrl,
       status: 'analyzing',
+      userId,
     })
     // Fire-and-forget analysis — flips run to 'ready' or 'failed'.
     await ctx.scheduler.runAfter(0, internal.studio.runAnalysis, { runId })
@@ -80,6 +108,10 @@ export const updateRunAnalysis = mutation({
     targetAudience: v.optional(v.string()),
   },
   handler: async (ctx, { runId, productDescription, targetAudience }) => {
+    const userId = await requireAuth(ctx)
+    const run = await ctx.db.get(runId)
+    if (!run) throw new Error('Run not found')
+    assertOwnsIfTracked(run, userId, 'run')
     const patch: Record<string, string> = {}
     if (productDescription !== undefined) patch.productDescription = productDescription
     if (targetAudience !== undefined) patch.targetAudience = targetAudience
@@ -94,8 +126,10 @@ export const updateRunAnalysis = mutation({
 export const reanalyze = mutation({
   args: { runId: v.id('studioRuns') },
   handler: async (ctx, { runId }) => {
+    const userId = await requireAuth(ctx)
     const run = await ctx.db.get(runId)
     if (!run) throw new Error('Run not found')
+    assertOwnsIfTracked(run, userId, 'run')
     await ctx.db.patch(runId, {
       status: 'analyzing',
       error: undefined,
@@ -234,6 +268,7 @@ export const submitRun = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx)
     if (args.templateIds.length === 0) throw new Error('No templates selected')
     if (args.templateIds.length > 3) throw new Error('At most 3 templates')
     if (args.variationsPerTemplate < 1 || args.variationsPerTemplate > 4) {
@@ -241,9 +276,22 @@ export const submitRun = mutation({
     }
     const run = await ctx.db.get(args.runId)
     if (!run) throw new Error('Run not found')
+    assertOwnsIfTracked(run, userId, 'run')
     if (run.status !== 'ready' && run.status !== 'complete') {
       throw new Error(`Run not ready (status=${run.status})`)
     }
+
+    // Billing: capability + credit enforcement (same gates as generateFromProduct).
+    const billing = await requireCapability(
+      ctx,
+      CAPABILITIES.GENERATE_VARIATIONS,
+      'submitRun',
+    )
+    if (args.variationsPerTemplate > 2) {
+      await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitRun')
+    }
+    const totalCredits = args.templateIds.length * args.variationsPerTemplate
+    await requireCredit(ctx, 'submitRun', totalCredits)
 
     await ctx.db.patch(args.runId, {
       status: 'generating',
@@ -271,7 +319,9 @@ export const submitRun = mutation({
           colorAdapt: args.colorAdapt,
           variationIndex: variationCounter++,
           status: 'queued',
+          userId,
         })
+        await recordCreditUse(ctx, billing, 'submitRun', CAPABILITIES.GENERATE_VARIATIONS)
         await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
           generationId: genId,
         })
@@ -483,9 +533,14 @@ export const maybeCompleteRun = internalMutation({
 export const retryGeneration = mutation({
   args: { generationId: v.id('templateGenerations') },
   handler: async (ctx, { generationId }) => {
+    const userId = await requireAuth(ctx)
     const gen = await ctx.db.get(generationId)
     if (!gen) throw new Error('Generation not found')
+    assertOwnsIfTracked(gen, userId, 'generation')
     if (gen.status !== 'failed') throw new Error('Only failed generations can be retried')
+    // Billing: retries count against the monthly quota (counting rule).
+    const billing = await requireCredit(ctx, 'retryGeneration', 1)
+    await recordCreditUse(ctx, billing, 'retryGeneration', CAPABILITIES.GENERATE_VARIATIONS)
     await ctx.db.patch(generationId, {
       status: 'queued',
       error: undefined,

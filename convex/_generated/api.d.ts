@@ -9,9 +9,15 @@
  */
 
 import type * as ai from "../ai.js";
+import type * as billing_syncPlan from "../billing/syncPlan.js";
 import type * as board from "../board.js";
 import type * as crons from "../crons.js";
 import type * as invariant from "../invariant.js";
+import type * as lib_billing_capabilities from "../lib/billing/capabilities.js";
+import type * as lib_billing_claims from "../lib/billing/claims.js";
+import type * as lib_billing_index from "../lib/billing/index.js";
+import type * as lib_billing_planConfig from "../lib/billing/planConfig.js";
+import type * as lib_billing_provider from "../lib/billing/provider.js";
 import type * as migrations from "../migrations.js";
 import type * as productImages from "../productImages.js";
 import type * as products from "../products.js";
@@ -31,9 +37,15 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  "billing/syncPlan": typeof billing_syncPlan;
   board: typeof board;
   crons: typeof crons;
   invariant: typeof invariant;
+  "lib/billing/capabilities": typeof lib_billing_capabilities;
+  "lib/billing/claims": typeof lib_billing_claims;
+  "lib/billing/index": typeof lib_billing_index;
+  "lib/billing/planConfig": typeof lib_billing_planConfig;
+  "lib/billing/provider": typeof lib_billing_provider;
   migrations: typeof migrations;
   productImages: typeof productImages;
   products: typeof products;

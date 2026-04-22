@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
-import { useAction } from 'convex/react'
+import { useAction, useQuery as useConvexQuery } from 'convex/react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { notifications } from '@mantine/notifications'
 import { useMediaQuery, useHotkeys } from '@mantine/hooks'
@@ -34,6 +34,7 @@ import {
   Tooltip,
   ThemeIcon,
   Skeleton,
+  Alert,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -56,10 +57,12 @@ import {
   IconUpload,
   IconLoader2,
   IconAlertTriangle,
+  IconBolt,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
+import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 
 export const Route = createFileRoute('/studio/$productId')({
   component: ProductWorkspacePage,
@@ -99,9 +102,24 @@ function ProductWorkspacePage() {
     convexQuery(api.productImages.getProductImagesList, { productId: productId as Id<'products'> }),
   )
 
+  const billingStatus = useConvexQuery(api.billing.syncPlan.getBillingStatus)
+
   // Get the primary image URL (or fallback to legacy imageUrl)
   const primaryImage = productImages?.find((img) => img._id === product?.primaryImageId)
   const primaryImageUrl = primaryImage?.imageUrl || product?.imageUrl
+
+  const creditsExhausted =
+    billingStatus != null &&
+    billingStatus.creditsTotal > 0 &&
+    billingStatus.creditsUsed >= billingStatus.creditsTotal
+
+  const resetDate =
+    billingStatus?.resetsOn
+      ? new Date(billingStatus.resetsOn).toLocaleDateString(undefined, {
+          month: 'long',
+          day: 'numeric',
+        })
+      : null
 
   if (productLoading) {
     return (
@@ -153,6 +171,20 @@ function ProductWorkspacePage() {
 
   return (
     <Container size="lg" py={40}>
+      {/* US-U06: Credits exhausted banner */}
+      {creditsExhausted && (
+        <Alert
+          color="red"
+          icon={<IconBolt size={16} />}
+          mb="md"
+          title="Credits exhausted"
+        >
+          You have used all {billingStatus!.creditsTotal} credits for this month.
+          {resetDate ? ` They reset on ${resetDate}.` : ''}{' '}
+          <Anchor component={Link} to="/pricing" fw={500}>Upgrade to Pro</Anchor> for 5× more.
+        </Alert>
+      )}
+
       {/* Breadcrumb */}
       <Box mb="md">
         <Anchor component={Link} to="/studio" size="sm" c="dark.2">
@@ -176,6 +208,7 @@ function ProductWorkspacePage() {
           completedGenerations={completedGenerations}
           pendingGenerations={pendingGenerations}
           onGenerateMore={() => setView('generate')}
+          creditsExhausted={creditsExhausted}
         />
       ) : (
         <GenerateWizard
@@ -184,6 +217,7 @@ function ProductWorkspacePage() {
           primaryImageUrl={primaryImageUrl}
           onBack={() => setView('gallery')}
           onComplete={() => setView('gallery')}
+          creditsExhausted={creditsExhausted}
         />
       )}
     </Container>
@@ -305,16 +339,19 @@ function ProductHeader({
               {capitalizeWords(product.name)}
             </Title>
           )}
-          <Group gap="sm" mt="sm">
-            {product.category && (
-              <Badge size="sm" variant="light" color="brand" radius="sm">
-                {product.category}
+          <Group gap="sm" mt="sm" justify="space-between" align="center">
+            <Group gap="sm">
+              {product.category && (
+                <Badge size="sm" variant="light" color="brand" radius="sm">
+                  {product.category}
+                </Badge>
+              )}
+              <Badge size="sm" variant="outline" color="gray" radius="sm">
+                {product.generationCount} {product.generationCount === 1 ? 'generation' : 'generations'}
               </Badge>
-            )}
-            <Badge size="sm" variant="outline" color="gray" radius="sm">
-              {product.generationCount} {product.generationCount === 1 ? 'generation' : 'generations'}
-            </Badge>
-            <StatusBadge status={product.status} />
+              <StatusBadge status={product.status} />
+            </Group>
+            <CreditsIndicator />
           </Group>
           {product.productDescription && (
             <Text size="sm" c="dark.1" mt="md" lh={1.6} maw={600}>
@@ -845,6 +882,7 @@ function GalleryView({
   completedGenerations,
   pendingGenerations,
   onGenerateMore,
+  creditsExhausted,
 }: {
   product: {
     status: string
@@ -871,6 +909,7 @@ function GalleryView({
     aspectRatio?: string
   }>
   onGenerateMore: () => void
+  creditsExhausted: boolean
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -918,8 +957,8 @@ function GalleryView({
           <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
         </Box>
         <Tooltip
-          label={product.status === 'analyzing' ? 'Product is still being analyzed...' : 'Product analysis failed'}
-          disabled={product.status === 'ready'}
+          label={creditsExhausted ? 'No credits remaining this month' : product.status === 'analyzing' ? 'Product is still being analyzed...' : 'Product analysis failed'}
+          disabled={product.status === 'ready' && !creditsExhausted}
           withArrow
           position="bottom"
           events={{ hover: true, focus: true, touch: true }}
@@ -927,7 +966,7 @@ function GalleryView({
           <span>
             <Button
               onClick={onGenerateMore}
-              disabled={product.status !== 'ready'}
+              disabled={product.status !== 'ready' || creditsExhausted}
               color="brand"
               size="md"
               rightSection={<IconArrowRight size={16} />}
@@ -986,7 +1025,7 @@ function GalleryView({
           </Text>
           <Button
             onClick={onGenerateMore}
-            disabled={product.status !== 'ready'}
+            disabled={product.status !== 'ready' || creditsExhausted}
             color="brand"
             size="md"
             rightSection={<IconArrowRight size={16} />}
@@ -1068,6 +1107,7 @@ function GalleryView({
         productId={productId}
         productImageUrl={primaryImageUrl || ''}
         onComplete={() => setVariationTarget(null)}
+        creditsExhausted={creditsExhausted}
       />
 
       {/* Delete Confirmation Modal */}
@@ -1102,6 +1142,7 @@ function VariationDrawer({
   productId,
   productImageUrl,
   onComplete,
+  creditsExhausted = false,
 }: {
   opened: boolean
   onClose: () => void
@@ -1109,6 +1150,7 @@ function VariationDrawer({
   productId: Id<'products'>
   productImageUrl: string
   onComplete: () => void
+  creditsExhausted?: boolean
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [changeText, setChangeText] = useState(false)
@@ -1276,7 +1318,7 @@ function VariationDrawer({
             size="md"
             color="brand"
             onClick={handleGenerate}
-            disabled={!hasSelection}
+            disabled={!hasSelection || creditsExhausted}
             loading={isSubmitting}
             leftSection={!isSubmitting && <IconSparkles size={18} />}
           >
@@ -1516,12 +1558,14 @@ function GenerateWizard({
   primaryImageUrl,
   onBack,
   onComplete,
+  creditsExhausted,
 }: {
   productId: Id<'products'>
   product: { name: string }
   primaryImageUrl?: string
   onBack: () => void
   onComplete: () => void
+  creditsExhausted: boolean
 }) {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [mode, setMode] = useState<Mode>('exact')
@@ -1901,11 +1945,11 @@ function GenerateWizard({
               color="brand"
               size="lg"
               onClick={handleGenerate}
-              disabled={pickedIds.length === 0}
+              disabled={pickedIds.length === 0 || creditsExhausted}
               loading={isSubmitting}
               styles={{
                 root: {
-                  boxShadow: pickedIds.length > 0 ? '0 4px 14px rgba(84, 116, 180, 0.3)' : 'none',
+                  boxShadow: pickedIds.length > 0 && !creditsExhausted ? '0 4px 14px rgba(84, 116, 180, 0.3)' : 'none',
                 },
               }}
             >

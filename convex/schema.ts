@@ -171,6 +171,8 @@ const schema = defineSchema({
   studioRuns: defineTable({
     productImageUrl: v.string(),
     status: runStatus,
+    // Owner (Clerk user ID). Optional for pre-auth legacy rows.
+    userId: v.optional(v.string()),
     category: v.optional(v.string()),
     productDescription: v.optional(v.string()),
     targetAudience: v.optional(v.string()),
@@ -180,7 +182,50 @@ const schema = defineSchema({
     colorAdapt: v.optional(v.boolean()),
     variationsPerTemplate: v.optional(v.number()),
     error: v.optional(v.string()),
-  }).index('by_status', ['status']),
+  })
+    .index('by_status', ['status'])
+    .index('by_userId', ['userId']),
+
+  // ─── Billing: synced plan per user ────────────────────────────────────────
+  // Source of truth for the enforcement layer. Populated by the
+  // `billing/syncPlan:syncUserPlan` Convex action, which calls Clerk's
+  // Backend API. Client triggers this action on app mount and after
+  // checkout completes. Future (v2): Clerk webhook also writes this row
+  // on subscription lifecycle events for real-time accuracy.
+  userPlans: defineTable({
+    userId: v.string(),                 // matches identity.tokenIdentifier
+    plan: v.string(),                   // "basic" | "pro" | "" (no active subscription)
+    syncedAt: v.number(),               // Unix ms
+    // Forward-compat: raw subscription snapshot for debugging/audit
+    clerkUserId: v.optional(v.string()),
+  }).index('by_userId', ['userId']),
+
+  // ─── Billing audit + credit ledger ───────────────────────────────────────
+  // Append-only. Rows with context: 'usage' also serve as the monthly-credit
+  // ledger — summing `units` since startOfMonthUtc() gives the user's quota
+  // consumption for the current period.
+  billingEvents: defineTable({
+    userId: v.string(),
+    mutationName: v.string(),
+    capability: v.optional(v.string()),
+    allowed: v.boolean(),
+    claimedPlan: v.optional(v.string()),
+    timestamp: v.number(),
+    // Forward-compat (populated when metered billing / webhooks land):
+    units: v.optional(v.number()),
+    metadata: v.optional(v.any()),
+    context: v.optional(
+      v.union(
+        v.literal('enforcement'),
+        v.literal('checkout'),
+        v.literal('webhook'),
+        v.literal('usage'),
+      ),
+    ),
+  })
+    .index('by_userId', ['userId'])
+    .index('by_timestamp', ['timestamp'])
+    .index('by_capability', ['capability']),
 
   promptConfigs: defineTable({
     key: v.string(),
