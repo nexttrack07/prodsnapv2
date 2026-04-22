@@ -10,11 +10,11 @@
  *   3. Future v2: Clerk webhook invokes an HTTP action that writes the same
  *      row on subscription lifecycle events for real-time accuracy.
  *
- * The plan slug is read from `user.publicMetadata.plan_slug` on the Clerk
- * user. In production, that metadata is set either manually (for admin
- * comp subscriptions) or via a Clerk webhook on subscription.active events.
- * For development, set it manually in the Clerk dashboard per the step-0
- * spike checklist.
+ * Plan resolution: we call Clerk's Backend API
+ * `clerk.billing.getUserBillingSubscription(clerkUserId)` and look for an
+ * active subscription item. The plan slug comes from
+ * `subscriptionItem.plan.slug`. No publicMetadata / webhook required — this
+ * is the canonical Clerk Billing Backend API.
  */
 import { v } from 'convex/values'
 import { createClerkClient } from '@clerk/backend'
@@ -24,7 +24,8 @@ import { isKnownPlan } from '../lib/billing/planConfig'
 
 /**
  * Public Convex action — called from the client.
- * Fetches the user's plan slug from Clerk and writes it to `userPlans`.
+ * Fetches the user's active billing subscription from Clerk and writes the
+ * resolved plan slug to `userPlans`.
  */
 export const syncUserPlan = action({
   args: {},
@@ -45,24 +46,40 @@ export const syncUserPlan = action({
       throw new Error('Server billing misconfiguration — contact support')
     }
 
-    // Clerk's user ID (the `subject` claim in the JWT) is what
-    // clerk.users.getUser expects. `tokenIdentifier` is issuer-prefixed.
     const clerkUserId = identity.subject
     const clerk = createClerkClient({ secretKey })
 
     let plan = ''
     try {
-      const user = await clerk.users.getUser(clerkUserId)
-      const meta = (user.publicMetadata ?? {}) as { plan_slug?: unknown }
-      const raw = typeof meta.plan_slug === 'string' ? meta.plan_slug : ''
-      // Only accept slugs we know about; anything else is treated as "no plan".
+      // Canonical Clerk Billing Backend API call. Returns the full subscription
+      // with all items; we pick the active (or past_due) item and read its
+      // plan.slug. "Active" subscription items are the source of truth for
+      // what the user is currently paying for.
+      const subscription = await clerk.billing.getUserBillingSubscription(
+        clerkUserId,
+      )
+
+      // Find the item that's currently billed. Clerk's status values
+      // for subscription items include 'active', 'past_due', 'canceled',
+      // 'upcoming', etc. We consider 'active' and 'past_due' as granting
+      // access (past_due is a grace window — user's card just failed).
+      const billedItem = subscription.subscriptionItems.find(
+        (item) => item.status === 'active' || item.status === 'past_due',
+      )
+
+      const raw = billedItem?.plan?.slug ?? ''
       plan = isKnownPlan(raw) ? raw : ''
     } catch (err) {
-      console.error(
-        '[billing/syncPlan] Failed to fetch user from Clerk:',
-        err instanceof Error ? err.message : err,
-      )
-      throw new Error('Could not sync plan from Clerk')
+      // getUserBillingSubscription throws if the user has no subscription
+      // at all. That's a valid state for a pre-checkout user — treat it
+      // as "no plan" rather than surfacing an error.
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/not found|no.*subscription/i.test(msg)) {
+        plan = ''
+      } else {
+        console.error('[billing/syncPlan] Clerk call failed:', msg)
+        throw new Error('Could not sync plan from Clerk')
+      }
     }
 
     await ctx.runMutation(internal.billing.syncPlan.writePlan, {
