@@ -14,12 +14,17 @@
  *
  * Never reference a capability slug as a raw string outside this file.
  */
+// NOTE: Clerk forces underscores in plan + feature slugs (hyphens are
+// rejected at dashboard save time and normalized to underscores). Our
+// capability slugs therefore use underscores to match what Clerk returns
+// from the Billing API. When creating features in the Clerk dashboard,
+// enter the exact slugs below.
 export const CAPABILITIES = {
   GENERATE_VARIATIONS: 'variations',
-  REMOVE_BACKGROUND: 'background-removal',
-  HD_OUTPUT: 'hd-output',
-  ADVANCED_TEMPLATES: 'advanced-templates',
-  BATCH_GENERATION: 'batch-generation',
+  REMOVE_BACKGROUND: 'background_removal',
+  HD_OUTPUT: 'hd_output',
+  ADVANCED_TEMPLATES: 'advanced_templates',
+  BATCH_GENERATION: 'batch_generation',
 } as const
 
 export type Capability = typeof CAPABILITIES[keyof typeof CAPABILITIES]

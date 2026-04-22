@@ -30,13 +30,13 @@ Mark both as **Publicly available** so they are returned by `usePlans({ for: 'us
 
 Go to **Billing → Features**. Create each with the EXACT slug:
 
-| Feature slug (required exact match) | Description |
+| Feature slug (required exact match — Clerk forces underscores) | Description |
 |---|---|
-| `advanced-templates` | Access to premium template library |
-| `hd-output` | High-resolution output (2048px) |
+| `advanced_templates` | Access to premium template library |
+| `hd_output` | High-resolution output (2048px) |
 | `variations` | Generate variations from outputs |
-| `batch-generation` | Generate >2 variations per template |
-| `background-removal` | AI background removal |
+| `batch_generation` | Generate >2 variations per template |
+| `background_removal` | AI background removal |
 
 Mark each as **Publicly available**.
 

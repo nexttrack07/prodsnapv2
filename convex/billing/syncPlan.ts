@@ -53,26 +53,30 @@ export const syncUserPlan = action({
     try {
       // Canonical Clerk Billing Backend API call. Returns the full subscription
       // with all items; we pick the active (or past_due) item and read its
-      // plan.slug. "Active" subscription items are the source of truth for
-      // what the user is currently paying for.
+      // plan.slug. Clerk forces underscores in slugs (e.g., "pro",
+      // "background_removal") so PLAN_CONFIG / CAPABILITIES must match.
       const subscription = await clerk.billing.getUserBillingSubscription(
         clerkUserId,
       )
 
-      // Find the item that's currently billed. Clerk's status values
-      // for subscription items include 'active', 'past_due', 'canceled',
-      // 'upcoming', etc. We consider 'active' and 'past_due' as granting
-      // access (past_due is a grace window — user's card just failed).
+      // Find the item that's currently billed. 'past_due' is a grace window
+      // where the card retry is in flight — user still has access.
       const billedItem = subscription.subscriptionItems.find(
         (item) => item.status === 'active' || item.status === 'past_due',
       )
 
       const raw = billedItem?.plan?.slug ?? ''
       plan = isKnownPlan(raw) ? raw : ''
+      if (raw && !plan) {
+        // Useful signal when Clerk dashboard drifts from PLAN_CONFIG.
+        console.warn(
+          `[billing/syncPlan] Clerk returned slug "${raw}" which is not in PLAN_CONFIG. ` +
+            `User will be treated as having no plan until config is updated.`,
+        )
+      }
     } catch (err) {
-      // getUserBillingSubscription throws if the user has no subscription
-      // at all. That's a valid state for a pre-checkout user — treat it
-      // as "no plan" rather than surfacing an error.
+      // getUserBillingSubscription throws if the user has no subscription.
+      // That's a valid state for a pre-checkout user — treat as no plan.
       const msg = err instanceof Error ? err.message : String(err)
       if (/not found|no.*subscription/i.test(msg)) {
         plan = ''
