@@ -192,8 +192,8 @@
   "hotPaths": [
     {
       "path": "src/routes/studio.$productId.tsx",
-      "accessCount": 118,
-      "lastAccessed": 1776810289066,
+      "accessCount": 130,
+      "lastAccessed": 1776826379584,
       "type": "directory"
     },
     {
@@ -204,8 +204,8 @@
     },
     {
       "path": "src/routes/studio.index.tsx",
-      "accessCount": 37,
-      "lastAccessed": 1776801192706,
+      "accessCount": 42,
+      "lastAccessed": 1776826306078,
       "type": "file"
     },
     {
@@ -240,14 +240,20 @@
     },
     {
       "path": "",
-      "accessCount": 15,
-      "lastAccessed": 1776810799995,
+      "accessCount": 16,
+      "lastAccessed": 1776826268010,
       "type": "directory"
     },
     {
       "path": "convex/productImages.ts",
       "accessCount": 15,
       "lastAccessed": 1776819435567,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/__root.tsx",
+      "accessCount": 14,
+      "lastAccessed": 1776826546636,
       "type": "file"
     },
     {
@@ -260,12 +266,6 @@
       "path": "convex/templates.ts",
       "accessCount": 11,
       "lastAccessed": 1776810650481,
-      "type": "file"
-    },
-    {
-      "path": "src/routes/__root.tsx",
-      "accessCount": 11,
-      "lastAccessed": 1776822803595,
       "type": "file"
     },
     {
@@ -287,6 +287,12 @@
       "type": "directory"
     },
     {
+      "path": "package.json",
+      "accessCount": 8,
+      "lastAccessed": 1776826607296,
+      "type": "file"
+    },
+    {
       "path": "tests/e2e/flows/product-upload.spec.ts",
       "accessCount": 7,
       "lastAccessed": 1776786339215,
@@ -296,12 +302,6 @@
       "path": "src/routes/admin.templates.tsx",
       "accessCount": 7,
       "lastAccessed": 1776801315294,
-      "type": "file"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 6,
-      "lastAccessed": 1776819238470,
       "type": "file"
     },
     {

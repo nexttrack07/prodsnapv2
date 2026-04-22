@@ -151,6 +151,56 @@ export const getMyPlan = query({
 })
 
 /**
+ * Action: cancel the current user's subscription via Clerk's Backend API.
+ * By default, schedules cancellation at period end (user retains access
+ * until their next renewal date). Pass `endNow: true` to revoke
+ * immediately.
+ */
+export const cancelMySubscription = action({
+  args: { endNow: v.optional(v.boolean()) },
+  returns: v.object({ canceledItemIds: v.array(v.string()) }),
+  handler: async (ctx, { endNow }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    const secretKey = process.env.CLERK_SECRET_KEY
+    if (!secretKey) throw new Error('Server billing misconfiguration')
+    const clerk = createClerkClient({ secretKey })
+    const clerkUserId = identity.subject
+
+    let canceled: string[] = []
+    try {
+      const subscription = await clerk.billing.getUserBillingSubscription(
+        clerkUserId,
+      )
+      const activeItems = subscription.subscriptionItems.filter(
+        (i) => i.status === 'active' || i.status === 'past_due',
+      )
+      for (const item of activeItems) {
+        await clerk.billing.cancelSubscriptionItem(item.id, {
+          endNow: endNow ?? false,
+        })
+        canceled.push(item.id)
+      }
+    } catch (err) {
+      console.error('[billing/cancelMySubscription] Clerk call failed:', err)
+      throw new Error('Could not cancel subscription')
+    }
+
+    // If end-now was requested, refresh userPlans immediately so the UI
+    // reflects the revoked plan. For end-of-period cancellation, the plan
+    // stays until the period expires and will sync naturally later.
+    if (endNow) {
+      await ctx.runMutation(internal.billing.syncPlan.writePlan, {
+        userId: identity.tokenIdentifier,
+        clerkUserId,
+        plan: '',
+      })
+    }
+    return { canceledItemIds: canceled }
+  },
+})
+
+/**
  * Query: UI-facing snapshot of the current user's billing state.
  * Consumed by studio CreditsIndicator, over-limit banners, and the
  * post-checkout interstitial's polling loop.

@@ -158,6 +158,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                     {/* Desktop navigation - hidden on mobile */}
                     <Group gap={4} visibleFrom="sm">
                       <NavLink to="/">Home</NavLink>
+                      <NavLink to="/pricing">Pricing</NavLink>
                       <NavLink to="/studio">Studio</NavLink>
                       <NavLink to="/admin">Admin</NavLink>
                     </Group>
@@ -217,8 +218,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           >
             <Stack gap="xs">
               <MobileNavLink to="/" onClick={closeMobileNav}>Home</MobileNavLink>
+              <MobileNavLink to="/pricing" onClick={closeMobileNav}>Pricing</MobileNavLink>
               <MobileNavLink to="/studio" onClick={closeMobileNav}>Studio</MobileNavLink>
               <MobileNavLink to="/admin" onClick={closeMobileNav}>Admin</MobileNavLink>
+              <MobileNavLink to="/account/billing" onClick={closeMobileNav}>Billing</MobileNavLink>
               <Divider my="sm" color="dark.5" />
               <Text size="xs" c="dark.2" px="md">
                 Pro-quality product photos in a snap
