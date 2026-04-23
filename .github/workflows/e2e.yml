@@ -35,16 +35,23 @@ jobs:
       - name: Build application
         run: pnpm build
         env:
-          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://placeholder.convex.cloud' }}
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://placeholder.convex.cloud' }}
 
+      # Smoke tests run against the built app. They verify static render paths
+      # (/pricing, /checkout fallback, admin redirect) and do NOT hit Convex
+      # or Clerk — so we provide placeholder URLs here only to let the app
+      # boot. Real authenticated E2E requires Clerk test-mode storageState,
+      # which is a separate future PR.
       - name: Run E2E tests
         run: pnpm test:e2e
         env:
           CONVEX_TEST_MODE: 'true'
+          CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://placeholder.convex.cloud' }}
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://placeholder.convex.cloud' }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder' }}
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
