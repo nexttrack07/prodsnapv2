@@ -248,12 +248,12 @@ function EmptyState({
         </Dropzone.Idle>
 
         <Title order={2} fw={600} c="white">
-          {isUploading ? 'Uploading...' : 'No products yet'}
+          {isUploading ? 'Uploading...' : 'Upload a product to get started'}
         </Title>
         <Text c="dark.2" size="sm" maw={440} ta="center">
           {isUploading
             ? 'Please wait while we process your image'
-            : 'Drag & drop a product photo here, or click to browse. We\'ll analyze it and help you generate stunning ad creatives.'}
+            : 'Drag and drop a product photo here, or click to browse. We will analyze it and help you generate ad creatives.'}
         </Text>
 
         {isUploading ? (

@@ -64,7 +64,7 @@ import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
 import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 import { ModelSelect } from '../components/ModelSelect'
-import { mapBillingError } from '../lib/billing/mapBillingError'
+import { mapGenerationError } from '../lib/billing/mapBillingError'
 
 export const Route = createFileRoute('/studio/$productId')({
   component: ProductWorkspacePage,
@@ -82,10 +82,13 @@ interface GenerationData {
   outputUrl?: string
   currentStep?: string
   error?: string
+  startedAt?: number
   aspectRatio?: string
   mode?: 'exact' | 'remix' | 'variation'
   templateSnapshot?: { name?: string; aspectRatio?: string }
 }
+
+const GENERATION_TIMEOUT_MS = 90_000
 
 function ProductWorkspacePage() {
   const { productId } = Route.useParams()
@@ -246,6 +249,8 @@ function ProductHeader({
 
   const updateProduct = useConvexMutation(api.products.updateProduct)
   const updateMutation = useMutation({ mutationFn: updateProduct })
+  const reanalyzeProduct = useConvexMutation(api.products.reanalyzeProduct)
+  const reanalyzeMutation = useMutation({ mutationFn: reanalyzeProduct })
 
   async function handleSaveName() {
     if (!editedName.trim()) return
@@ -258,6 +263,23 @@ function ProductHeader({
       notifications.show({ title: 'Success', message: 'Name updated', color: 'green' })
     } catch {
       notifications.show({ title: 'Error', message: 'Failed to update name', color: 'red' })
+    }
+  }
+
+  async function handleRetryAnalysis() {
+    try {
+      await reanalyzeMutation.mutateAsync({ productId: product._id })
+      notifications.show({
+        title: 'Analysis restarted',
+        message: 'We are analyzing this product again.',
+        color: 'green',
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Retry failed',
+        message: err instanceof Error ? err.message : 'Could not restart analysis',
+        color: 'red',
+      })
     }
   }
 
@@ -359,6 +381,32 @@ function ProductHeader({
             <Text size="sm" c="dark.1" mt="md" lh={1.6} maw={600}>
               {product.productDescription}
             </Text>
+          )}
+          {product.status === 'failed' && (
+            <Alert
+              color="red"
+              variant="light"
+              mt="md"
+              title="Product analysis failed"
+              icon={<IconAlertTriangle size={16} />}
+            >
+              <Stack gap="sm">
+                <Text size="sm">
+                  Retry analysis to unlock generation for this product.
+                </Text>
+                <Button
+                  w="fit-content"
+                  size="xs"
+                  color="red"
+                  variant="light"
+                  leftSection={<IconRefresh size={13} />}
+                  loading={reanalyzeMutation.isPending}
+                  onClick={handleRetryAnalysis}
+                >
+                  Retry analysis
+                </Button>
+              </Stack>
+            </Alert>
           )}
         </Box>
       </Group>
@@ -894,22 +942,8 @@ function GalleryView({
   productId: Id<'products'>
   primaryImageUrl?: string
   legacyImageUrl?: string
-  completedGenerations: Array<{
-    _id: Id<'templateGenerations'>
-    status: string
-    outputUrl?: string
-    currentStep?: string
-    error?: string
-    aspectRatio?: string
-  }>
-  pendingGenerations: Array<{
-    _id: Id<'templateGenerations'>
-    status: string
-    outputUrl?: string
-    currentStep?: string
-    error?: string
-    aspectRatio?: string
-  }>
+  completedGenerations: GenerationData[]
+  pendingGenerations: GenerationData[]
   onGenerateMore: () => void
   creditsExhausted: boolean
 }) {
@@ -917,6 +951,7 @@ function GalleryView({
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [variationTarget, setVariationTarget] = useState<{ _id: Id<'templateGenerations'>; outputUrl: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Id<'templateGenerations'> | null>(null)
+  const [retryingId, setRetryingId] = useState<Id<'templateGenerations'> | null>(null)
   const hasAny = completedGenerations.length > 0 || pendingGenerations.length > 0
 
   // Keyboard shortcuts
@@ -930,6 +965,8 @@ function GalleryView({
 
   const deleteGeneration = useConvexMutation(api.products.deleteGeneration)
   const deleteMutation = useMutation({ mutationFn: deleteGeneration })
+  const retryGeneration = useConvexMutation(api.studio.retryGeneration)
+  const retryMutation = useMutation({ mutationFn: retryGeneration })
 
   function handleDelete(id: Id<'templateGenerations'>) {
     setDeleteTarget(id)
@@ -944,6 +981,26 @@ function GalleryView({
       notifications.show({ title: 'Error', message: 'Failed to delete', color: 'red' })
     } finally {
       setDeleteTarget(null)
+    }
+  }
+
+  async function handleRetry(id: Id<'templateGenerations'>) {
+    setRetryingId(id)
+    try {
+      await retryMutation.mutateAsync({ generationId: id })
+      notifications.show({ title: 'Retry started', message: 'Generation queued again.', color: 'green' })
+    } catch (err) {
+      const info = mapGenerationError(err)
+      notifications.show({
+        title: info.title,
+        message: info.action ? (
+          <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
+        ) : info.message,
+        color: 'red',
+        autoClose: 8000,
+      })
+    } finally {
+      setRetryingId(null)
     }
   }
 
@@ -1003,6 +1060,8 @@ function GalleryView({
                 onExpand={setLightboxUrl}
                 onDelete={handleDelete}
                 onCreateVariations={setVariationTarget}
+                onRetry={handleRetry}
+                retrying={retryingId === gen._id}
               />
             ))}
           </Box>
@@ -1059,6 +1118,8 @@ function GalleryView({
               onExpand={setLightboxUrl}
               onDelete={handleDelete}
               onCreateVariations={setVariationTarget}
+              onRetry={handleRetry}
+              retrying={retryingId === gen._id}
             />
           ))}
         </Box>
@@ -1206,7 +1267,7 @@ function VariationDrawer({
       notifications.show({ title: 'Success', message: 'Variations started!', color: 'green' })
       onComplete()
     } catch (err) {
-      const info = mapBillingError(err)
+      const info = mapGenerationError(err)
       notifications.show({
         title: info.title,
         message: info.action ? (
@@ -1362,16 +1423,31 @@ function GenerationCard({
   onExpand,
   onDelete,
   onCreateVariations,
+  onRetry,
+  retrying,
 }: {
   generation: GenerationData
   title: string
   onExpand: (url: string) => void
   onDelete: (id: Id<'templateGenerations'>) => void
   onCreateVariations: (generation: { _id: Id<'templateGenerations'>; outputUrl: string }) => void
+  onRetry: (id: Id<'templateGenerations'>) => void
+  retrying?: boolean
 }) {
   const isComplete = generation.status === 'complete' && generation.outputUrl
   const isFailed = generation.status === 'failed'
   const isPending = !isComplete && !isFailed
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!isPending) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [isPending])
+
+  const pendingStartedAt = generation.startedAt ?? generation._creationTime ?? now
+  const isTimedOut = isPending && now - pendingStartedAt >= GENERATION_TIMEOUT_MS
+  const failureInfo = generation.error ? mapGenerationError(generation.error) : null
 
   const getAspectRatioValue = (): number => {
     switch (generation.aspectRatio) {
@@ -1455,7 +1531,7 @@ function GenerationCard({
           </Box>
         )}
 
-        {isPending && (
+        {isPending && !isTimedOut && (
           <AspectRatio ratio={getAspectRatioValue()}>
             <Box
               bg="dark.6"
@@ -1474,6 +1550,39 @@ function GenerationCard({
           </AspectRatio>
         )}
 
+        {isTimedOut && (
+          <AspectRatio ratio={getAspectRatioValue()}>
+            <Box
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                height: '100%',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              }}
+            >
+              <IconAlertTriangle size={24} style={{ color: 'var(--mantine-color-yellow-5)' }} />
+              <Text size="sm" fw={500} c="yellow.5" mt={6}>Taking too long</Text>
+              <Text size="xs" c="dark.2" mt={4} px="xs" ta="center">
+                This generation may be stuck.
+              </Text>
+              <Button
+                size="xs"
+                variant="light"
+                color="yellow"
+                mt="sm"
+                leftSection={<IconRefresh size={13} />}
+                loading={retrying}
+                onClick={() => onRetry(generation._id)}
+              >
+                Retry
+              </Button>
+            </Box>
+          </AspectRatio>
+        )}
+
         {isFailed && (
           <AspectRatio ratio={getAspectRatioValue()}>
             <Box
@@ -1487,10 +1596,22 @@ function GenerationCard({
                 backgroundColor: 'rgba(239, 68, 68, 0.1)',
               }}
             >
-              <Text size="sm" fw={500} c="red.5">Failed</Text>
-              {generation.error && (
-                <Text size="xs" c="red.4" mt={4} px="xs" ta="center" lineClamp={2}>{generation.error}</Text>
-              )}
+              <IconAlertTriangle size={24} style={{ color: 'var(--mantine-color-red-5)' }} />
+              <Text size="sm" fw={500} c="red.5" mt={6}>{failureInfo?.title ?? 'Failed'}</Text>
+              <Text size="xs" c="red.4" mt={4} px="xs" ta="center" lineClamp={2}>
+                {failureInfo?.message ?? 'Generation failed.'}
+              </Text>
+              <Button
+                size="xs"
+                variant="light"
+                color="red"
+                mt="sm"
+                leftSection={<IconRefresh size={13} />}
+                loading={retrying}
+                onClick={() => onRetry(generation._id)}
+              >
+                Retry
+              </Button>
             </Box>
           </AspectRatio>
         )}
@@ -1665,7 +1786,7 @@ function GenerateWizard({
       notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
       onComplete()
     } catch (err) {
-      const info = mapBillingError(err)
+      const info = mapGenerationError(err)
       notifications.show({
         title: info.title,
         message: info.action ? (

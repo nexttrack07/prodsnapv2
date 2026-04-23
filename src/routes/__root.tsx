@@ -124,6 +124,7 @@ function RootComponent() {
 function RootDocument({ children }: { children: React.ReactNode }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [mobileNavOpened, { toggle: toggleMobileNav, close: closeMobileNav }] = useDisclosure(false)
+  const showDevtools = import.meta.env.DEV
 
   return (
     <html lang="en">
@@ -236,8 +237,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             </Stack>
           </Drawer>
 
-          <ReactQueryDevtools />
-          <TanStackRouterDevtools position="bottom-right" />
+          {showDevtools && (
+            <>
+              <ReactQueryDevtools />
+              <TanStackRouterDevtools position="bottom-right" />
+            </>
+          )}
         </MantineProvider>
         <Scripts />
       </body>

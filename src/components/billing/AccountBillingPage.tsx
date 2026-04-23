@@ -10,6 +10,7 @@
  */
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
+import { useClerk } from '@clerk/react'
 import {
   Alert,
   Button,
@@ -28,6 +29,7 @@ import { useAction, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 
 export function AccountBillingPage() {
+  const { openUserProfile } = useClerk()
   const status = useQuery(api.billing.syncPlan.getBillingStatus)
   const cancelSub = useAction(api.billing.syncPlan.cancelMySubscription)
   const syncPlan = useAction(api.billing.syncPlan.syncUserPlan)
@@ -63,9 +65,14 @@ export function AccountBillingPage() {
           <Alert color="yellow" variant="light">
             You don't have an active subscription.
           </Alert>
-          <Button component={Link} to="/pricing" color="brand" fz="sm">
-            Choose a plan
-          </Button>
+          <Group gap="sm">
+            <Button component={Link} to="/pricing" color="brand" fz="sm">
+              Choose a plan
+            </Button>
+            <Button variant="subtle" color="gray" fz="sm" onClick={() => openUserProfile()}>
+              Manage or delete account
+            </Button>
+          </Group>
         </Stack>
       </Container>
     )
@@ -113,12 +120,11 @@ export function AccountBillingPage() {
             We're having trouble with your payment. Update your card in account
             settings to avoid losing access.{' '}
             <Button
-              component="a"
-              href="/account"
               variant="transparent"
               color="yellow"
               size="compact-sm"
               p={0}
+              onClick={() => openUserProfile()}
             >
               Update payment method
             </Button>
@@ -207,6 +213,26 @@ export function AccountBillingPage() {
               onClick={() => setCancelOpen(true)}
             >
               Cancel subscription
+            </Button>
+          </Stack>
+        </Card>
+
+        <Card withBorder radius="lg" padding="lg" bg="dark.7">
+          <Stack gap="sm">
+            <Text size="xs" c="dark.2" tt="uppercase" fw={600}>
+              Account
+            </Text>
+            <Text size="sm" c="dark.1">
+              Manage your profile or delete your account from Clerk account settings.
+            </Text>
+            <Button
+              variant="subtle"
+              color="gray"
+              w="fit-content"
+              size="sm"
+              onClick={() => openUserProfile()}
+            >
+              Manage or delete account
             </Button>
           </Stack>
         </Card>
