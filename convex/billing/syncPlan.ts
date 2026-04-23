@@ -57,6 +57,9 @@ export const syncUserPlan = action({
     )) as { plan: string; syncedAt: number } | null
 
     let plan = ''
+    let periodStart: number | undefined = undefined
+    let periodEnd: number | undefined = undefined
+    let billingStatus: string | undefined = undefined
     let billingEventContext:
       | 'clerk-api-error'
       | 'unknown-plan-slug'
@@ -119,6 +122,11 @@ export const syncUserPlan = action({
         } else {
           // Known slug or no active item (non-active/past_due statuses → no plan).
           plan = isKnownPlan(raw) ? raw : ''
+          if (isKnownPlan(raw) && billedItem) {
+            periodStart = billedItem.periodStart ?? undefined
+            periodEnd = billedItem.periodEnd ?? undefined
+            billingStatus = billedItem.status ?? undefined
+          }
         }
       }
     } catch (err) {
@@ -144,6 +152,9 @@ export const syncUserPlan = action({
       userId: identity.tokenIdentifier,
       clerkUserId,
       plan,
+      periodStart,
+      periodEnd,
+      billingStatus,
       billingEventContext: billingEventContext ?? undefined,
       billingEventMetadata,
     })
@@ -162,6 +173,9 @@ export const writePlan = internalMutation({
     userId: v.string(),
     clerkUserId: v.string(),
     plan: v.string(),
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),
+    billingStatus: v.optional(v.string()),
     billingEventContext: v.optional(
       v.union(
         v.literal('clerk-api-error'),
@@ -175,7 +189,7 @@ export const writePlan = internalMutation({
       v.object({ error: v.string(), preservedPlan: v.string() }),
     )),
   },
-  handler: async (ctx, { userId, clerkUserId, plan, billingEventContext, billingEventMetadata }) => {
+  handler: async (ctx, { userId, clerkUserId, plan, periodStart, periodEnd, billingStatus, billingEventContext, billingEventMetadata }) => {
     const existing = await ctx.db
       .query('userPlans')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
@@ -187,6 +201,9 @@ export const writePlan = internalMutation({
         plan,
         clerkUserId,
         syncedAt: now,
+        periodStart,
+        periodEnd,
+        billingStatus,
       })
     } else {
       await ctx.db.insert('userPlans', {
@@ -194,6 +211,9 @@ export const writePlan = internalMutation({
         clerkUserId,
         plan,
         syncedAt: now,
+        periodStart,
+        periodEnd,
+        billingStatus,
       })
     }
 
@@ -217,7 +237,13 @@ export const writePlan = internalMutation({
 export const getMyPlanByUserId = internalQuery({
   args: { userId: v.string() },
   returns: v.union(
-    v.object({ plan: v.string(), syncedAt: v.number() }),
+    v.object({
+      plan: v.string(),
+      syncedAt: v.number(),
+      periodStart: v.optional(v.number()),
+      periodEnd: v.optional(v.number()),
+      billingStatus: v.optional(v.string()),
+    }),
     v.null(),
   ),
   handler: async (ctx, { userId }) => {
@@ -226,7 +252,13 @@ export const getMyPlanByUserId = internalQuery({
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .unique()
     if (!row) return null
-    return { plan: row.plan, syncedAt: row.syncedAt }
+    return {
+      plan: row.plan,
+      syncedAt: row.syncedAt,
+      periodStart: row.periodStart,
+      periodEnd: row.periodEnd,
+      billingStatus: row.billingStatus,
+    }
   },
 })
 
@@ -339,13 +371,14 @@ export const getBillingStatus = query({
 
     const creditsUsed = await countUsageThisMonth(ctx, userId)
 
-    // Next-month anchor = first of following UTC month.
+    // Use Clerk's period end if available; fall back to first of next UTC month.
     const now = new Date()
-    const nextReset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+    const nextReset = row?.periodEnd ?? Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
 
     return {
       signedIn: true,
       plan: planSlug || null,
+      billingStatus: row?.billingStatus ?? null,
       productCount: products.length,
       productLimit: productLimit === Infinity ? null : productLimit,
       creditsUsed,
@@ -376,6 +409,9 @@ export const syncUserPlanInternal = internalAction({
     )) as { plan: string; syncedAt: number } | null
 
     let plan = ''
+    let periodStart: number | undefined = undefined
+    let periodEnd: number | undefined = undefined
+    let billingStatus: string | undefined = undefined
     let billingEventContext:
       | 'clerk-api-error'
       | 'unknown-plan-slug'
@@ -410,6 +446,11 @@ export const syncUserPlanInternal = internalAction({
           billingEventMetadata = { receivedSlug: raw, preservedPlan: plan }
         } else {
           plan = isKnownPlan(raw) ? raw : ''
+          if (isKnownPlan(raw) && billedItem) {
+            periodStart = billedItem.periodStart ?? undefined
+            periodEnd = billedItem.periodEnd ?? undefined
+            billingStatus = billedItem.status ?? undefined
+          }
         }
       }
     } catch (err) {
@@ -427,11 +468,81 @@ export const syncUserPlanInternal = internalAction({
       userId,
       clerkUserId,
       plan,
+      periodStart,
+      periodEnd,
+      billingStatus,
       billingEventContext: billingEventContext ?? undefined,
       billingEventMetadata,
     })
 
     return { plan, synced: true }
+  },
+})
+
+/**
+ * Internal action — hourly cron target (Layer 1 of the defense-in-depth triad).
+ * Scans `userPlans` for rows where `periodEnd < now` AND `syncedAt + 60_000 < now`,
+ * then schedules a `syncUserPlanInternal` for each qualifying row.
+ */
+export const refreshStalePeriodsInternal = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx: ActionCtx) => {
+    const now = Date.now()
+    const rows = await ctx.runQuery(
+      internal.billing.syncPlan.getStalePeriodsForRefresh,
+      { now },
+    )
+
+    let scheduled = 0
+    let skippedMissingClerkUserId = 0
+
+    for (const row of rows) {
+      if (!row.clerkUserId) {
+        skippedMissingClerkUserId++
+        console.warn(
+          `[billing cron] Skipping stale row for userId=${row.userId}: missing clerkUserId`,
+        )
+        continue
+      }
+      await ctx.scheduler.runAfter(
+        0,
+        internal.billing.syncPlan.syncUserPlanInternal,
+        { userId: row.userId, clerkUserId: row.clerkUserId },
+      )
+      scheduled++
+    }
+
+    console.log(
+      `[billing cron] Scanned ${rows.length}, scheduled ${scheduled}, ` +
+        `skipped ${skippedMissingClerkUserId} missing clerkUserId`,
+    )
+    return null
+  },
+})
+
+/**
+ * Internal query — returns userPlans rows eligible for stale-period refresh.
+ * Used by refreshStalePeriodsInternal to keep query logic server-side.
+ */
+export const getStalePeriodsForRefresh = internalQuery({
+  args: { now: v.number() },
+  returns: v.array(
+    v.object({
+      userId: v.string(),
+      clerkUserId: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, { now }) => {
+    const allRows = await ctx.db.query('userPlans').collect()
+    return allRows
+      .filter(
+        (r) =>
+          r.periodEnd !== undefined &&
+          r.periodEnd < now &&
+          (!r.syncedAt || r.syncedAt + 60_000 < now),
+      )
+      .map((r) => ({ userId: r.userId, clerkUserId: r.clerkUserId }))
   },
 })
 
