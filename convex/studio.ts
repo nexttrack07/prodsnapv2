@@ -537,22 +537,34 @@ export const retryGeneration = mutation({
     const gen = await ctx.db.get(generationId)
     if (!gen) throw new Error('Generation not found')
     assertOwnsIfTracked(gen, userId, 'generation')
-    if (gen.status !== 'failed') throw new Error('Only failed generations can be retried')
+    const now = Date.now()
+    const pendingStartedAt = gen.startedAt ?? gen._creationTime
+    const isStalePending =
+      gen.status !== 'complete' &&
+      gen.status !== 'failed' &&
+      now - pendingStartedAt >= 90_000
+    if (gen.status !== 'failed' && !isStalePending) {
+      throw new Error('Only failed or timed-out generations can be retried')
+    }
     // Billing: retries count against the monthly quota (counting rule).
     const billing = await requireCredit(ctx, 'retryGeneration', 1)
     await recordCreditUse(ctx, billing, 'retryGeneration', CAPABILITIES.GENERATE_VARIATIONS)
     await ctx.db.patch(generationId, {
       status: 'queued',
       error: undefined,
-      currentStep: undefined,
+      currentStep: 'Queuing',
       outputUrl: undefined,
+      startedAt: undefined,
+      finishedAt: undefined,
     })
     // Update legacy run status if this is a run-based generation
     if (gen.runId) {
       await ctx.db.patch(gen.runId, { status: 'generating' })
     }
-    await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
-      generationId,
-    })
+    if (gen.variationSource) {
+      await workflow.start(ctx, internal.studio.generateVariationWorkflow, { generationId })
+    } else {
+      await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, { generationId })
+    }
   },
 })

@@ -32,7 +32,7 @@ test.describe('Product Upload Flow', () => {
     await expect(page.getByRole('heading', { name: 'My Products' })).toBeVisible({ timeout: 30000 })
 
     // Check if we're in empty state (no products)
-    const emptyStateText = page.getByRole('heading', { name: 'No products yet' })
+    const emptyStateText = page.getByRole('heading', { name: 'Upload a product to get started' })
     const productCards = page.locator('[data-testid^="product-card"]')
 
     // Either we have products or we see empty state

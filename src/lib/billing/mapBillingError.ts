@@ -46,3 +46,23 @@ export function mapBillingError(err: unknown): BillingErrorInfo {
     message: msg,
   }
 }
+
+export function mapGenerationError(err: unknown): BillingErrorInfo {
+  const msg = err instanceof Error ? err.message : String(err)
+
+  if (/image model rejected|safety|blocked|rejected|moderation|content policy/i.test(msg)) {
+    return {
+      title: 'Generation blocked',
+      message: 'The image model could not generate this request. Try a different template or soften the prompt.',
+    }
+  }
+
+  if (/timed out|timeout|stuck/i.test(msg)) {
+    return {
+      title: 'Generation timed out',
+      message: 'This generation took too long. Retry it or pick a different template.',
+    }
+  }
+
+  return mapBillingError(err)
+}
