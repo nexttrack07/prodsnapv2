@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1776698377066,
+  "lastScanned": 1776831996870,
   "projectRoot": "/Users/nexttrack/prodsnap",
   "techStack": {
     "languages": [
@@ -33,26 +33,37 @@
         "category": "frontend"
       },
       {
+        "name": "@playwright/test",
+        "version": "1.59.1",
+        "category": "testing"
+      },
+      {
         "name": "vite",
         "version": "8.0.0",
         "category": "build"
       }
     ],
-    "packageManager": "npm",
+    "packageManager": "pnpm",
     "runtime": null
   },
   "build": {
-    "buildCommand": "npm run build",
+    "buildCommand": "pnpm build",
     "testCommand": null,
     "lintCommand": null,
-    "devCommand": "npm run dev",
+    "devCommand": "pnpm dev",
     "scripts": {
-      "dev": "npx convex dev --once && concurrently -r npm:dev:web npm:dev:db",
+      "dev": "pnpm exec convex dev --once && concurrently -r pnpm:dev:web pnpm:dev:db",
       "dev:web": "vite dev",
       "dev:db": "convex dev --run board:seed",
-      "build": "vite build && tsc --noEmit",
+      "build": "bash scripts/check-billing-fence.sh && vite build && tsc --noEmit",
+      "check:billing-fence": "bash scripts/check-billing-fence.sh",
       "preview": "vite preview",
-      "start": "pnpx srvx --prod -s ../client dist/server/server.js"
+      "start": "pnpm dlx srvx --prod -s ../client dist/server/server.js",
+      "dev:test": "concurrently -r pnpm:dev:web pnpm:dev:db",
+      "test:e2e": "playwright test",
+      "test:e2e:ui": "playwright test --ui",
+      "test:e2e:debug": "playwright test --debug",
+      "test:e2e:report": "playwright show-report"
     }
   },
   "conventions": {
@@ -65,44 +76,86 @@
     "isMonorepo": false,
     "workspaces": [],
     "mainDirectories": [
+      "docs",
       "public",
-      "src"
+      "scripts",
+      "src",
+      "tests"
     ],
-    "gitBranches": null
+    "gitBranches": {
+      "defaultBranch": "master",
+      "branchingStrategy": null
+    }
   },
   "customNotes": [],
   "directoryMap": {
     "convex": {
       "path": "convex",
       "purpose": null,
-      "fileCount": 6,
-      "lastAccessed": 1776698377061,
+      "fileCount": 17,
+      "lastAccessed": 1776831996864,
       "keyFiles": [
         "README.md",
+        "ai.ts",
+        "auth.config.ts",
         "board.ts",
-        "crons.ts",
-        "invariant.ts",
-        "schema.ts"
+        "convex.config.ts"
+      ]
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 0,
+      "lastAccessed": 1776831996864,
+      "keyFiles": []
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 3,
+      "lastAccessed": 1776831996866,
+      "keyFiles": [
+        "CODE_AUDIT_ISSUES.md",
+        "CODE_AUDIT_ISSUES_V2.md",
+        "MOBILE_FRIENDLY_PLAN.md"
+      ]
+    },
+    "playwright-report": {
+      "path": "playwright-report",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1776831996866,
+      "keyFiles": [
+        "index.html"
       ]
     },
     "public": {
       "path": "public",
       "purpose": "Public files",
-      "fileCount": 10,
-      "lastAccessed": 1776698377061,
+      "fileCount": 12,
+      "lastAccessed": 1776831996866,
       "keyFiles": [
+        "_redirects",
         "android-chrome-192x192.png",
         "android-chrome-512x512.png",
         "apple-touch-icon.png",
-        "favicon-16x16.png",
-        "favicon-32x32.png"
+        "favicon-16x16.png"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1776831996867,
+      "keyFiles": [
+        "check-billing-fence.sh"
       ]
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
       "fileCount": 5,
-      "lastAccessed": 1776698377063,
+      "lastAccessed": 1776831996867,
       "keyFiles": [
         "invariant.ts",
         "queries.ts",
@@ -111,328 +164,356 @@
         "types.ts"
       ]
     },
+    "test-results": {
+      "path": "test-results",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1776831996867,
+      "keyFiles": []
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 0,
+      "lastAccessed": 1776831996867,
+      "keyFiles": []
+    },
+    "convex/lib": {
+      "path": "convex/lib",
+      "purpose": "Library code",
+      "fileCount": 0,
+      "lastAccessed": 1776831996867,
+      "keyFiles": []
+    },
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 12,
-      "lastAccessed": 1776698377063,
+      "fileCount": 13,
+      "lastAccessed": 1776831996867,
       "keyFiles": [
         "Board.tsx",
         "CancelButton.tsx",
         "Card.tsx"
       ]
     },
+    "src/lib": {
+      "path": "src/lib",
+      "purpose": "Library code",
+      "fileCount": 0,
+      "lastAccessed": 1776831996868,
+      "keyFiles": []
+    },
     "src/routes": {
       "path": "src/routes",
       "purpose": "Route handlers",
-      "fileCount": 3,
-      "lastAccessed": 1776698377064,
+      "fileCount": 13,
+      "lastAccessed": 1776831996868,
       "keyFiles": [
         "__root.tsx",
-        "boards.$boardId.tsx",
-        "index.tsx"
+        "account.billing.tsx",
+        "admin.index.tsx"
       ]
     }
   },
   "hotPaths": [
     {
-      "path": "convex/studio.ts",
-      "accessCount": 22,
-      "lastAccessed": 1776722769316,
+      "path": "src/routes/studio.$productId.tsx",
+      "accessCount": 93,
+      "lastAccessed": 1776981040349,
+      "type": "directory"
+    },
+    {
+      "path": "convex/billing/syncPlan.ts",
+      "accessCount": 77,
+      "lastAccessed": 1776946879849,
       "type": "file"
     },
     {
-      "path": "convex/ai.ts",
-      "accessCount": 19,
-      "lastAccessed": 1776722577554,
+      "path": "src/routes/admin.playground.tsx",
+      "accessCount": 46,
+      "lastAccessed": 1776879594665,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/studio.index.tsx",
+      "accessCount": 35,
+      "lastAccessed": 1776981010185,
       "type": "file"
     },
     {
       "path": "convex/schema.ts",
-      "accessCount": 13,
-      "lastAccessed": 1776722479544,
+      "accessCount": 34,
+      "lastAccessed": 1776946678330,
       "type": "file"
     },
     {
-      "path": "src/routes/studio.tsx",
-      "accessCount": 10,
-      "lastAccessed": 1776722872872,
+      "path": "",
+      "accessCount": 27,
+      "lastAccessed": 1776980967769,
+      "type": "directory"
+    },
+    {
+      "path": "convex/lib/billing/index.ts",
+      "accessCount": 26,
+      "lastAccessed": 1776950892785,
       "type": "file"
     },
     {
-      "path": "src/routes/admin.templates.tsx",
-      "accessCount": 7,
-      "lastAccessed": 1776722347173,
+      "path": "convex/products.ts",
+      "accessCount": 19,
+      "lastAccessed": 1776950891983,
+      "type": "directory"
+    },
+    {
+      "path": "convex/ai.ts",
+      "accessCount": 19,
+      "lastAccessed": 1776950914073,
+      "type": "directory"
+    },
+    {
+      "path": "convex/admin/playground.ts",
+      "accessCount": 18,
+      "lastAccessed": 1776897518383,
       "type": "file"
     },
     {
-      "path": "convex/templates.ts",
-      "accessCount": 5,
-      "lastAccessed": 1776722335876,
+      "path": "convex",
+      "accessCount": 18,
+      "lastAccessed": 1776946721135,
+      "type": "directory"
+    },
+    {
+      "path": "convex/admin/playgroundActions.ts",
+      "accessCount": 15,
+      "lastAccessed": 1776897544254,
       "type": "file"
     },
     {
-      "path": "package.json",
-      "accessCount": 4,
-      "lastAccessed": 1776698507463,
+      "path": "src/components/billing/AccountBillingPage.tsx",
+      "accessCount": 12,
+      "lastAccessed": 1776980982095,
       "type": "file"
     },
     {
-      "path": "src/routes/admin.prompts.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1776707020827,
+      "path": "convex/lib/billing/provider.clerk.ts",
+      "accessCount": 11,
+      "lastAccessed": 1776897527023,
       "type": "file"
     },
     {
-      "path": "ROADMAP.md",
-      "accessCount": 4,
-      "lastAccessed": 1776722314939,
-      "type": "file"
-    },
-    {
-      "path": "convex/r2.ts",
-      "accessCount": 4,
-      "lastAccessed": 1776722340233,
-      "type": "file"
-    },
-    {
-      "path": "convex/prompts.ts",
-      "accessCount": 4,
-      "lastAccessed": 1776722340265,
+      "path": "convex/_generated/ai/guidelines.md",
+      "accessCount": 11,
+      "lastAccessed": 1776946674978,
       "type": "file"
     },
     {
       "path": "src/routes/admin.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1776722865008,
+      "accessCount": 11,
+      "lastAccessed": 1776950917719,
+      "type": "file"
+    },
+    {
+      "path": "src/components/billing/CheckoutForm.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1776947331661,
+      "type": "file"
+    },
+    {
+      "path": "src/components/billing/BillingSync.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1776946673995,
       "type": "file"
     },
     {
       "path": "src/routes/__root.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1776704895183,
+      "accessCount": 8,
+      "lastAccessed": 1776951343389,
       "type": "file"
     },
     {
-      "path": "src/routes/index.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1776725440672,
+      "path": "src/components/billing/PricingPage.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1776981049194,
       "type": "file"
     },
     {
-      "path": "convex/tsconfig.json",
-      "accessCount": 2,
-      "lastAccessed": 1776701011552,
+      "path": "convex/lib/billing/provider.ts",
+      "accessCount": 7,
+      "lastAccessed": 1776897496746,
       "type": "file"
     },
     {
-      "path": "src/styles/app.css",
-      "accessCount": 2,
-      "lastAccessed": 1776703591302,
-      "type": "file"
-    },
-    {
-      "path": "convex/board.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776698840085,
-      "type": "file"
-    },
-    {
-      "path": "convex/crons.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776698840453,
-      "type": "file"
-    },
-    {
-      "path": "convex/invariant.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776698840862,
-      "type": "file"
-    },
-    {
-      "path": "src/queries.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776698841217,
-      "type": "file"
-    },
-    {
-      "path": "src/router.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698841589,
-      "type": "file"
-    },
-    {
-      "path": "src/types.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776698842043,
-      "type": "file"
-    },
-    {
-      "path": "src/routes/boards.$boardId.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698847052,
-      "type": "file"
-    },
-    {
-      "path": "src/components/Board.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698847445,
-      "type": "file"
-    },
-    {
-      "path": "src/components/Column.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698848114,
-      "type": "file"
-    },
-    {
-      "path": "src/components/Card.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698848583,
-      "type": "file"
-    },
-    {
-      "path": "src/components/NewCard.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698848950,
-      "type": "file"
-    },
-    {
-      "path": "src/components/NewColumn.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698849343,
-      "type": "file"
-    },
-    {
-      "path": "src/components/EditableText.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698849743,
-      "type": "file"
-    },
-    {
-      "path": "src/components/DefaultCatchBoundary.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698850575,
-      "type": "file"
-    },
-    {
-      "path": "src/db/schema.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776698850611,
-      "type": "file"
-    },
-    {
-      "path": "src/hooks/useOfflineIndicator.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698851218,
-      "type": "file"
-    },
-    {
-      "path": "src/utils/seo.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776698851607,
-      "type": "file"
-    },
-    {
-      "path": "src/utils/posts.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776698852074,
-      "type": "file"
-    },
-    {
-      "path": "vite.config.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776698852438,
-      "type": "file"
-    },
-    {
-      "path": "convex/README.md",
-      "accessCount": 1,
-      "lastAccessed": 1776698852772,
-      "type": "file"
-    },
-    {
-      "path": "PATTERNS.md",
-      "accessCount": 1,
-      "lastAccessed": 1776698957440,
-      "type": "file"
-    },
-    {
-      "path": "CONVEX_JOBS_PATTERNS.md",
-      "accessCount": 1,
-      "lastAccessed": 1776699841679,
-      "type": "file"
-    },
-    {
-      "path": ".env.local",
-      "accessCount": 1,
-      "lastAccessed": 1776700689441,
-      "type": "file"
-    },
-    {
-      "path": ".env.local.example",
-      "accessCount": 1,
-      "lastAccessed": 1776700689493,
-      "type": "file"
-    },
-    {
-      "path": "convex/convex.config.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776700747004,
-      "type": "file"
-    },
-    {
-      "path": "src/components/Logo.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776703585608,
-      "type": "file"
-    },
-    {
-      "path": "src/routeTree.gen.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776704978076,
+      "path": "src/components/billing/PostCheckoutInterstitial.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1776897513045,
       "type": "file"
     },
     {
       "path": "src/routes/admin.index.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1776705000566,
+      "accessCount": 7,
+      "lastAccessed": 1776897563776,
       "type": "file"
     },
     {
-      "path": ".firecrawl/magritte.co.md",
-      "accessCount": 1,
-      "lastAccessed": 1776711243328,
+      "path": "src/routes/studio.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1776946798207,
       "type": "file"
     },
     {
-      "path": ".firecrawl/magritte.co-pricing.md",
-      "accessCount": 1,
-      "lastAccessed": 1776711244143,
+      "path": "src/components/billing/PlanCard.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1776947458085,
       "type": "file"
     },
     {
-      "path": ".firecrawl/cake.ad.md",
-      "accessCount": 1,
-      "lastAccessed": 1776711257779,
+      "path": "convex/lib/billing/planConfig.ts",
+      "accessCount": 7,
+      "lastAccessed": 1776950895656,
       "type": "file"
     },
     {
-      "path": ".firecrawl/looka.com.md",
-      "accessCount": 1,
-      "lastAccessed": 1776711751499,
+      "path": "src/routes/index.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1776951315010,
       "type": "file"
     },
     {
-      "path": ".firecrawl/looka.com-logo-maker.md",
-      "accessCount": 1,
-      "lastAccessed": 1776711751874,
+      "path": "src",
+      "accessCount": 6,
+      "lastAccessed": 1776951327962,
+      "type": "directory"
+    },
+    {
+      "path": "src/routes/admin.prompts.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1776867572826,
       "type": "file"
     },
     {
-      "path": ".firecrawl/looka.com-pricing.md",
+      "path": "src/components/billing/CreditsIndicator.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1776946798419,
+      "type": "file"
+    },
+    {
+      "path": ".env.local.example",
+      "accessCount": 5,
+      "lastAccessed": 1776950925026,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/checkout.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1776951327425,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/pricing.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1776980971426,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/billing/mapBillingError.ts",
+      "accessCount": 5,
+      "lastAccessed": 1776980986436,
+      "type": "file"
+    },
+    {
+      "path": "convex/crons.ts",
+      "accessCount": 4,
+      "lastAccessed": 1776946692877,
+      "type": "file"
+    },
+    {
+      "path": "convex/studio.ts",
+      "accessCount": 4,
+      "lastAccessed": 1776950892398,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/DefaultCatchBoundary.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1776950883995,
+      "type": "file"
+    },
+    {
+      "path": "src/components/NotFound.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1776950884458,
+      "type": "file"
+    },
+    {
+      "path": "convex/r2.ts",
+      "accessCount": 3,
+      "lastAccessed": 1776950892595,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/admin.templates.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1776833701280,
+      "type": "file"
+    },
+    {
+      "path": "convex/lib/billing/claims.ts",
+      "accessCount": 2,
+      "lastAccessed": 1776891826114,
+      "type": "file"
+    },
+    {
+      "path": "convex/lib/billing/capabilities.ts",
+      "accessCount": 2,
+      "lastAccessed": 1776896827653,
+      "type": "file"
+    },
+    {
+      "path": "src/components/billing/SubscriptionRequired.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1776946673320,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/account.billing.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1776950921669,
+      "type": "file"
+    },
+    {
+      "path": "src/components/CancelButton.tsx",
       "accessCount": 1,
-      "lastAccessed": 1776711752292,
+      "lastAccessed": 1776833677873,
+      "type": "file"
+    },
+    {
+      "path": "src/components/SaveButton.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776833678161,
+      "type": "file"
+    },
+    {
+      "path": "convex/prompts.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776864367382,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/ModelSelect.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776879543818,
+      "type": "file"
+    },
+    {
+      "path": "convex/admin",
+      "accessCount": 1,
+      "lastAccessed": 1776895604213,
+      "type": "directory"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 1,
+      "lastAccessed": 1776896314990,
       "type": "file"
     }
   ],

@@ -1082,26 +1082,39 @@ function GalleryView({
             background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
           }}
         >
-          <IconSparkles size={48} style={{ color: 'var(--mantine-color-brand-5)', marginBottom: 16 }} />
-          <Title order={3} fz="lg" fw={600} c="white" mb={8}>No generations yet</Title>
-          <Text c="dark.2" mb="xl" maw={400} mx="auto">
-            Create stunning ad variations from your product photo. Pick templates and let AI do the magic.
-          </Text>
-          <Button
-            onClick={onGenerateMore}
-            disabled={product.status !== 'ready' || creditsExhausted}
-            color="brand"
-            size="md"
-            fz="sm"
-            rightSection={<IconArrowRight size={16} />}
-            styles={{
-              root: {
-                boxShadow: '0 4px 14px rgba(84, 116, 180, 0.25)',
-              },
-            }}
-          >
-            Generate Ads
-          </Button>
+          {product.status === 'analyzing' ? (
+            <>
+              <IconSparkles size={48} style={{ color: 'var(--mantine-color-brand-5)', marginBottom: 16 }} />
+              <Title order={3} fz="lg" fw={600} c="white" mb={8}>Analyzing your product…</Title>
+              <Text c="dark.2" mb="xl" maw={400} mx="auto">
+                This usually takes 10-15 seconds. We're figuring out the product details so we can pick the best ad templates.
+              </Text>
+              <Loader size="md" color="brand" mx="auto" />
+            </>
+          ) : (
+            <>
+              <IconSparkles size={48} style={{ color: 'var(--mantine-color-brand-5)', marginBottom: 16 }} />
+              <Title order={3} fz="lg" fw={600} c="white" mb={8}>Ready when you are</Title>
+              <Text c="dark.2" mb="xl" maw={400} mx="auto">
+                Pick ad templates above, hit <strong>Generate Ads</strong>, and new variations will appear here in under a minute.
+              </Text>
+              <Button
+                onClick={onGenerateMore}
+                disabled={product.status !== 'ready' || creditsExhausted}
+                color="brand"
+                size="md"
+                fz="sm"
+                rightSection={<IconArrowRight size={16} />}
+                styles={{
+                  root: {
+                    boxShadow: '0 4px 14px rgba(84, 116, 180, 0.25)',
+                  },
+                }}
+              >
+                Generate Ads
+              </Button>
+            </>
+          )}
         </Paper>
       ) : completedGenerations.length > 0 ? (
         <Box style={{

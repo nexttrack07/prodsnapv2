@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAction, useQuery as useConvexQuery } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useState } from 'react'
+import { useAuth } from '@clerk/react'
 import { notifications } from '@mantine/notifications'
 import { useMediaQuery } from '@mantine/hooks'
 import {
@@ -195,6 +196,8 @@ function EmptyState({
   onUpload: (files: File[]) => void
   isUploading: boolean
 }) {
+  const { sessionClaims } = useAuth()
+  const isAdmin = (sessionClaims?.metadata as any)?.role === 'admin'
   return (
     <Dropzone
       onDrop={onUpload}
@@ -248,12 +251,12 @@ function EmptyState({
         </Dropzone.Idle>
 
         <Title order={2} fw={600} c="white">
-          {isUploading ? 'Uploading...' : 'Upload a product to get started'}
+          {isUploading ? 'Uploading...' : "Let's make your first ad"}
         </Title>
         <Text c="dark.2" size="sm" maw={440} ta="center">
           {isUploading
             ? 'Please wait while we process your image'
-            : 'Drag and drop a product photo here, or click to browse. We will analyze it and help you generate ad creatives.'}
+            : 'Upload a clear photo of your product — ideally on a plain background. ProdSnap will turn it into ready-to-use ad creatives in about a minute.'}
         </Text>
 
         {isUploading ? (
@@ -271,6 +274,15 @@ function EmptyState({
           >
             Upload Your First Product
           </Button>
+        )}
+
+        {isAdmin && !isUploading && (
+          <Text size="xs" c="dark.3" mt="sm">
+            Need inspiration?{' '}
+            <Anchor component={Link} to="/admin/templates" size="xs" fw={600}>
+              Browse templates
+            </Anchor>
+          </Text>
         )}
       </Stack>
     </Dropzone>

@@ -13,6 +13,7 @@ import {
   Stack,
   Text,
   Title,
+  Anchor,
 } from '@mantine/core'
 import { usePlans } from '@clerk/react/experimental'
 import { useAuth } from '@clerk/react'
@@ -60,7 +61,7 @@ export function PricingPage() {
         </Group>
       ) : !plans || plans.length === 0 ? (
         <Text c="dark.2" ta="center" py={64}>
-          No plans are currently available. Please check back later.
+          Plans aren't loading — please <Anchor href="mailto:support@prodsnap.io">email support@prodsnap.io</Anchor>.
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
