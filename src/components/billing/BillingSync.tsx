@@ -14,23 +14,54 @@
  * to "no active subscription" behavior which correctly sends the user to
  * /pricing. We don't want sync failures to block app render.
  */
-import { useEffect, useRef } from 'react'
-import { useAction } from 'convex/react'
+import { useCallback, useEffect, useRef } from 'react'
+import { useAction, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
+
+const DEBOUNCE_MS = 30_000
 
 export function BillingSync() {
   const syncPlan = useAction(api.billing.syncPlan.syncUserPlan)
+  const billingStatus = useQuery(api.billing.syncPlan.getBillingStatus)
   const hasSynced = useRef(false)
+  const lastSyncAt = useRef(0)
 
+  const runSync = useCallback(
+    (reason: string) => {
+      const now = Date.now()
+      if (now - lastSyncAt.current < DEBOUNCE_MS) return
+      lastSyncAt.current = now
+      syncPlan().catch((err) => {
+        console.warn(`[BillingSync] failed to sync plan (${reason}):`, err)
+      })
+    },
+    [syncPlan],
+  )
+
+  // Mount-time sync (runs once)
   useEffect(() => {
     if (hasSynced.current) return
     hasSynced.current = true
+    lastSyncAt.current = Date.now()
     syncPlan().catch((err) => {
-      // Surface to console in dev; in prod, Convex logs capture it too.
-      // Not user-facing — enforcement will handle stale/missing state.
-      console.warn('[BillingSync] failed to sync plan:', err)
+      console.warn('[BillingSync] failed to sync plan (mount):', err)
     })
   }, [syncPlan])
+
+  // Re-sync when the user returns to the tab
+  useEffect(() => {
+    const handleFocus = () => runSync('focus')
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [runSync])
+
+  // Re-sync when the billing period is detected as stale
+  useEffect(() => {
+    if (billingStatus?.resetsOn == null) return
+    if (billingStatus.resetsOn < Date.now()) {
+      runSync('stale-period')
+    }
+  }, [billingStatus?.resetsOn, runSync])
 
   return null
 }
