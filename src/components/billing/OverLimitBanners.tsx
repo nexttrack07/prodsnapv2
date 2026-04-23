@@ -41,7 +41,7 @@ export function OverLimitBanners() {
           radius={0}
           styles={{ root: { borderRadius: 0, borderLeft: 'none', borderRight: 'none' } }}
         >
-          You have used all {billingStatus.creditsTotal} credits for this month.
+          You have used all {billingStatus.creditsTotal} credits for this billing period.
           {resetDate ? ` They reset on ${resetDate}.` : ''}{' '}
           <Anchor component={Link} to="/pricing" fw={500}>
             Upgrade to Pro
