@@ -109,14 +109,17 @@ export const handleBillingEvent = internalAction({
       return null
     }
 
-    // Extract clerkUserId from the event. For subscription events the user id
-    // is nested under data.object.subscriber_id or data.subscriber_id.
-    // For user.updated it is data.id.
-    const clerkUserId =
-      (data?.data as any)?.subscriber_id ??
-      (data?.data as any)?.object?.subscriber_id ??
-      (data?.data as any)?.id ??
-      null
+    // Extract clerkUserId from the event. Shape per event type:
+    //   subscription.* / subscriptionItem.*: data.data.payer.user_id
+    //     (data.data.id is the subscription/item id — NOT the user)
+    //   user.updated: data.data.id (the Clerk user id itself)
+    const inner = (data?.data as Record<string, unknown>) ?? {}
+    const payer = (inner as { payer?: { user_id?: string } }).payer
+    const clerkUserId: string | null =
+      (payer?.user_id as string | undefined) ??
+      (eventType === 'user.updated'
+        ? ((inner as { id?: string }).id ?? null)
+        : null)
 
     if (!clerkUserId || typeof clerkUserId !== 'string') {
       console.error(

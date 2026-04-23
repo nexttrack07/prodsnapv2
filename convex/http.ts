@@ -16,8 +16,8 @@ http.route({
     }
 
     // Read raw body as text for Svix signature verification.
-    const bodyBytes = await request.bytes()
-    const bodyText = new TextDecoder().decode(bodyBytes)
+    // Convex's Request object exposes .text() but not .bytes().
+    const bodyText = await request.text()
 
     const svixId = request.headers.get('svix-id')
     const svixTimestamp = request.headers.get('svix-timestamp')
