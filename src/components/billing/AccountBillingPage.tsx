@@ -19,6 +19,7 @@ import {
   Group,
   Loader,
   Modal,
+  Paper,
   Progress,
   Stack,
   Text,
@@ -236,6 +237,26 @@ export function AccountBillingPage() {
             </Button>
           </Stack>
         </Card>
+
+        <Paper withBorder p="md" radius="md" mt="lg" style={{ borderColor: 'var(--mantine-color-red-9)' }}>
+          <Stack gap="xs">
+            <Text fw={500} c="red.5">Danger zone</Text>
+            <Text size="sm" c="dark.2">
+              Deleting your account is permanent. Your products, generations, and billing
+              history will be lost. Cancel your subscription first if it's still active.
+            </Text>
+            <Button
+              variant="outline"
+              color="red"
+              size="xs"
+              fz="xs"
+              onClick={() => openUserProfile()}
+              disabled={canceling}
+            >
+              Manage or delete account
+            </Button>
+          </Stack>
+        </Paper>
       </Stack>
 
       <Modal
