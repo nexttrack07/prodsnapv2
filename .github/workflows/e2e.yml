@@ -5,9 +5,20 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+    # Only trigger on changes that could affect the user-facing app.
+    # Backend-only PRs (convex/**) don't need E2E smoke coverage.
+    paths:
+      - 'src/**'
+      - 'tests/e2e/**'
+      - 'playwright.config.*'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/e2e.yml'
 
 jobs:
   test:
+    # Skip drafts — they burn ~4min of CI time for iterating work.
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -29,7 +40,29 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Cache Playwright browsers — they're ~300MB and reinstalling every run
+      # adds ~90s. Key includes the installed @playwright/test version so the
+      # cache invalidates when Playwright is upgraded.
+      - name: Get Playwright version
+        id: pw-version
+        run: |
+          VERSION=$(pnpm list --depth=0 --json @playwright/test | node -e "
+            const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            const pkg = (Array.isArray(data) ? data[0] : data);
+            const dep = (pkg.devDependencies?.['@playwright/test'] || pkg.dependencies?.['@playwright/test']);
+            process.stdout.write(dep?.version || 'unknown');
+          ")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
       - name: Install Playwright browsers
+        # --with-deps is cheap if browsers are cached; installs only system deps.
         run: pnpm exec playwright install chromium --with-deps
 
       - name: Build application
