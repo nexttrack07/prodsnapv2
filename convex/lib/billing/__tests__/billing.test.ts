@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 /**
- * Unit tests for billing helpers (P0.5):
+ * Unit tests for billing helpers (P0.5 + P1.1c):
  *   requireCapability, requireProductLimit, requireCredit,
- *   recordCreditUse, countUsageThisMonth
+ *   recordCreditUse, countUsageThisMonth, countUsageSincePeriodStart
  */
 import { convexTest } from 'convex-test'
 import { expect, test, vi, beforeEach, afterEach } from 'vitest'
@@ -13,6 +13,7 @@ import {
   requireCredit,
   recordCreditUse,
   countUsageThisMonth,
+  countUsageSincePeriodStart,
   startOfMonthUtc,
   CAPABILITIES,
 } from '../index'
@@ -28,12 +29,18 @@ const USER_ID = 'tok|user_test_001'
 const CLERK_USER_ID = 'user_test_001'
 
 /** Seed a userPlans row so the billing provider can resolve a plan. */
-async function seedPlan(t: Awaited<ReturnType<typeof makeT>>, plan: string) {
+async function seedPlan(
+  t: Awaited<ReturnType<typeof makeT>>,
+  plan: string,
+  extra?: { periodStart?: number; periodEnd?: number; clerkUserId?: string },
+) {
   const { internal } = await import('../../../_generated/api')
   await t.mutation(internal.billing.syncPlan.writePlan, {
     userId: USER_ID,
-    clerkUserId: CLERK_USER_ID,
+    clerkUserId: extra?.clerkUserId ?? CLERK_USER_ID,
     plan,
+    periodStart: extra?.periodStart,
+    periodEnd: extra?.periodEnd,
   })
 }
 
@@ -267,7 +274,7 @@ test('requireCredit: zero balance throws reset-date message', async () => {
 
     const mutCtx = ctx as unknown as MutationCtx
     await expect(requireCredit(mutCtx, 'test:mutation', 1)).rejects.toThrow(
-      'Credits reset on the 1st',
+      'credits for this billing period',
     )
     vi.unstubAllEnvs()
   })
@@ -401,5 +408,143 @@ test('countUsageThisMonth: returns 0 when no rows exist', async () => {
   await t.run(async (ctx) => {
     const count = await countUsageThisMonth(ctx, USER_ID)
     expect(count).toBe(0)
+  })
+})
+
+// ─── countUsageSincePeriodStart (P1.1c) ──────────────────────────────────────
+
+test('countUsageSincePeriodStart: uses periodStart when present', async () => {
+  const t = await makeT()
+  const periodStart = Date.now() - 10 * 24 * 60 * 60 * 1000 // 10 days ago
+
+  await seedPlan(t, 'basic', { periodStart })
+
+  await t.run(async (ctx) => {
+    // 2 usage rows within period
+    for (let i = 0; i < 2; i++) {
+      await ctx.db.insert('billingEvents', {
+        userId: USER_ID,
+        mutationName: 'test:gen',
+        allowed: true,
+        timestamp: periodStart + (i + 1) * 1000,
+        units: 1,
+        context: 'usage',
+      })
+    }
+    // 1 usage row before period — must be excluded
+    await ctx.db.insert('billingEvents', {
+      userId: USER_ID,
+      mutationName: 'test:gen',
+      allowed: true,
+      timestamp: periodStart - 1000,
+      units: 1,
+      context: 'usage',
+    })
+
+    const count = await countUsageSincePeriodStart(ctx, USER_ID)
+    expect(count).toBe(2)
+  })
+})
+
+test('countUsageSincePeriodStart: falls back to calendar-month and writes period-fallback event when periodStart missing', async () => {
+  const t = await makeT()
+  // Seed plan with no periodStart
+  await seedPlan(t, 'basic')
+
+  await t.withIdentity({ tokenIdentifier: USER_ID }).run(async (ctx) => {
+    const since = startOfMonthUtc()
+    // Insert 1 usage row this month
+    await ctx.db.insert('billingEvents', {
+      userId: USER_ID,
+      mutationName: 'test:gen',
+      allowed: true,
+      timestamp: since + 1000,
+      units: 1,
+      context: 'usage',
+    })
+
+    const mutCtx = ctx as unknown as MutationCtx
+    const count = await countUsageSincePeriodStart(mutCtx, USER_ID)
+    expect(count).toBe(1)
+
+    // period-fallback event should have been written
+    const events = await ctx.db
+      .query('billingEvents')
+      .withIndex('by_userId', (q) => q.eq('userId', USER_ID))
+      .collect()
+    const fallback = events.find((e) => e.context === 'period-fallback')
+    expect(fallback).toBeDefined()
+  })
+})
+
+// ─── requireCredit stale-period path (P1.1c) ─────────────────────────────────
+
+test('requireCredit: stale-period path writes stale-period-fallback event and fires scheduler', async () => {
+  const t = await makeT()
+  const now = Date.now()
+  const periodEnd = now - 5 * 60 * 1000 // expired 5 minutes ago
+  const periodStart = periodEnd - 30 * 24 * 60 * 60 * 1000
+
+  await seedPlan(t, 'basic', { periodStart, periodEnd, clerkUserId: CLERK_USER_ID })
+
+  // Patch syncedAt to be old enough that debounceOk passes (> 30s ago).
+  await t.run(async (ctx) => {
+    const row = await ctx.db
+      .query('userPlans')
+      .withIndex('by_userId', (q) => q.eq('userId', USER_ID))
+      .unique()
+    if (row) await ctx.db.patch(row._id, { syncedAt: now - 60_000 })
+  })
+
+  await t.withIdentity({ tokenIdentifier: USER_ID }).run(async (ctx) => {
+    vi.stubEnv('BILLING_ENABLED', 'true')
+    const mutCtx = ctx as unknown as MutationCtx
+    // Should succeed (credits available) but trigger the stale-period path
+    await requireCredit(mutCtx, 'test:mutation', 1)
+
+    const events = await ctx.db
+      .query('billingEvents')
+      .withIndex('by_userId', (q) => q.eq('userId', USER_ID))
+      .collect()
+    const staleFallback = events.find((e) => e.context === 'stale-period-fallback')
+    expect(staleFallback).toBeDefined()
+    vi.unstubAllEnvs()
+  })
+})
+
+test('requireCredit: debounce prevents duplicate stale-period-fallback within 30s', async () => {
+  const t = await makeT()
+  const now = Date.now()
+  const periodEnd = now - 5 * 60 * 1000
+  const periodStart = periodEnd - 30 * 24 * 60 * 60 * 1000
+  // syncedAt within the last 30s — debounce should prevent another event
+  const recentSyncedAt = now - 10_000
+
+  await seedPlan(t, 'basic', { periodStart, periodEnd, clerkUserId: CLERK_USER_ID })
+
+  // Patch syncedAt to be recent (within debounce window) by directly patching the row
+  await t.run(async (ctx) => {
+    const row = await ctx.db
+      .query('userPlans')
+      .withIndex('by_userId', (q) => q.eq('userId', USER_ID))
+      .unique()
+    if (row) {
+      await ctx.db.patch(row._id, { syncedAt: recentSyncedAt })
+    }
+  })
+
+  await t.withIdentity({ tokenIdentifier: USER_ID }).run(async (ctx) => {
+    vi.stubEnv('BILLING_ENABLED', 'true')
+    const mutCtx = ctx as unknown as MutationCtx
+    await requireCredit(mutCtx, 'test:mutation', 1)
+
+    const events = await ctx.db
+      .query('billingEvents')
+      .withIndex('by_userId', (q) => q.eq('userId', USER_ID))
+      .collect()
+    const staleFallbacks = events.filter((e) => e.context === 'stale-period-fallback')
+    // Debounce should have blocked the event — none written
+    expect(staleFallbacks.length).toBe(0)
+    vi.unstubAllEnvs()
   })
 })
