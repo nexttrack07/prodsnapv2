@@ -50,17 +50,25 @@ export function mapBillingError(err: unknown): BillingErrorInfo {
 export function mapGenerationError(err: unknown): BillingErrorInfo {
   const msg = err instanceof Error ? err.message : String(err)
 
-  if (/image model rejected|safety|blocked|rejected|moderation|content policy/i.test(msg)) {
+  if (/image model rejected|safety|blocked|rejected/i.test(msg)) {
     return {
-      title: 'Generation blocked',
-      message: 'The image model could not generate this request. Try a different template or soften the prompt.',
+      title: 'Generation blocked by safety filter',
+      message:
+        'The AI model flagged your prompt or template. Try a different template, soften the wording, or upload a cleaner product image.',
     }
   }
 
-  if (/timed out|timeout|stuck/i.test(msg)) {
+  if (/timeout|timed out/i.test(msg)) {
     return {
       title: 'Generation timed out',
-      message: 'This generation took too long. Retry it or pick a different template.',
+      message: 'The image model took too long to respond. Please try again.',
+    }
+  }
+
+  if (/model did not return/i.test(msg)) {
+    return {
+      title: 'No image generated',
+      message: 'The AI model returned no image. Please retry.',
     }
   }
 
