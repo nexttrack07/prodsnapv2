@@ -194,7 +194,7 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
             {isCreditsDowngrade && !isProductOverLimit && limits && billingStatus && (
               <>
                 You've already used <strong>{billingStatus.creditsUsed} credits</strong>{' '}
-                this month, which exceeds {plan.name}'s limit of{' '}
+                this billing period, which exceeds {plan.name}'s limit of{' '}
                 <strong>{limits.monthlyCredits}</strong>. Generation will be blocked until
                 your next billing period.
               </>

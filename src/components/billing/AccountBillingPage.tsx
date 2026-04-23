@@ -144,7 +144,7 @@ export function AccountBillingPage() {
               </Stack>
               <Button
                 component={Link}
-                to="/pricing"
+                to={`/pricing${status.plan ? `?plan=${status.plan}` : ''}`}
                 variant="light"
                 color="brand"
                 size="sm"
