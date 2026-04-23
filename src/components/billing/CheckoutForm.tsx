@@ -228,7 +228,7 @@ function PaymentSection() {
             {submitting ? 'Processing…' : 'Complete purchase'}
           </Button>
           <Text c="dark.3" size="xs" ta="center">
-            Secured by Stripe. Cancel anytime from Account → Billing.
+            Secured payments. Cancel anytime from Account → Billing.
           </Text>
         </Stack>
       </form>

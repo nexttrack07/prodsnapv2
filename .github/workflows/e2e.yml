@@ -5,9 +5,20 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+    # Only trigger on changes that could affect the user-facing app.
+    # Backend-only PRs (convex/**) don't need E2E smoke coverage.
+    paths:
+      - 'src/**'
+      - 'tests/e2e/**'
+      - 'playwright.config.*'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/e2e.yml'
 
 jobs:
   test:
+    # Skip drafts — they burn ~4min of CI time for iterating work.
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -15,31 +26,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
+
+      # Cache Playwright browsers — they're ~300MB and reinstalling every run
+      # adds ~90s. Key includes the installed @playwright/test version so the
+      # cache invalidates when Playwright is upgraded.
+      - name: Get Playwright version
+        id: pw-version
+        run: |
+          VERSION=$(pnpm list --depth=0 --json @playwright/test | node -e "
+            const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            const pkg = (Array.isArray(data) ? data[0] : data);
+            const dep = (pkg.devDependencies?.['@playwright/test'] || pkg.dependencies?.['@playwright/test']);
+            process.stdout.write(dep?.version || 'unknown');
+          ")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
 
       - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
+        # --with-deps is cheap if browsers are cached; installs only system deps.
+        run: pnpm exec playwright install chromium --with-deps
 
       - name: Build application
-        run: npm run build
+        run: pnpm build
         env:
-          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://placeholder.convex.cloud' }}
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://placeholder.convex.cloud' }}
 
+      # Smoke tests run against the built app. They verify static render paths
+      # (/pricing, /checkout fallback, admin redirect) and do NOT hit Convex
+      # or Clerk — so we provide placeholder URLs here only to let the app
+      # boot. Real authenticated E2E requires Clerk test-mode storageState,
+      # which is a separate future PR.
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: pnpm test:e2e
         env:
           CONVEX_TEST_MODE: 'true'
+          CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://placeholder.convex.cloud' }}
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://placeholder.convex.cloud' }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder' }}
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4

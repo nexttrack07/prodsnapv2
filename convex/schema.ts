@@ -198,6 +198,10 @@ const schema = defineSchema({
     syncedAt: v.number(),               // Unix ms
     // Forward-compat: raw subscription snapshot for debugging/audit
     clerkUserId: v.optional(v.string()),
+    // Subscription-anniversary credit period anchors (from Clerk)
+    periodStart: v.optional(v.number()),    // Unix ms, from Clerk currentPeriodStartDate
+    periodEnd: v.optional(v.number()),      // Unix ms, from Clerk currentPeriodEndDate
+    billingStatus: v.optional(v.string()),  // Clerk subscription status (active, past_due, etc.)
   }).index('by_userId', ['userId']),
 
   // ─── Billing audit + credit ledger ───────────────────────────────────────
@@ -231,6 +235,8 @@ const schema = defineSchema({
         v.literal('unknown-plan-slug'),
         v.literal('malformed-clerk-response'),
         v.literal('rate-limited'),
+        v.literal('period-fallback'),       // periodStart missing → calendar-month used
+        v.literal('stale-period-fallback'), // periodEnd < now and Layer 3 scheduler fired
       ),
     ),
   })

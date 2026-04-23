@@ -84,7 +84,7 @@ export function PricingPage() {
       )}
 
       <Text c="dark.3" size="xs" ta="center" mt={48} maw={600} mx="auto">
-        Payments processed securely by Stripe. Cancel anytime from Account →
+        Payments processed securely. Cancel anytime from Account →
         Billing.
       </Text>
     </Container>

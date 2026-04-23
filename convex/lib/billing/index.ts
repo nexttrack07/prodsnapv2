@@ -20,6 +20,7 @@ import type { Capability } from './capabilities'
 import { PLAN_CONFIG } from './planConfig'
 import { ClerkBillingProvider } from './provider.clerk'
 import type { BillingContext, BillingProvider } from './provider'
+import { internal } from '../../_generated/api'
 
 // ─── Provider instance (swap here to change providers) ────────────────────
 export const billingProvider: BillingProvider = new ClerkBillingProvider()
@@ -153,7 +154,7 @@ export function startOfMonthUtc(now = Date.now()): number {
 
 /**
  * Assert the user has at least `count` monthly credits remaining (default 1).
- * Throws on exhaustion with the reset-on-1st message. Does NOT consume
+ * Throws on exhaustion with the billing-period reset date. Does NOT consume
  * credits — call `recordCreditUse` for each consumption after success.
  *
  * Counting rule: every generation attempt consumes one credit regardless of
@@ -181,16 +182,54 @@ export async function requireCredit(
     throw new Error('No active subscription — choose a plan at /pricing')
   }
 
+  // Layer 3: stale-period fallback — fire-and-forget sync if period has expired.
+  const row = await ctx.db
+    .query('userPlans')
+    .withIndex('by_userId', (q) => q.eq('userId', billing.userId))
+    .unique()
+  const now = Date.now()
+  const periodExpired = row?.periodEnd && row.periodEnd < now
+  const debounceOk = !row?.syncedAt || row.syncedAt + 30_000 < now
+  if (periodExpired && debounceOk && row?.clerkUserId) {
+    await ctx.db.insert('billingEvents', {
+      userId: billing.userId,
+      mutationName,
+      capability: 'monthly-credits',
+      allowed: true,
+      timestamp: now,
+      context: 'stale-period-fallback',
+    })
+    await ctx.scheduler.runAfter(
+      0,
+      internal.billing.syncPlan.syncUserPlanInternal,
+      { userId: billing.userId, clerkUserId: row.clerkUserId },
+    )
+  }
+
   const plan = PLAN_CONFIG[billing.plan]
-  const used = await countUsageThisMonth(ctx, billing.userId)
+  const used = await countUsageSincePeriodStart(ctx, billing.userId)
   const remaining = plan.monthlyCredits - used
 
   if (remaining < count) {
     await recordDenial(ctx, billing, mutationName, 'monthly-credits', billing.plan)
+    // Build reset date from periodEnd or start of next month as fallback.
+    const resetMs = row?.periodEnd ?? startOfMonthUtc(now + 32 * 24 * 60 * 60 * 1000)
+    const resetDate = new Date(resetMs).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    })
+    // Append retry hint when period just rolled (within last 2 minutes).
+    const justRenewed =
+      row?.periodEnd && row.periodEnd > now - 2 * 60 * 1000 && row.periodEnd <= now
+    const retrySuffix = justRenewed
+      ? ' If you just renewed, please retry in a few seconds.'
+      : ''
     if (remaining <= 0) {
       throw new Error(
-        `You have used all ${plan.monthlyCredits} credits for this month. ` +
-          `Credits reset on the 1st.`,
+        `You've used all ${plan.monthlyCredits} credits for this billing period. ` +
+          `Credits reset on ${resetDate}.${retrySuffix}`,
       )
     }
     throw new Error(
@@ -225,11 +264,36 @@ export async function recordCreditUse(
   })
 }
 
-export async function countUsageThisMonth(
+export async function countUsageSincePeriodStart(
   ctx: QueryCtx | MutationCtx,
   userId: string,
 ): Promise<number> {
-  const since = startOfMonthUtc()
+  const row = await ctx.db
+    .query('userPlans')
+    .withIndex('by_userId', (q) => q.eq('userId', userId))
+    .unique()
+
+  let since: number
+  if (row?.periodStart !== undefined) {
+    since = row.periodStart
+  } else {
+    since = startOfMonthUtc()
+    // Only write the fallback event when called from a mutation context (has scheduler).
+    if ('scheduler' in ctx) {
+      await (ctx as MutationCtx).db.insert('billingEvents', {
+        userId,
+        mutationName: 'billing/index:countUsageSincePeriodStart',
+        allowed: true,
+        timestamp: Date.now(),
+        context: 'period-fallback',
+      })
+      console.warn(
+        `[billing] countUsageSincePeriodStart: no periodStart for user ${userId}, ` +
+          'falling back to calendar-month anchor. Sync userPlans to fix.',
+      )
+    }
+  }
+
   const rows = await ctx.db
     .query('billingEvents')
     .withIndex('by_userId', (q) => q.eq('userId', userId))
@@ -242,6 +306,14 @@ export async function countUsageThisMonth(
     }
   }
   return sum
+}
+
+/** @deprecated Use countUsageSincePeriodStart instead. */
+export async function countUsageThisMonth(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+): Promise<number> {
+  return countUsageSincePeriodStart(ctx, userId)
 }
 
 // ─── Audit helper ─────────────────────────────────────────────────────────

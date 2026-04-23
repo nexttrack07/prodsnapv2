@@ -108,6 +108,23 @@ export function AccountBillingPage() {
       <Stack gap="lg">
         <Title order={2}>Billing</Title>
 
+        {(status as { billingStatus?: string }).billingStatus === 'past_due' && (
+          <Alert color="yellow" variant="light" title="Payment issue">
+            We're having trouble with your payment. Update your card in account
+            settings to avoid losing access.{' '}
+            <Button
+              component="a"
+              href="/account"
+              variant="transparent"
+              color="yellow"
+              size="compact-sm"
+              p={0}
+            >
+              Update payment method
+            </Button>
+          </Alert>
+        )}
+
         {canceledMessage && (
           <Alert color="green" variant="light" withCloseButton={false}>
             {canceledMessage}
@@ -127,7 +144,7 @@ export function AccountBillingPage() {
               </Stack>
               <Button
                 component={Link}
-                to="/pricing"
+                to={`/pricing${status.plan ? `?plan=${status.plan}` : ''}`}
                 variant="light"
                 color="brand"
                 size="sm"

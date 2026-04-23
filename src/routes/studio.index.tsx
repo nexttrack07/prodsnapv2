@@ -23,11 +23,10 @@ import {
   AspectRatio,
   LoadingOverlay,
   Skeleton,
-  Alert,
   Anchor,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
-import { IconUpload, IconPhoto, IconX, IconBolt } from '@tabler/icons-react'
+import { IconUpload, IconPhoto, IconX } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
@@ -51,23 +50,10 @@ function ProductGridPage() {
 
   const [isUploading, setIsUploading] = useState(false)
 
-  const creditsExhausted =
-    billingStatus &&
-    billingStatus.creditsTotal > 0 &&
-    billingStatus.creditsUsed >= billingStatus.creditsTotal
-
   const atProductLimit =
     billingStatus &&
     billingStatus.productLimit !== null &&
     billingStatus.productCount >= billingStatus.productLimit
-
-  const resetDate =
-    billingStatus?.resetsOn
-      ? new Date(billingStatus.resetsOn).toLocaleDateString(undefined, {
-          month: 'long',
-          day: 'numeric',
-        })
-      : null
 
   async function handleFileDrop(files: File[]) {
     const file = files[0]
@@ -127,20 +113,6 @@ function ProductGridPage() {
 
   return (
     <Container size="lg" py="xl">
-      {/* US-U06: Credits exhausted banner */}
-      {creditsExhausted && (
-        <Alert
-          color="red"
-          icon={<IconBolt size={16} />}
-          mb="md"
-          title="Credits exhausted"
-        >
-          You have used all {billingStatus!.creditsTotal} credits for this month.
-          {resetDate ? ` They reset on ${resetDate}.` : ''}{' '}
-          <Anchor component={Link} to="/pricing" fw={500}>Upgrade to Pro</Anchor> for 5× more.
-        </Alert>
-      )}
-
       <Paper
         radius="lg"
         p={isMobile ? 'md' : 'xl'}
@@ -204,19 +176,6 @@ function ProductGridPage() {
           </Group>
         </Stack>
       </Paper>
-
-      {/* US-U07: product limit banner */}
-      {atProductLimit && (
-        <Alert
-          color="yellow"
-          mb="md"
-          title="Product limit reached"
-        >
-          You have {billingStatus!.productCount} products but your plan allows {billingStatus!.productLimit}.
-          Archive products or{' '}
-          <Anchor component={Link} to="/pricing" fw={500}>upgrade to Pro</Anchor>.
-        </Alert>
-      )}
 
       {isLoading ? (
         <ProductGridSkeleton />

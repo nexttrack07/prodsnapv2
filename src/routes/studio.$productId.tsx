@@ -181,7 +181,7 @@ function ProductWorkspacePage() {
           mb="md"
           title="Credits exhausted"
         >
-          You have used all {billingStatus!.creditsTotal} credits for this month.
+          You have used all {billingStatus!.creditsTotal} credits for this billing period.
           {resetDate ? ` They reset on ${resetDate}.` : ''}{' '}
           <Anchor component={Link} to="/pricing" fw={500}>Upgrade to Pro</Anchor> for 5× more.
         </Alert>
@@ -959,7 +959,7 @@ function GalleryView({
           <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
         </Box>
         <Tooltip
-          label={creditsExhausted ? 'No credits remaining this month' : product.status === 'analyzing' ? 'Product is still being analyzed...' : 'Product analysis failed'}
+          label={creditsExhausted ? 'No credits remaining this billing period' : product.status === 'analyzing' ? 'Product is still being analyzed...' : 'Product analysis failed'}
           disabled={product.status === 'ready' && !creditsExhausted}
           withArrow
           position="bottom"
