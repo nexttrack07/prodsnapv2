@@ -24,6 +24,8 @@ export type BillingContext = {
   hasCapability: (slug: string) => boolean
   /** True if the plan field resolves to a known PLAN_CONFIG entry. */
   hasKnownPlan: boolean
+  /** Unix ms timestamp of when the plan was last synced from Clerk. */
+  syncedAt: number | undefined
 }
 
 export interface BillingProvider {

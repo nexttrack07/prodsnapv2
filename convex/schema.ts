@@ -213,13 +213,24 @@ const schema = defineSchema({
     timestamp: v.number(),
     // Forward-compat (populated when metered billing / webhooks land):
     units: v.optional(v.number()),
-    metadata: v.optional(v.any()),
+    metadata: v.optional(v.union(
+      // malformed-clerk-response: subscriptionItems was not an array
+      v.object({ receivedType: v.string(), preservedPlan: v.string() }),
+      // unknown-plan-slug: Clerk returned a slug not in PLAN_CONFIG
+      v.object({ receivedSlug: v.string(), preservedPlan: v.string() }),
+      // clerk-api-error: Clerk API threw a network/5xx error
+      v.object({ error: v.string(), preservedPlan: v.string() }),
+    )),
     context: v.optional(
       v.union(
         v.literal('enforcement'),
         v.literal('checkout'),
         v.literal('webhook'),
         v.literal('usage'),
+        v.literal('clerk-api-error'),
+        v.literal('unknown-plan-slug'),
+        v.literal('malformed-clerk-response'),
+        v.literal('rate-limited'),
       ),
     ),
   })
@@ -290,6 +301,30 @@ const schema = defineSchema({
     .index('by_userId', ['userId'])
     .index('by_run', ['runId']) // legacy, keep for migration
     .index('by_template', ['templateId']),
+  // ─── Webhook event deduplication log ────────────────────────────────────
+  webhookEvents: defineTable({
+    eventId: v.string(),        // Svix svix-id header, unique per Clerk event
+    type: v.string(),           // e.g. 'subscription.updated'
+    receivedAt: v.number(),
+    handled: v.boolean(),
+    rawBody: v.optional(v.string()),
+    handlerError: v.optional(v.string()),
+  })
+    .index('by_eventId', ['eventId'])
+    .index('by_receivedAt', ['receivedAt']),
+
+  // ─── Admin audit log ─────────────────────────────────────────────────────
+  adminAuditEvents: defineTable({
+    adminUserId: v.string(),
+    action: v.string(),
+    targetUserId: v.optional(v.string()),
+    targetId: v.optional(v.string()),
+    details: v.optional(v.any()),
+    at: v.number(),
+  })
+    .index('by_admin_at', ['adminUserId', 'at'])
+    .index('by_at', ['at']),
+
   adminDebugRuns: defineTable({
     adminUserId: v.string(),
     sourceGenerationId: v.id('templateGenerations'),

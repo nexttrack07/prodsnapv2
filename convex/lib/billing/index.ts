@@ -29,6 +29,22 @@ function isBillingEnabled(): boolean {
   return process.env.BILLING_ENABLED === 'true'
 }
 
+// ─── Cache-trust flag ─────────────────────────────────────────────────────
+// BILLING_TRUST_CACHE=true: operator kill switch for confirmed Clerk outages.
+// When set, cached plans are trusted for up to 4h past syncedAt even if
+// billingStatus is 'clerk-unreachable'. After 4h the cache is considered stale
+// and enforcement falls back to denying as "no plan".
+const TRUST_CACHE_TTL_MS = 4 * 60 * 60 * 1000 // 4 hours
+
+function isCacheTrusted(syncedAt: number | undefined): boolean {
+  if (process.env.BILLING_TRUST_CACHE !== 'true') return false
+  if (syncedAt === undefined) return false
+  return Date.now() - syncedAt < TRUST_CACHE_TTL_MS
+}
+
+// Exported for unit tests only — not part of the public billing API.
+export { isCacheTrusted as isCacheTrustedForTest }
+
 // ─── Context ──────────────────────────────────────────────────────────────
 
 /** Open to a resolved billing context, or null if unauthenticated. */
@@ -62,6 +78,8 @@ export async function requireCapability(
   if (!billing) throw new Error('Not authenticated')
 
   if (!billing.hasKnownPlan) {
+    // BILLING_TRUST_CACHE: allow access when cache is fresh enough during outage.
+    if (isCacheTrusted(billing.syncedAt)) return billing
     await recordDenial(ctx, billing, mutationName, capability, billing.plan)
     throw new Error('No active subscription — choose a plan at /pricing')
   }
@@ -92,6 +110,8 @@ export async function requireProductLimit(
   if (!isBillingEnabled()) return billing
 
   if (!billing.hasKnownPlan) {
+    // BILLING_TRUST_CACHE: allow access when cache is fresh enough during outage.
+    if (isCacheTrusted(billing.syncedAt)) return billing
     await recordDenial(ctx, billing, mutationName, 'product-limit', billing.plan)
     throw new Error('No active subscription — choose a plan at /pricing')
   }
@@ -155,6 +175,8 @@ export async function requireCredit(
   if (!isBillingEnabled()) return billing
 
   if (!billing.hasKnownPlan) {
+    // BILLING_TRUST_CACHE: allow access when cache is fresh enough during outage.
+    if (isCacheTrusted(billing.syncedAt)) return billing
     await recordDenial(ctx, billing, mutationName, 'monthly-credits', billing.plan)
     throw new Error('No active subscription — choose a plan at /pricing')
   }

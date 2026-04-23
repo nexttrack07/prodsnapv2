@@ -31,7 +31,7 @@ export type PostCheckoutInterstitialProps = {
 }
 
 const POLL_INTERVAL_MS = 500
-const TIMEOUT_MS = 10_000
+const TIMEOUT_MS = 30_000
 
 export function PostCheckoutInterstitial({
   open,
@@ -119,8 +119,8 @@ export function PostCheckoutInterstitial({
         ) : (
           <>
             <Alert color="yellow" variant="light" w="100%">
-              Still activating — your subscription may take a few more
-              moments to sync. Try refreshing the page.
+              Still activating — your subscription usually syncs within 30
+              seconds. You can wait, retry, or continue to the studio now.
             </Alert>
             <Group gap="sm">
               <Button
@@ -142,6 +142,18 @@ export function PostCheckoutInterstitial({
                 onClick={() => window.location.reload()}
               >
                 Refresh page
+              </Button>
+              <Button
+                variant="subtle"
+                fz="sm"
+                onClick={() => {
+                  if (!hasResolvedRef.current) {
+                    hasResolvedRef.current = true
+                    onPlanActive()
+                  }
+                }}
+              >
+                Continue to Studio
               </Button>
             </Group>
           </>

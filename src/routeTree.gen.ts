@@ -21,6 +21,7 @@ import { Route as BoardsBoardIdRouteImport } from './routes/boards.$boardId'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminPromptsRouteImport } from './routes/admin.prompts'
 import { Route as AdminPlaygroundRouteImport } from './routes/admin.playground'
+import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AccountBillingRouteImport } from './routes/account.billing'
 
 const StudioRoute = StudioRouteImport.update({
@@ -83,6 +84,11 @@ const AdminPlaygroundRoute = AdminPlaygroundRouteImport.update({
   path: '/playground',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AccountBillingRoute = AccountBillingRouteImport.update({
   id: '/account/billing',
   path: '/account/billing',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/studio': typeof StudioRouteWithChildren
   '/account/billing': typeof AccountBillingRoute
+  '/admin/audit': typeof AdminAuditRoute
   '/admin/playground': typeof AdminPlaygroundRoute
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/pricing': typeof PricingRoute
   '/account/billing': typeof AccountBillingRoute
+  '/admin/audit': typeof AdminAuditRoute
   '/admin/playground': typeof AdminPlaygroundRoute
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/studio': typeof StudioRouteWithChildren
   '/account/billing': typeof AccountBillingRoute
+  '/admin/audit': typeof AdminAuditRoute
   '/admin/playground': typeof AdminPlaygroundRoute
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/studio'
     | '/account/billing'
+    | '/admin/audit'
     | '/admin/playground'
     | '/admin/prompts'
     | '/admin/templates'
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/pricing'
     | '/account/billing'
+    | '/admin/audit'
     | '/admin/playground'
     | '/admin/prompts'
     | '/admin/templates'
@@ -170,6 +181,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/studio'
     | '/account/billing'
+    | '/admin/audit'
     | '/admin/playground'
     | '/admin/prompts'
     | '/admin/templates'
@@ -275,6 +287,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPlaygroundRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/audit': {
+      id: '/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/account/billing': {
       id: '/account/billing'
       path: '/account/billing'
@@ -286,6 +305,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminAuditRoute: typeof AdminAuditRoute
   AdminPlaygroundRoute: typeof AdminPlaygroundRoute
   AdminPromptsRoute: typeof AdminPromptsRoute
   AdminTemplatesRoute: typeof AdminTemplatesRoute
@@ -293,6 +313,7 @@ interface AdminRouteChildren {
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAuditRoute: AdminAuditRoute,
   AdminPlaygroundRoute: AdminPlaygroundRoute,
   AdminPromptsRoute: AdminPromptsRoute,
   AdminTemplatesRoute: AdminTemplatesRoute,
