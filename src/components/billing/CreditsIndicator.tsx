@@ -8,9 +8,10 @@
  *   - Normal: "47/100 credits · resets Nov 1"
  *   - Low (<=10% remaining): colored warning
  *   - Exhausted (0 left): red "Out of credits"
+ *   - past_due: yellow badge + tooltip warning
  */
 import { Badge, Text, Tooltip } from '@mantine/core'
-import { IconBolt } from '@tabler/icons-react'
+import { IconBolt, IconAlertTriangle } from '@tabler/icons-react'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 
@@ -21,13 +22,15 @@ export function CreditsIndicator() {
     return null
   }
 
+  const isPastDue = (status as { billingStatus?: string }).billingStatus === 'past_due'
+
   const used = status.creditsUsed
   const total = status.creditsTotal
   const remaining = Math.max(0, total - used)
   const isExhausted = remaining <= 0
   const isLow = !isExhausted && remaining / total <= 0.1
 
-  const color = isExhausted ? 'red' : isLow ? 'yellow' : 'brand'
+  const color = isExhausted ? 'red' : isLow || isPastDue ? 'yellow' : 'brand'
   const resetDate = status.resetsOn
     ? new Date(status.resetsOn).toLocaleDateString(undefined, {
         month: 'short',
@@ -40,6 +43,7 @@ export function CreditsIndicator() {
     : `${used}/${total} credits`
 
   const tooltipLabel = [
+    isPastDue ? 'Payment issue — update your card to avoid losing access.' : null,
     'Monthly generation credits. Each generation uses one credit.',
     resetDate ? `Resets on ${resetDate}` : null,
   ]
@@ -50,8 +54,8 @@ export function CreditsIndicator() {
     <Tooltip label={tooltipLabel} position="bottom">
       <Badge
         color={color}
-        variant={isExhausted || isLow ? 'filled' : 'light'}
-        leftSection={<IconBolt size={12} />}
+        variant={isExhausted || isLow || isPastDue ? 'filled' : 'light'}
+        leftSection={isPastDue ? <IconAlertTriangle size={12} /> : <IconBolt size={12} />}
         size="sm"
         tabIndex={0}
         styles={{ root: { textTransform: 'none', fontWeight: 500 } }}

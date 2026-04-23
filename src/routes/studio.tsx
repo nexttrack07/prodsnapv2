@@ -3,6 +3,7 @@ import { useAuth } from '@clerk/react'
 import { Center, Loader, Stack, Text, Button } from '@mantine/core'
 import { useEffect } from 'react'
 import { SubscriptionRequired } from '~/components/billing/SubscriptionRequired'
+import { OverLimitBanners } from '~/components/billing/OverLimitBanners'
 
 export const Route = createFileRoute('/studio')({
   component: StudioLayout,
@@ -48,6 +49,7 @@ function StudioLayout() {
 
   return (
     <SubscriptionRequired>
+      <OverLimitBanners />
       <Outlet />
     </SubscriptionRequired>
   )
