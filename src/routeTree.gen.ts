@@ -9,7 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StudioRouteImport } from './routes/studio'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -24,9 +26,19 @@ import { Route as AdminPlaygroundRouteImport } from './routes/admin.playground'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AccountBillingRouteImport } from './routes/account.billing'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
   path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PricingRoute = PricingRouteImport.update({
@@ -100,7 +112,9 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/checkout': typeof CheckoutRoute
   '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
   '/studio': typeof StudioRouteWithChildren
+  '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/playground': typeof AdminPlaygroundRoute
@@ -115,6 +129,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/checkout': typeof CheckoutRoute
   '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/playground': typeof AdminPlaygroundRoute
@@ -131,7 +147,9 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/checkout': typeof CheckoutRoute
   '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
   '/studio': typeof StudioRouteWithChildren
+  '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/playground': typeof AdminPlaygroundRoute
@@ -149,7 +167,9 @@ export interface FileRouteTypes {
     | '/admin'
     | '/checkout'
     | '/pricing'
+    | '/privacy'
     | '/studio'
+    | '/terms'
     | '/account/billing'
     | '/admin/audit'
     | '/admin/playground'
@@ -164,6 +184,8 @@ export interface FileRouteTypes {
     | '/'
     | '/checkout'
     | '/pricing'
+    | '/privacy'
+    | '/terms'
     | '/account/billing'
     | '/admin/audit'
     | '/admin/playground'
@@ -179,7 +201,9 @@ export interface FileRouteTypes {
     | '/admin'
     | '/checkout'
     | '/pricing'
+    | '/privacy'
     | '/studio'
+    | '/terms'
     | '/account/billing'
     | '/admin/audit'
     | '/admin/playground'
@@ -196,18 +220,34 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   CheckoutRoute: typeof CheckoutRoute
   PricingRoute: typeof PricingRoute
+  PrivacyRoute: typeof PrivacyRoute
   StudioRoute: typeof StudioRouteWithChildren
+  TermsRoute: typeof TermsRoute
   AccountBillingRoute: typeof AccountBillingRoute
   BoardsBoardIdRoute: typeof BoardsBoardIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/studio': {
       id: '/studio'
       path: '/studio'
       fullPath: '/studio'
       preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pricing': {
@@ -340,7 +380,9 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   CheckoutRoute: CheckoutRoute,
   PricingRoute: PricingRoute,
+  PrivacyRoute: PrivacyRoute,
   StudioRoute: StudioRouteWithChildren,
+  TermsRoute: TermsRoute,
   AccountBillingRoute: AccountBillingRoute,
   BoardsBoardIdRoute: BoardsBoardIdRoute,
 }
