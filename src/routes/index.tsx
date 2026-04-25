@@ -25,6 +25,7 @@ import {
   IconTemplate,
   IconVideo,
 } from '@tabler/icons-react'
+import { HeroMediaFlow } from '~/components/landing/HeroMediaFlow'
 import { seo } from '~/utils/seo'
 
 export const Route = createFileRoute('/')({
@@ -44,6 +45,16 @@ export const Route = createFileRoute('/')({
 function placeholder(width: number, height: number, text: string, bg = '0d0d0d', fg = 'f5f5f5') {
   return `https://placehold.co/${width}x${height}/${bg}/${fg}?text=${encodeURIComponent(text)}`
 }
+
+const templateLibraryShot = '/landing/shots/template-library.png'
+const generatedResultsShot = '/landing/shots/generated-results.png'
+const heroProductShot = '/landing/shots/hero-product-toiletry-bag-no-bg.png'
+const heroTemplateShot = '/landing/shots/hero-template-selection.png'
+const heroVariationShots = [
+  '/landing/shots/hero-variation-exact-a.png',
+  '/landing/shots/hero-variation-exact-b.png',
+  '/landing/shots/hero-variation-variation.png',
+]
 
 const proofPoints = [
   {
@@ -119,20 +130,20 @@ const valueBlocks = [
 ]
 
 const templateCarouselItems = [
-  { title: 'UGC Hook', meta: 'Winning template', image: placeholder(520, 680, 'UGC Hook Template') },
-  { title: 'Before / After', meta: 'Curated ad', image: placeholder(520, 680, 'Before After Template') },
-  { title: 'Product Demo', meta: 'Top performer', image: placeholder(520, 680, 'Product Demo Template') },
-  { title: 'Founder Story', meta: 'Facebook ad', image: placeholder(520, 680, 'Founder Story Template') },
-  { title: 'Benefit Stack', meta: 'Handpicked creative', image: placeholder(520, 680, 'Benefit Stack Template') },
-  { title: 'Visual Comparison', meta: 'Proven concept', image: placeholder(520, 680, 'Comparison Template') },
+  { title: 'UGC Hook', meta: 'Winning template', image: templateLibraryShot },
+  { title: 'Before / After', meta: 'Curated ad', image: templateLibraryShot },
+  { title: 'Product Demo', meta: 'Top performer', image: templateLibraryShot },
+  { title: 'Founder Story', meta: 'Facebook ad', image: templateLibraryShot },
+  { title: 'Benefit Stack', meta: 'Handpicked creative', image: templateLibraryShot },
+  { title: 'Visual Comparison', meta: 'Proven concept', image: templateLibraryShot },
 ]
 
 const variationCarouselItems = [
-  { title: 'Batch 01', meta: '4 outputs from one template', image: placeholder(520, 640, 'Variation Grid 1') },
-  { title: 'Batch 02', meta: 'Single click multi-generate', image: placeholder(520, 640, 'Variation Grid 2') },
-  { title: 'Refine Winner', meta: 'Variation of variation', image: placeholder(520, 640, 'Variation Grid 3') },
-  { title: 'Scale Angle', meta: 'Keep best direction moving', image: placeholder(520, 640, 'Variation Grid 4') },
-  { title: 'New Pass', meta: 'Template remixed for your product', image: placeholder(520, 640, 'Variation Grid 5') },
+  { title: 'Batch 01', meta: '4 outputs from one template', image: generatedResultsShot },
+  { title: 'Batch 02', meta: 'Single click multi-generate', image: generatedResultsShot },
+  { title: 'Refine Winner', meta: 'Variation of variation', image: generatedResultsShot },
+  { title: 'Scale Angle', meta: 'Keep best direction moving', image: generatedResultsShot },
+  { title: 'New Pass', meta: 'Template remixed for your product', image: generatedResultsShot },
 ]
 
 function Home() {
@@ -193,71 +204,11 @@ function Home() {
               </Paper>
             </Stack>
 
-            <Box className="landing-browser-stack">
-              <Paper className="landing-browser" withBorder radius="md" p="md">
-                <Group justify="space-between" mb="md" align="center">
-                  <Group gap="xs">
-                    <Box className="landing-dot" />
-                    <Box className="landing-dot" />
-                    <Box className="landing-dot" />
-                  </Group>
-                  <Text size="xs" c="dark.2">
-                    Template Browser
-                  </Text>
-                </Group>
-
-                <Group gap="xs" mb="md" wrap="wrap">
-                  <Box className="landing-toolbar-chip">
-                    <IconSearch size={14} />
-                    <span>Search proven ads</span>
-                  </Box>
-                  <Box className="landing-toolbar-chip">
-                    <IconFilter size={14} />
-                    <span>Filter</span>
-                  </Box>
-                  <Box className="landing-toolbar-chip">
-                    <IconTemplate size={14} />
-                    <span>Sort by top performers</span>
-                  </Box>
-                </Group>
-
-                <Image
-                  src={placeholder(1120, 760, 'Browse curated proven Facebook ad templates')}
-                  alt="Placeholder showing template browser"
-                  radius="md"
-                />
-
-                <SimpleGrid cols={3} spacing="sm" mt="sm">
-                  {[1, 2, 3].map((item) => (
-                    <Image
-                      key={item}
-                      src={placeholder(420, 280, `Template ${item}`)}
-                      alt={`Placeholder template ${item}`}
-                      radius="md"
-                    />
-                  ))}
-                </SimpleGrid>
-              </Paper>
-
-              <Paper className="landing-floating-panel landing-floating-right" withBorder radius="md" p="md">
-                <Text size="xs" tt="uppercase" fw={700} c="dark.2">
-                  Multi-generate
-                </Text>
-                <Text mt={6} size="sm" fw={600} c="white">
-                  Create several variations from one template selection.
-                </Text>
-                <SimpleGrid cols={2} spacing="xs" mt="md">
-                  {[1, 2, 3, 4].map((item) => (
-                    <Image
-                      key={item}
-                      src={placeholder(280, 200, `Variation ${item}`)}
-                      alt={`Placeholder variation ${item}`}
-                      radius="md"
-                    />
-                  ))}
-                </SimpleGrid>
-              </Paper>
-            </Box>
+            <HeroMediaFlow
+              productShot={heroProductShot}
+              templateShot={heroTemplateShot}
+              variationShots={heroVariationShots}
+            />
           </SimpleGrid>
         </Container>
       </Box>
@@ -372,14 +323,14 @@ function Home() {
 
             <Box className="landing-media-grid">
               <Image
-                src={placeholder(1200, 800, 'Search, filter, sort, and browse templates')}
-                alt="Placeholder showing template discovery view"
+                src={templateLibraryShot}
+                alt="ProdSnap discovery view with filters and template browser"
                 radius="md"
                 className="landing-media-large"
               />
               <SimpleGrid cols={2} spacing="md">
-                <Image src={placeholder(520, 360, 'Filter results')} alt="Filter results placeholder" radius="md" />
-                <Image src={placeholder(520, 360, 'Top performing ads')} alt="Top performing ads placeholder" radius="md" />
+                <Image src={templateLibraryShot} alt="ProdSnap filtered template results" radius="md" />
+                <Image src={templateLibraryShot} alt="ProdSnap top performing ad templates" radius="md" />
               </SimpleGrid>
             </Box>
           </SimpleGrid>
@@ -407,16 +358,16 @@ function Home() {
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
             <Box className="landing-media-grid">
               <Image
-                src={placeholder(1200, 820, 'Choose a template and generate your own product inside it')}
-                alt="Placeholder showing generation workflow"
+                src={generatedResultsShot}
+                alt="ProdSnap generated product variations from a selected template"
                 radius="md"
                 className="landing-media-large"
               />
               <Paper className="landing-workflow-strip" withBorder radius="md" p="md">
                 <Group grow>
-                  <Image src={placeholder(360, 220, 'Upload product')} alt="Upload product placeholder" radius="md" />
-                  <Image src={placeholder(360, 220, 'Pick template')} alt="Pick template placeholder" radius="md" />
-                  <Image src={placeholder(360, 220, 'Generate outputs')} alt="Generate outputs placeholder" radius="md" />
+                  <Image src={generatedResultsShot} alt="ProdSnap uploaded product" radius="md" />
+                  <Image src={templateLibraryShot} alt="ProdSnap selected template" radius="md" />
+                  <Image src={generatedResultsShot} alt="ProdSnap generated outputs" radius="md" />
                 </Group>
               </Paper>
             </Box>
@@ -531,16 +482,16 @@ function Home() {
 
             <Box className="landing-variation-wall">
               <Image
-                src={placeholder(1200, 760, 'Variation grid and variation-of-variation workflow')}
-                alt="Placeholder showing variation wall"
+                src={generatedResultsShot}
+                alt="ProdSnap variation grid"
                 radius="md"
               />
               <SimpleGrid cols={3} spacing="md" mt="md">
                 {[1, 2, 3].map((item) => (
                   <Image
                     key={item}
-                    src={placeholder(360, 260, `Refinement ${item}`)}
-                    alt={`Placeholder refinement ${item}`}
+                    src={generatedResultsShot}
+                    alt={`ProdSnap refinement placeholder ${item}`}
                     radius="md"
                   />
                 ))}
@@ -575,8 +526,8 @@ function Home() {
                 </Group>
               </Stack>
               <Image
-                src={placeholder(1200, 760, 'Actual app walkthrough video or GIF goes here')}
-                alt="Placeholder for app walkthrough media"
+                src={generatedResultsShot}
+                alt="ProdSnap walkthrough placeholder using current results grid"
                 radius="md"
               />
             </SimpleGrid>

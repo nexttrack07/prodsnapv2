@@ -1,5 +1,4 @@
 /// <reference types="vite/client" />
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools/production'
 import {
   Link,
   Outlet,
@@ -8,7 +7,6 @@ import {
   HeadContent,
   Scripts,
 } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import * as React from 'react'
 import {
   MantineProvider,
@@ -124,7 +122,6 @@ function RootComponent() {
 function RootDocument({ children }: { children: React.ReactNode }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [mobileNavOpened, { toggle: toggleMobileNav, close: closeMobileNav }] = useDisclosure(false)
-  const showDevtools = import.meta.env.DEV
 
   return (
     <html lang="en">
@@ -236,13 +233,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               </Text>
             </Stack>
           </Drawer>
-
-          {showDevtools && (
-            <>
-              <ReactQueryDevtools />
-              <TanStackRouterDevtools position="bottom-right" />
-            </>
-          )}
         </MantineProvider>
         <Scripts />
       </body>

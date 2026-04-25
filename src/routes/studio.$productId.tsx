@@ -65,6 +65,7 @@ import { capitalizeWords } from '../utils/strings'
 import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 import { ModelSelect } from '../components/ModelSelect'
 import { mapGenerationError } from '../lib/billing/mapBillingError'
+import { fetchDownloadAsset } from '../utils/downloads'
 
 export const Route = createFileRoute('/studio/$productId')({
   component: ProductWorkspacePage,
@@ -89,6 +90,51 @@ interface GenerationData {
 }
 
 const GENERATION_TIMEOUT_MS = 90_000
+
+function slugifyFilePart(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'image'
+}
+
+function inferFileExtension(url: string, contentType?: string | null): string {
+  if (contentType) {
+    if (contentType.includes('png')) return 'png'
+    if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg'
+    if (contentType.includes('webp')) return 'webp'
+    if (contentType.includes('gif')) return 'gif'
+  }
+
+  try {
+    const pathname = new URL(url).pathname
+    const match = pathname.match(/\.([a-zA-Z0-9]+)$/)
+    if (match?.[1]) return match[1].toLowerCase()
+  } catch {
+    // ignore URL parsing failures and fall back below
+  }
+
+  return 'png'
+}
+
+async function downloadFile(url: string, fileBaseName: string) {
+  const { base64, contentType } = await fetchDownloadAsset({ data: { url } })
+  const binary = atob(base64)
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+  const blob = new Blob([bytes], { type: contentType || 'application/octet-stream' })
+  const extension = inferFileExtension(url, contentType)
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = objectUrl
+  link.download = `${slugifyFilePart(fileBaseName)}.${extension}`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+}
 
 function ProductWorkspacePage() {
   const { productId } = Route.useParams()
@@ -774,9 +820,30 @@ function ImageCard({
   const isProcessing = image.status === 'processing'
   const isFailed = image.status === 'failed'
   const isReady = image.status === 'ready'
+  const [isDownloading, setIsDownloading] = useState(false)
 
   // Check if this original already has a bg-removed enhancement
   // (We can't tell from this component alone, so we disable if any bg removal is in progress)
+
+  async function handleDownload() {
+    if (!image.imageUrl) return
+
+    setIsDownloading(true)
+    try {
+      await downloadFile(
+        image.imageUrl,
+        `${productName}-${isOriginal ? 'original' : 'background-removed'}`,
+      )
+    } catch (err) {
+      notifications.show({
+        title: 'Download failed',
+        message: err instanceof Error ? err.message : 'Could not download image',
+        color: 'red',
+      })
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   return (
     <Paper
@@ -898,12 +965,11 @@ function ImageCard({
           )}
           <Tooltip label="Download" events={{ hover: true, focus: true, touch: true }}>
             <ActionIcon
-              component="a"
-              href={image.imageUrl}
-              download
               variant="light"
               color="gray"
               size="sm"
+              onClick={handleDownload}
+              loading={isDownloading}
             >
               <IconDownload size={14} />
             </ActionIcon>
@@ -1451,6 +1517,7 @@ function GenerationCard({
   const isFailed = generation.status === 'failed'
   const isPending = !isComplete && !isFailed
   const [now, setNow] = useState(() => Date.now())
+  const [isDownloading, setIsDownloading] = useState(false)
 
   useEffect(() => {
     if (!isPending) return
@@ -1504,6 +1571,24 @@ function GenerationCard({
       case 'variation': return 'violet'
       case 'remix': return 'orange'
       default: return 'teal'
+    }
+  }
+
+  async function handleDownload(e: React.MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation()
+    if (!generation.outputUrl) return
+
+    setIsDownloading(true)
+    try {
+      await downloadFile(generation.outputUrl, `${title}-${generation.mode || 'generation'}`)
+    } catch (err) {
+      notifications.show({
+        title: 'Download failed',
+        message: err instanceof Error ? err.message : 'Could not download generation',
+        color: 'red',
+      })
+    } finally {
+      setIsDownloading(false)
     }
   }
 
@@ -1671,15 +1756,13 @@ function GenerationCard({
             Vary
           </Button>
           <Button
-            component="a"
-            href={generation.outputUrl}
-            download
             variant="light"
             color="gray"
             size="xs"
             radius="md"
             leftSection={<IconDownload size={14} />}
-            onClick={(e) => e.stopPropagation()}
+            onClick={handleDownload}
+            loading={isDownloading}
           >
             Save
           </Button>
