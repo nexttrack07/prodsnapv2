@@ -745,6 +745,17 @@ export const listTemplates = query({
   },
 })
 
+export const countPublishedTemplates = query({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db
+      .query('adTemplates')
+      .withIndex('by_status', (q) => q.eq('status', 'published'))
+      .collect()
+    return { count: all.length }
+  },
+})
+
 /**
  * Generate variations from an existing generated image.
  * User can choose to change text, icons, and/or colors.

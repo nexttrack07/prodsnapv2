@@ -80,7 +80,7 @@ h1, h2 { font-weight: 700; }
 }
 
 .landing-hero-shell {
-  padding: 110px 0 84px;
+  padding: 80px 0 56px;
   overflow: hidden;
 }
 
@@ -180,8 +180,8 @@ h1, h2 { font-weight: 700; }
 
 .landing-hero-arrows {
   position: relative;
-  height: 62px;
-  margin: -6px 20px -2px;
+  height: 44px;
+  margin: -8px 20px -4px;
 }
 
 .landing-hero-arrow-svg {
@@ -301,8 +301,10 @@ h1, h2 { font-weight: 700; }
 
 .landing-band-alt {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
-    rgba(255, 255, 255, 0.01);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
+    rgba(255, 255, 255, 0.02);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .landing-section-title,
