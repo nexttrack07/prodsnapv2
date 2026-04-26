@@ -31,6 +31,25 @@ const productStatus = v.union(
   v.literal('failed'),
 )
 
+// Marketing angle produced by the analysis AI for a product.
+// Each angle is a positioning/hook pair the user can act on.
+const marketingAngle = v.object({
+  title: v.string(),               // short label, e.g. "Late-night skincare ritual"
+  description: v.string(),         // 1-2 sentence positioning explanation
+  hook: v.string(),                // a sample headline/opening line
+  suggestedAdStyle: v.string(),    // e.g. "lifestyle UGC", "before/after demo"
+})
+
+// URL import job lifecycle.
+const urlImportStatus = v.union(
+  v.literal('pending'),
+  v.literal('scraping'),
+  v.literal('extracting'),
+  v.literal('uploading'),
+  v.literal('done'),
+  v.literal('failed'),
+)
+
 const genStatus = v.union(
   v.literal('queued'),
   v.literal('running'),
@@ -93,6 +112,9 @@ const schema = defineSchema({
     category: v.optional(v.string()),
     productDescription: v.optional(v.string()),
     targetAudience: v.optional(v.string()),
+    // Marketing analysis (extended; produced by the same AI call as above)
+    valueProposition: v.optional(v.string()),
+    marketingAngles: v.optional(v.array(marketingAngle)),
     // Metadata
     error: v.optional(v.string()),
     archivedAt: v.optional(v.number()), // soft delete timestamp
@@ -307,6 +329,39 @@ const schema = defineSchema({
     .index('by_userId', ['userId'])
     .index('by_run', ['runId']) // legacy, keep for migration
     .index('by_template', ['templateId']),
+  // ─── Brand kits (one per user, populated manually or via URL import) ────
+  brandKits: defineTable({
+    userId: v.string(),
+    logoUrl: v.optional(v.string()),
+    logoStorageKey: v.optional(v.string()), // R2 object key for management/deletion
+    // Hex color strings; first entry is primary by convention.
+    colors: v.optional(v.array(v.string())),
+    primaryFont: v.optional(v.string()),
+    voice: v.optional(v.string()),          // free-form notes about brand voice
+    tagline: v.optional(v.string()),
+    websiteUrl: v.optional(v.string()),     // source URL if auto-imported
+    updatedAt: v.number(),
+  }).index('by_userId', ['userId']),
+
+  // ─── URL import jobs (Shopify / website → product + brand kit) ──────────
+  // A staging table that tracks the lifecycle of an automated product import.
+  // The job scrapes the URL via Firecrawl, asks the AI to extract product
+  // fields + brand kit fields + image URLs, uploads images to R2, then creates
+  // the corresponding `products` row and updates the user's `brandKits` row.
+  urlImports: defineTable({
+    userId: v.string(),
+    sourceUrl: v.string(),
+    status: urlImportStatus,
+    currentStep: v.optional(v.string()),     // human-readable progress label
+    productId: v.optional(v.id('products')), // populated when product is created
+    brandKitUpdated: v.optional(v.boolean()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index('by_userId', ['userId'])
+    .index('by_status', ['status']),
+
   // ─── Webhook event deduplication log ────────────────────────────────────
   webhookEvents: defineTable({
     eventId: v.string(),        // Svix svix-id header, unique per Clerk event
@@ -426,3 +481,6 @@ export type StudioRun = Infer<typeof schema.tables.studioRuns.validator>
 export type TemplateGeneration = Infer<
   typeof schema.tables.templateGenerations.validator
 >
+export type BrandKit = Infer<typeof schema.tables.brandKits.validator>
+export type UrlImport = Infer<typeof schema.tables.urlImports.validator>
+export type MarketingAngle = Infer<typeof marketingAngle>

@@ -12,6 +12,21 @@ export const mockVisionResponse = {
   category: 'electronics' as const,
   productDescription: 'A high-quality test product for e2e testing with premium features and modern design.',
   targetAudience: 'testers, developers, QA engineers, tech enthusiasts',
+  valueProposition: 'The reliable choice for teams who need premium quality without the enterprise price tag.',
+  marketingAngles: [
+    {
+      title: 'Premium without the price tag',
+      description: 'Position as the smart-money pick for buyers who notice quality but watch the budget.',
+      hook: "Premium feel, mid-range price. The teams in the know already switched.",
+      suggestedAdStyle: 'before/after demo',
+    },
+    {
+      title: 'Built for power users',
+      description: 'Lean into pro features that hobbyist tools skip.',
+      hook: "If you've outgrown the basic option, you already know.",
+      suggestedAdStyle: 'lifestyle UGC',
+    },
+  ],
 }
 
 // Mock response for template tag computation

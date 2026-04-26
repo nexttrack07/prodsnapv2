@@ -187,10 +187,19 @@ function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
 }
 
 // ─── Product analysis (vision) ─────────────────────────────────────────────
+const marketingAngleSchema = z.object({
+  title: z.string().min(3).max(80),
+  description: z.string().min(15).max(280),
+  hook: z.string().min(5).max(200),
+  suggestedAdStyle: z.string().min(3).max(80),
+})
+
 const productAnalysisSchema = z.object({
   category: z.enum(AD_CATEGORIES),
   productDescription: z.string().min(10).max(300),
   targetAudience: z.string().min(10).max(300),
+  valueProposition: z.string().min(15).max(280),
+  marketingAngles: z.array(marketingAngleSchema).min(3).max(5),
 })
 
 export const analyzeProduct = internalAction({
@@ -208,11 +217,23 @@ export const analyzeProduct = internalAction({
 {
   "category": "<one of: ${AD_CATEGORIES.join(', ')}>",
   "productDescription": "<25-30 word description of the product, key features, and use case>",
-  "targetAudience": "<comma-separated list of 3-5 target audience segments>"
+  "targetAudience": "<comma-separated list of 3-5 target audience segments>",
+  "valueProposition": "<one sentence (15-30 words) capturing the core promise this product makes to its buyer>",
+  "marketingAngles": [
+    {
+      "title": "<short label, 3-6 words, e.g. 'Late-night skincare ritual'>",
+      "description": "<1-2 sentence positioning explanation, why this angle works for this product and audience>",
+      "hook": "<a single ad headline or opening line in this angle's voice, under 25 words>",
+      "suggestedAdStyle": "<one of: lifestyle UGC, before/after demo, founder story, problem/solution, social proof, comparison, ingredient close-up, in-use demo>"
+    }
+  ]
 }
 
+Generate 3-5 distinct marketing angles. Each angle should target a different buyer motivation (status, savings, anxiety relief, identity, convenience, etc.). Avoid repeating the same hook idea twice.
+
 Return ONLY the JSON object, no other text.`,
-      systemPrompt: 'You are a product analyst for marketing use cases. Be factual and concise. Return valid JSON only.',
+      systemPrompt:
+        'You are a senior performance marketer for DTC brands. You understand Facebook ads, ad copy, and how to position products for specific audience motivations. Be concrete and specific. Return valid JSON only.',
     })
 
     const analysis = parseJsonFromResponse(analysisText, productAnalysisSchema)
@@ -221,6 +242,8 @@ Return ONLY the JSON object, no other text.`,
       category: analysis.category,
       productDescription: analysis.productDescription,
       targetAudience: analysis.targetAudience,
+      valueProposition: analysis.valueProposition,
+      marketingAngles: analysis.marketingAngles,
     }
   },
 })

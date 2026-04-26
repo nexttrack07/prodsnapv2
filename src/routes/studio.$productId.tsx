@@ -249,6 +249,8 @@ function ProductWorkspacePage() {
       {/* Product Header - hidden in generate mode */}
       {view === 'gallery' && <ProductHeader product={product} primaryImageUrl={primaryImageUrl} />}
 
+      {view === 'gallery' && <MarketingAnalysisPanel product={product} />}
+
       {/* View Toggle */}
       {view === 'gallery' ? (
         <GalleryView
@@ -456,6 +458,113 @@ function ProductHeader({
           )}
         </Box>
       </Group>
+    </Paper>
+  )
+}
+
+function MarketingAnalysisPanel({
+  product,
+}: {
+  product: {
+    status: 'analyzing' | 'ready' | 'failed'
+    valueProposition?: string
+    marketingAngles?: Array<{
+      title: string
+      description: string
+      hook: string
+      suggestedAdStyle: string
+    }>
+  }
+}) {
+  if (product.status === 'analyzing') {
+    return (
+      <Paper withBorder radius="md" p="lg" mb="md">
+        <Group gap="sm">
+          <Loader size="xs" />
+          <Text size="sm" c="dark.1">
+            Analyzing your product to suggest marketing angles…
+          </Text>
+        </Group>
+      </Paper>
+    )
+  }
+
+  if (product.status !== 'ready' || !product.marketingAngles?.length) {
+    return null
+  }
+
+  const handlePlaceholder = (action: string, angleTitle: string) => {
+    notifications.show({
+      title: 'Coming soon',
+      message: `${action} for "${angleTitle}" — wiring this up next.`,
+      color: 'blue',
+    })
+  }
+
+  return (
+    <Paper withBorder radius="md" p="lg" mb="md">
+      <Stack gap="md">
+        <Box>
+          <Text size="xs" tt="uppercase" fw={700} c="dark.2">
+            Marketing analysis
+          </Text>
+          {product.valueProposition && (
+            <Text mt="xs" size="md" fw={600} c="white">
+              {product.valueProposition}
+            </Text>
+          )}
+        </Box>
+
+        <Stack gap="sm">
+          {product.marketingAngles.map((angle, index) => (
+            <Paper
+              key={`${angle.title}-${index}`}
+              withBorder
+              radius="md"
+              p="md"
+              style={{ background: 'rgba(255,255,255,0.02)' }}
+            >
+              <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+                <Box style={{ flex: 1, minWidth: 200 }}>
+                  <Group gap="sm" align="center">
+                    <Text size="sm" fw={700} c="white">
+                      {angle.title}
+                    </Text>
+                    <Badge size="xs" color="teal" variant="light" radius="sm">
+                      {angle.suggestedAdStyle}
+                    </Badge>
+                  </Group>
+                  <Text mt={6} size="sm" c="dark.1">
+                    {angle.description}
+                  </Text>
+                  <Text mt="xs" size="sm" c="dark.0" fs="italic">
+                    “{angle.hook}”
+                  </Text>
+                </Box>
+                <Stack gap={6}>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="brand"
+                    leftSection={<IconSparkles size={12} />}
+                    onClick={() => handlePlaceholder('Generate visuals', angle.title)}
+                  >
+                    Generate visuals
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="default"
+                    leftSection={<IconAlignLeft size={12} />}
+                    onClick={() => handlePlaceholder('Write copy', angle.title)}
+                  >
+                    Write copy
+                  </Button>
+                </Stack>
+              </Group>
+            </Paper>
+          ))}
+        </Stack>
+      </Stack>
     </Paper>
   )
 }

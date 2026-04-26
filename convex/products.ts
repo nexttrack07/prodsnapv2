@@ -187,6 +187,8 @@ export const runProductAnalysis = internalAction({
         category: result.category,
         productDescription: result.productDescription,
         targetAudience: result.targetAudience,
+        valueProposition: result.valueProposition,
+        marketingAngles: result.marketingAngles,
       })
     } catch (err) {
       await ctx.runMutation(internal.products.markProductFailed, {
@@ -203,6 +205,17 @@ export const saveProductAnalysis = internalMutation({
     category: v.string(),
     productDescription: v.string(),
     targetAudience: v.string(),
+    valueProposition: v.optional(v.string()),
+    marketingAngles: v.optional(
+      v.array(
+        v.object({
+          title: v.string(),
+          description: v.string(),
+          hook: v.string(),
+          suggestedAdStyle: v.string(),
+        }),
+      ),
+    ),
   },
   handler: async (ctx, { productId, ...rest }) => {
     await ctx.db.patch(productId, { ...rest, status: 'ready' })
