@@ -18,6 +18,7 @@ import {
 import {
   IconArrowRight,
   IconDownload,
+  IconEqual,
   IconEraser,
   IconLayersIntersect,
   IconPalette,
@@ -29,6 +30,7 @@ import {
   IconTemplate,
   IconTextSize,
   IconWand,
+  IconX,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import { HeroMediaFlow } from '~/components/landing/HeroMediaFlow'
@@ -392,26 +394,70 @@ function Home() {
                 distinct ad concepts in a single generation — without rebuilding the creative direction once.
               </Text>
 
-              <SimpleGrid cols={3} spacing="md">
-                <Paper className="landing-proof-card" withBorder radius="md" p="lg" ta="center">
+              <Group gap="sm" wrap="nowrap" align="center">
+                <Paper
+                  className="landing-proof-card"
+                  withBorder
+                  radius="md"
+                  p="sm"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
                   <Text size="xl" fw={700} c="white">3</Text>
                   <Text size="xs" tt="uppercase" fw={700} c="dark.2" mt={4}>
                     Templates
                   </Text>
                 </Paper>
-                <Paper className="landing-proof-card" withBorder radius="md" p="lg" ta="center">
-                  <Text size="xl" fw={700} c="white">×4</Text>
+                <IconX size={20} stroke={2.5} color="var(--mantine-color-dark-2)" />
+                <Paper
+                  className="landing-proof-card"
+                  withBorder
+                  radius="md"
+                  p="sm"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text size="xl" fw={700} c="white">4</Text>
                   <Text size="xs" tt="uppercase" fw={700} c="dark.2" mt={4}>
                     Variants
                   </Text>
                 </Paper>
-                <Paper className="landing-proof-card" withBorder radius="md" p="lg" ta="center">
-                  <Text size="xl" fw={700} c="white">=12</Text>
+                <IconEqual size={20} stroke={2.5} color="var(--mantine-color-dark-2)" />
+                <Paper
+                  className="landing-proof-card"
+                  withBorder
+                  radius="md"
+                  p="sm"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text size="xl" fw={700} c="white">12</Text>
                   <Text size="xs" tt="uppercase" fw={700} c="dark.2" mt={4}>
                     Ads
                   </Text>
                 </Paper>
-              </SimpleGrid>
+              </Group>
             </Stack>
 
             <Image
