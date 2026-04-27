@@ -176,6 +176,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                     </Unauthenticated>
                     <Authenticated>
                       <BillingSync />
+                      <NavLink to="/account/brand">Brand</NavLink>
                       <NavLink to="/account/billing">Billing</NavLink>
                       <UserButton
                         appearance={{
@@ -226,6 +227,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               <MobileNavLink to="/pricing" onClick={closeMobileNav}>Pricing</MobileNavLink>
               <MobileNavLink to="/studio" onClick={closeMobileNav}>Studio</MobileNavLink>
               <MobileNavLink to="/admin" onClick={closeMobileNav}>Admin</MobileNavLink>
+              <MobileNavLink to="/account/brand" onClick={closeMobileNav}>Brand</MobileNavLink>
               <MobileNavLink to="/account/billing" onClick={closeMobileNav}>Billing</MobileNavLink>
               <Divider my="sm" color="dark.5" />
               <Text size="xs" c="dark.2" px="md">
