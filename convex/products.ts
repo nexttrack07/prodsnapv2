@@ -232,6 +232,50 @@ export const markProductFailed = internalMutation({
   },
 })
 
+/**
+ * Creates a product from a URL import. Skips public-mutation auth (the import
+ * action runs server-side) but still attributes the product to the importing
+ * user. Mirrors createProduct's setup of product + productImage + scheduling
+ * the analysis pass.
+ */
+export const createProductFromImport = internalMutation({
+  args: {
+    userId: v.string(),
+    name: v.string(),
+    imageUrls: v.array(v.string()),
+    sourceUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, { userId, name, imageUrls, sourceUrl }) => {
+    if (imageUrls.length === 0) {
+      throw new Error('At least one product image is required')
+    }
+    const primaryImageUrl = imageUrls[0]
+    const productId = await ctx.db.insert('products', {
+      name,
+      imageUrl: primaryImageUrl, // back-compat
+      status: 'analyzing',
+      userId,
+    })
+    const imageIds: Id<'productImages'>[] = []
+    for (const url of imageUrls) {
+      const id = await ctx.db.insert('productImages', {
+        productId,
+        userId,
+        imageUrl: url,
+        type: 'original',
+        status: 'ready',
+      })
+      imageIds.push(id)
+    }
+    await ctx.db.patch(productId, { primaryImageId: imageIds[0] })
+    void sourceUrl // unused for now; reserved for provenance/audit
+    await ctx.scheduler.runAfter(0, internal.products.runProductAnalysis, {
+      productId,
+    })
+    return productId
+  },
+})
+
 // ─── Product queries ──────────────────────────────────────────────────────
 
 export const getProduct = query({

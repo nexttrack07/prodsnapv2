@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAction, useQuery as useConvexQuery } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@clerk/react'
 import { notifications } from '@mantine/notifications'
 import { useMediaQuery } from '@mantine/hooks'
@@ -25,9 +25,11 @@ import {
   LoadingOverlay,
   Skeleton,
   Anchor,
+  TextInput,
+  Divider,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
-import { IconUpload, IconPhoto, IconX } from '@tabler/icons-react'
+import { IconUpload, IconPhoto, IconX, IconLink, IconArrowRight } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
@@ -175,6 +177,15 @@ function ProductGridPage() {
               </Dropzone>
             </Group>
           </Group>
+
+          <Divider color="dark.5" my="xs" />
+
+          <UrlImportRow
+            disabled={!!atProductLimit}
+            onComplete={(productId) => {
+              navigate({ to: '/studio/$productId', params: { productId } })
+            }}
+          />
         </Stack>
       </Paper>
 
@@ -186,6 +197,112 @@ function ProductGridPage() {
         <ProductGrid products={products} />
       )}
     </Container>
+  )
+}
+
+function UrlImportRow({
+  disabled,
+  onComplete,
+}: {
+  disabled?: boolean
+  onComplete: (productId: Id<'products'>) => void
+}) {
+  const [url, setUrl] = useState('')
+  const [activeImportId, setActiveImportId] = useState<Id<'urlImports'> | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  const createUrlImport = useConvexMutation(api.urlImports.createUrlImport)
+  const importStatus = useConvexQuery(
+    api.urlImports.getUrlImport,
+    activeImportId ? { importId: activeImportId } : 'skip',
+  )
+
+  useEffect(() => {
+    if (!importStatus || !activeImportId) return
+    if (importStatus.status === 'done' && importStatus.productId) {
+      const productId = importStatus.productId
+      setActiveImportId(null)
+      setUrl('')
+      notifications.show({
+        title: 'Import complete',
+        message: importStatus.brandKitUpdated
+          ? 'Product imported and brand kit updated.'
+          : 'Product imported.',
+        color: 'green',
+      })
+      onComplete(productId)
+    } else if (importStatus.status === 'failed') {
+      setActiveImportId(null)
+      notifications.show({
+        title: 'Import failed',
+        message: importStatus.error ?? 'We couldn\'t import that page.',
+        color: 'red',
+        autoClose: 8000,
+      })
+    }
+  }, [importStatus, activeImportId, onComplete])
+
+  const handleSubmit = async () => {
+    if (!url.trim() || disabled || submitting || activeImportId) return
+    setSubmitting(true)
+    try {
+      const importId = await createUrlImport({ url })
+      setActiveImportId(importId)
+    } catch (err) {
+      notifications.show({
+        title: 'Couldn\'t start import',
+        message: err instanceof Error ? err.message : String(err),
+        color: 'red',
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (activeImportId && importStatus && importStatus.status !== 'done' && importStatus.status !== 'failed') {
+    return (
+      <Group gap="sm" wrap="nowrap">
+        <Loader size="xs" color="brand" />
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Text size="sm" c="white" fw={500} truncate>
+            Importing {importStatus.sourceUrl}
+          </Text>
+          <Text size="xs" c="dark.2">
+            {importStatus.currentStep ?? 'Working on it…'}
+          </Text>
+        </Box>
+      </Group>
+    )
+  }
+
+  return (
+    <Group gap="sm" wrap="nowrap" align="flex-end">
+      <TextInput
+        placeholder="Paste a Shopify or product page URL"
+        leftSection={<IconLink size={14} />}
+        value={url}
+        onChange={(e) => setUrl(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            handleSubmit()
+          }
+        }}
+        disabled={!!disabled || submitting}
+        style={{ flex: 1 }}
+        size="md"
+      />
+      <Button
+        onClick={handleSubmit}
+        loading={submitting}
+        disabled={!!disabled || !url.trim()}
+        rightSection={<IconArrowRight size={14} />}
+        variant="default"
+        size="md"
+      >
+        Import
+      </Button>
+    </Group>
   )
 }
 

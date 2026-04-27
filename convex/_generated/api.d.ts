@@ -15,6 +15,7 @@ import type * as ai from "../ai.js";
 import type * as billing_syncPlan from "../billing/syncPlan.js";
 import type * as billing_webhookHandler from "../billing/webhookHandler.js";
 import type * as board from "../board.js";
+import type * as brandKits from "../brandKits.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as invariant from "../invariant.js";
@@ -35,6 +36,8 @@ import type * as testMocks from "../testMocks.js";
 import type * as testing_cleanup from "../testing/cleanup.js";
 import type * as testing_clerkBackendStub from "../testing/clerkBackendStub.js";
 import type * as testing_seed from "../testing/seed.js";
+import type * as urlImports from "../urlImports.js";
+import type * as urlImportsActions from "../urlImportsActions.js";
 
 import type {
   ApiFromModules,
@@ -50,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   "billing/syncPlan": typeof billing_syncPlan;
   "billing/webhookHandler": typeof billing_webhookHandler;
   board: typeof board;
+  brandKits: typeof brandKits;
   crons: typeof crons;
   http: typeof http;
   invariant: typeof invariant;
@@ -70,6 +74,8 @@ declare const fullApi: ApiFromModules<{
   "testing/cleanup": typeof testing_cleanup;
   "testing/clerkBackendStub": typeof testing_clerkBackendStub;
   "testing/seed": typeof testing_seed;
+  urlImports: typeof urlImports;
+  urlImportsActions: typeof urlImportsActions;
 }>;
 
 /**

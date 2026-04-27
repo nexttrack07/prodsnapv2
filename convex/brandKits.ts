@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { internalMutation, mutation, query } from './_generated/server'
 
 async function requireAuth(
   ctx: { auth: { getUserIdentity: () => Promise<unknown> } },
@@ -66,6 +66,50 @@ export const clearBrandLogo = mutation({
       logoUrl: undefined,
       logoStorageKey: undefined,
       updatedAt: Date.now(),
+    })
+  },
+})
+
+/**
+ * Upsert helper for the URL-import flow. Only patches fields that are provided;
+ * never overwrites existing brand kit values with empty/undefined.
+ */
+export const upsertBrandKitFromImport = internalMutation({
+  args: {
+    userId: v.string(),
+    logoUrl: v.optional(v.string()),
+    logoStorageKey: v.optional(v.string()),
+    colors: v.optional(v.array(v.string())),
+    primaryFont: v.optional(v.string()),
+    voice: v.optional(v.string()),
+    tagline: v.optional(v.string()),
+    websiteUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, { userId, ...incoming }) => {
+    const existing = await ctx.db
+      .query('brandKits')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .first()
+
+    const cleaned: Record<string, unknown> = {}
+    if (incoming.logoUrl) cleaned.logoUrl = incoming.logoUrl
+    if (incoming.logoStorageKey) cleaned.logoStorageKey = incoming.logoStorageKey
+    if (incoming.colors && incoming.colors.length > 0) cleaned.colors = incoming.colors
+    if (incoming.primaryFont) cleaned.primaryFont = incoming.primaryFont
+    if (incoming.voice) cleaned.voice = incoming.voice
+    if (incoming.tagline) cleaned.tagline = incoming.tagline
+    if (incoming.websiteUrl) cleaned.websiteUrl = incoming.websiteUrl
+
+    const now = Date.now()
+    if (existing) {
+      if (Object.keys(cleaned).length === 0) return existing._id
+      await ctx.db.patch(existing._id, { ...cleaned, updatedAt: now })
+      return existing._id
+    }
+    return await ctx.db.insert('brandKits', {
+      userId,
+      ...cleaned,
+      updatedAt: now,
     })
   },
 })
