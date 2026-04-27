@@ -36,6 +36,7 @@ import {
   Skeleton,
   Alert,
   Select,
+  Accordion,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -59,6 +60,7 @@ import {
   IconLoader2,
   IconAlertTriangle,
   IconBolt,
+  IconLayoutGrid,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -88,6 +90,12 @@ interface GenerationData {
   aspectRatio?: string
   mode?: 'exact' | 'remix' | 'variation'
   templateSnapshot?: { name?: string; aspectRatio?: string }
+  adCopy?: {
+    headlines: string[]
+    primaryTexts: string[]
+    ctas: string[]
+    generatedAt: number
+  }
 }
 
 const GENERATION_TIMEOUT_MS = 90_000
@@ -137,9 +145,16 @@ async function downloadFile(url: string, fileBaseName: string) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
 }
 
+type TemplateFilters = {
+  productCategory?: string | null
+  imageStyle?: string | null
+  setting?: string | null
+}
+
 function ProductWorkspacePage() {
   const { productId } = Route.useParams()
   const [view, setView] = useState<View>('gallery')
+  const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
 
   const { data: product, isLoading: productLoading } = useQuery(
     convexQuery(api.products.getProductWithStats, { productId: productId as Id<'products'> }),
@@ -254,6 +269,10 @@ function ProductWorkspacePage() {
         <MarketingAnalysisPanel
           product={product}
           productId={productId as Id<'products'>}
+          onExploreAngle={(filters) => {
+            setInitialFilters(filters)
+            setView('generate')
+          }}
         />
       )}
 
@@ -277,6 +296,7 @@ function ProductWorkspacePage() {
           onBack={() => setView('gallery')}
           onComplete={() => setView('gallery')}
           creditsExhausted={creditsExhausted}
+          initialFilters={initialFilters}
         />
       )}
     </Container>
@@ -468,15 +488,10 @@ function ProductHeader({
   )
 }
 
-type AdCopyResult = {
-  headlines: string[]
-  primaryTexts: string[]
-  ctas: string[]
-}
-
 function MarketingAnalysisPanel({
   product,
   productId,
+  onExploreAngle,
 }: {
   product: {
     status: 'analyzing' | 'ready' | 'failed'
@@ -486,26 +501,24 @@ function MarketingAnalysisPanel({
       description: string
       hook: string
       suggestedAdStyle: string
+      tags?: {
+        productCategory?: string
+        imageStyle?: string
+        setting?: string
+        primaryColor?: string
+      }
     }>
   }
   productId: Id<'products'>
+  onExploreAngle: (filters: TemplateFilters) => void
 }) {
-  const generateAdCopy = useAction(api.adCopy.generateAdCopy)
   const submitAngle = useConvexMutation(api.angleGenerations.submitAngleGeneration)
-  const [copyState, setCopyState] = useState<{
-    angleIndex: number
-    angleTitle: string
-    loading: boolean
-    error?: string
-    result?: AdCopyResult
-  } | null>(null)
   const [angleGenState, setAngleGenState] = useState<{
     angleIndex: number
     angleTitle: string
   } | null>(null)
 
   useEffect(() => {
-    setCopyState(null)
     setAngleGenState(null)
   }, [productId])
 
@@ -526,92 +539,103 @@ function MarketingAnalysisPanel({
     return null
   }
 
-  const handleWriteCopy = async (angleIndex: number, angleTitle: string) => {
-    setCopyState({ angleIndex, angleTitle, loading: true })
-    try {
-      const result = await generateAdCopy({ productId, angleIndex })
-      setCopyState({ angleIndex, angleTitle, loading: false, result })
-    } catch (err) {
-      setCopyState({
-        angleIndex,
-        angleTitle,
-        loading: false,
-        error: err instanceof Error ? err.message : String(err),
-      })
-    }
-  }
+  const angleCount = product.marketingAngles.length
 
   return (
     <>
-      <Paper withBorder radius="md" p="lg" mb="md">
-        <Stack gap="md">
-          <Box>
-            <Text size="xs" tt="uppercase" fw={700} c="dark.2">
-              Marketing analysis
-            </Text>
-            {product.valueProposition && (
-              <Text mt="xs" size="md" fw={600} c="white">
-                {product.valueProposition}
-              </Text>
-            )}
-          </Box>
-
-          <Stack gap="sm">
-            {product.marketingAngles.map((angle, index) => (
-              <Paper
-                key={`${angle.title}-${index}`}
-                withBorder
-                radius="md"
-                p="md"
-                style={{ background: 'rgba(255,255,255,0.02)' }}
-              >
-                <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
-                  <Box style={{ flex: 1, minWidth: 200 }}>
-                    <Group gap="sm" align="center">
-                      <Text size="sm" fw={700} c="white">
-                        {angle.title}
+      <Accordion
+        variant="separated"
+        chevronPosition="right"
+        defaultValue={null}
+        mb="md"
+        styles={{
+          item: {
+            borderColor: 'var(--mantine-color-dark-5)',
+            backgroundColor: 'var(--mantine-color-dark-8)',
+          },
+        }}
+      >
+        <Accordion.Item value="analysis">
+          <Accordion.Control>
+            <Group gap="sm" wrap="nowrap">
+              <Badge size="sm" variant="light" color="brand" radius="sm">
+                Marketing analysis
+              </Badge>
+              {product.valueProposition && (
+                <Text size="sm" fw={600} c="white" lineClamp={1} style={{ flex: 1 }}>
+                  {product.valueProposition}
+                </Text>
+              )}
+              <Badge size="xs" variant="outline" color="gray" radius="sm">
+                {angleCount} angle{angleCount !== 1 ? 's' : ''}
+              </Badge>
+            </Group>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="sm">
+              {product.marketingAngles.map((angle, index) => (
+                <Paper
+                  key={`${angle.title}-${index}`}
+                  withBorder
+                  radius="md"
+                  p="md"
+                  style={{ background: 'rgba(255,255,255,0.02)' }}
+                >
+                  <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+                    <Box style={{ flex: 1, minWidth: 200 }}>
+                      <Group gap="sm" align="center">
+                        <Text size="sm" fw={700} c="white">
+                          {angle.title}
+                        </Text>
+                        <Badge size="xs" color="teal" variant="light" radius="sm">
+                          {angle.suggestedAdStyle}
+                        </Badge>
+                      </Group>
+                      <Text mt={6} size="sm" c="dark.1">
+                        {angle.description}
                       </Text>
-                      <Badge size="xs" color="teal" variant="light" radius="sm">
-                        {angle.suggestedAdStyle}
-                      </Badge>
-                    </Group>
-                    <Text mt={6} size="sm" c="dark.1">
-                      {angle.description}
-                    </Text>
-                    <Text mt="xs" size="sm" c="dark.0" fs="italic">
-                      “{angle.hook}”
-                    </Text>
-                  </Box>
-                  <Stack gap={6}>
-                    <Button
-                      size="xs"
-                      variant="light"
-                      color="brand"
-                      leftSection={<IconSparkles size={12} />}
-                      onClick={() =>
-                        setAngleGenState({ angleIndex: index, angleTitle: angle.title })
-                      }
-                    >
-                      Generate visuals
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="default"
-                      leftSection={<IconAlignLeft size={12} />}
-                      onClick={() => handleWriteCopy(index, angle.title)}
-                      loading={copyState?.angleIndex === index && copyState.loading}
-                    >
-                      Write copy
-                    </Button>
-                  </Stack>
-                </Group>
-              </Paper>
-            ))}
-          </Stack>
-        </Stack>
-      </Paper>
+                      <Text mt="xs" size="sm" c="dark.0" fs="italic">
+                        "{angle.hook}"
+                      </Text>
+                    </Box>
+                    <Stack gap={6}>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="brand"
+                        leftSection={<IconSparkles size={12} />}
+                        onClick={() =>
+                          setAngleGenState({ angleIndex: index, angleTitle: angle.title })
+                        }
+                      >
+                        Generate visuals
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="default"
+                        leftSection={<IconLayoutGrid size={12} />}
+                        onClick={() => {
+                          const filters: TemplateFilters = angle.tags
+                            ? {
+                                productCategory: angle.tags.productCategory,
+                                imageStyle: angle.tags.imageStyle,
+                                setting: angle.tags.setting,
+                              }
+                            : {}
+                          onExploreAngle(filters)
+                        }}
+                      >
+                        Explore templates
+                      </Button>
+                    </Stack>
+                  </Group>
+                </Paper>
+              ))}
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
 
-      <AdCopyModal state={copyState} onClose={() => setCopyState(null)} />
       <GenerateFromAngleModal
         state={angleGenState}
         onClose={() => setAngleGenState(null)}
@@ -720,78 +744,6 @@ function GenerateFromAngleModal({
           </Button>
         </Group>
       </Stack>
-    </Modal>
-  )
-}
-
-function AdCopyModal({
-  state,
-  onClose,
-}: {
-  state: {
-    angleIndex: number
-    angleTitle: string
-    loading: boolean
-    error?: string
-    result?: AdCopyResult
-  } | null
-  onClose: () => void
-}) {
-  const opened = !!state && (state.loading || !!state.result || !!state.error)
-
-  const copyToClipboard = (value: string, label: string) => {
-    navigator.clipboard
-      .writeText(value)
-      .then(() =>
-        notifications.show({ title: 'Copied', message: label, color: 'green', autoClose: 1500 }),
-      )
-      .catch(() =>
-        notifications.show({ title: 'Copy failed', message: 'Try selecting and copying manually.', color: 'red' }),
-      )
-  }
-
-  return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={state ? `Ad copy for "${state.angleTitle}"` : 'Ad copy'}
-      size="lg"
-      radius="md"
-      centered
-    >
-      {state?.loading && (
-        <Group gap="sm" py="md" justify="center">
-          <Loader size="sm" />
-          <Text size="sm" c="dark.1">
-            Drafting headlines, body copy, and CTAs…
-          </Text>
-        </Group>
-      )}
-      {state?.error && (
-        <Alert color="red" variant="light" icon={<IconAlertTriangle size={16} />}>
-          {state.error}
-        </Alert>
-      )}
-      {state?.result && (
-        <Stack gap="md">
-          <CopySection
-            label="Headlines"
-            items={state.result.headlines}
-            onCopy={copyToClipboard}
-          />
-          <CopySection
-            label="Primary text"
-            items={state.result.primaryTexts}
-            onCopy={copyToClipboard}
-          />
-          <CopySection
-            label="CTAs"
-            items={state.result.ctas}
-            onCopy={copyToClipboard}
-            inline
-          />
-        </Stack>
-      )}
     </Modal>
   )
 }
@@ -1377,6 +1329,37 @@ function ImageCard({
   )
 }
 
+function LightboxCopySection({
+  adCopy,
+}: {
+  adCopy: { headlines: string[]; primaryTexts: string[]; ctas: string[] }
+}) {
+  const copyToClipboard = (value: string, label: string) => {
+    navigator.clipboard
+      .writeText(value)
+      .then(() =>
+        notifications.show({ title: 'Copied', message: label, color: 'green', autoClose: 1500 }),
+      )
+      .catch(() =>
+        notifications.show({ title: 'Copy failed', message: 'Try selecting and copying manually.', color: 'red' }),
+      )
+  }
+
+  return (
+    <Stack gap="md">
+      {adCopy.headlines.length > 0 && (
+        <CopySection label="Headlines" items={adCopy.headlines} onCopy={copyToClipboard} />
+      )}
+      {adCopy.primaryTexts.length > 0 && (
+        <CopySection label="Primary text" items={adCopy.primaryTexts} onCopy={copyToClipboard} />
+      )}
+      {adCopy.ctas.length > 0 && (
+        <CopySection label="CTAs" items={adCopy.ctas} onCopy={copyToClipboard} inline />
+      )}
+    </Stack>
+  )
+}
+
 function GalleryView({
   product,
   productId,
@@ -1401,7 +1384,7 @@ function GalleryView({
   creditsExhausted: boolean
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightboxGen, setLightboxGen] = useState<GenerationData | null>(null)
   const [variationTarget, setVariationTarget] = useState<{ _id: Id<'templateGenerations'>; outputUrl: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Id<'templateGenerations'> | null>(null)
   const [retryingId, setRetryingId] = useState<Id<'templateGenerations'> | null>(null)
@@ -1410,7 +1393,7 @@ function GalleryView({
   // Keyboard shortcuts
   useHotkeys([
     ['Escape', () => {
-      if (lightboxUrl) setLightboxUrl(null)
+      if (lightboxGen) setLightboxGen(null)
       else if (variationTarget) setVariationTarget(null)
       else if (deleteTarget) setDeleteTarget(null)
     }],
@@ -1510,7 +1493,7 @@ function GalleryView({
                 key={gen._id}
                 generation={gen}
                 title={`${product.name} #${completedGenerations.length + index + 1}`}
-                onExpand={setLightboxUrl}
+                onExpand={setLightboxGen}
                 onDelete={handleDelete}
                 onCreateVariations={setVariationTarget}
                 onRetry={handleRetry}
@@ -1581,7 +1564,7 @@ function GalleryView({
               key={gen._id}
               generation={gen}
               title={`${product.name} #${index + 1}`}
-              onExpand={setLightboxUrl}
+              onExpand={setLightboxGen}
               onDelete={handleDelete}
               onCreateVariations={setVariationTarget}
               onRetry={handleRetry}
@@ -1593,8 +1576,8 @@ function GalleryView({
 
       {/* Lightbox Modal */}
       <Modal
-        opened={!!lightboxUrl}
-        onClose={() => setLightboxUrl(null)}
+        opened={!!lightboxGen}
+        onClose={() => setLightboxGen(null)}
         fullScreen
         withCloseButton={false}
         padding={0}
@@ -1620,17 +1603,24 @@ function GalleryView({
           size="lg"
           variant="subtle"
           c="white"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightboxGen(null)}
           aria-label="Close image viewer"
         />
-        {lightboxUrl && (
-          <Image
-            src={lightboxUrl}
-            alt="Full size generated ad image"
-            fit="contain"
-            maw="90vw"
-            mah="90vh"
-          />
+        {lightboxGen?.outputUrl && (
+          <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--mantine-spacing-lg)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <Image
+              src={lightboxGen.outputUrl}
+              alt="Full size generated ad image"
+              fit="contain"
+              maw="80vw"
+              mah="70vh"
+            />
+            {lightboxGen.adCopy && (
+              <Box maw={560} w="100%" px="md">
+                <LightboxCopySection adCopy={lightboxGen.adCopy} />
+              </Box>
+            )}
+          </Box>
         )}
       </Modal>
 
@@ -1894,7 +1884,7 @@ function GenerationCard({
 }: {
   generation: GenerationData
   title: string
-  onExpand: (url: string) => void
+  onExpand: (generation: GenerationData) => void
   onDelete: (id: Id<'templateGenerations'>) => void
   onCreateVariations: (generation: { _id: Id<'templateGenerations'>; outputUrl: string }) => void
   onRetry: (id: Id<'templateGenerations'>) => void
@@ -1967,6 +1957,7 @@ function GenerationCard({
     e.stopPropagation()
     if (!generation.outputUrl) return
 
+    // TODO: bundle image + copy.txt into a zip when JSZip is added as a dependency
     setIsDownloading(true)
     try {
       await downloadFile(generation.outputUrl, `${title}-${generation.mode || 'generation'}`)
@@ -2008,7 +1999,7 @@ function GenerationCard({
         {isComplete && generation.outputUrl && (
           <Box
             style={{ cursor: 'pointer' }}
-            onClick={() => onExpand(generation.outputUrl!)}
+            onClick={() => onExpand(generation)}
           >
             <Image
               src={generation.outputUrl}
@@ -2172,6 +2163,31 @@ function GenerationCard({
         </Group>
       )}
 
+      {/* Ad copy preview — first variant of each field */}
+      {isComplete && (
+        generation.adCopy ? (
+          <Box mt="xs" px="xs" pb="xs" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
+            {generation.adCopy.headlines[0] && (
+              <Text size="sm" fw={600} c="white" lineClamp={2}>
+                {generation.adCopy.headlines[0]}
+              </Text>
+            )}
+            {generation.adCopy.primaryTexts[0] && (
+              <Text size="xs" c="dark.1" mt={4} lineClamp={2}>
+                {generation.adCopy.primaryTexts[0]}
+              </Text>
+            )}
+            {generation.adCopy.ctas[0] && (
+              <Badge size="xs" variant="light" color="brand" mt={6}>
+                {generation.adCopy.ctas[0]}
+              </Badge>
+            )}
+          </Box>
+        ) : (
+          <Text size="xs" c="dark.3" mt="xs" pl="xs" pb="xs">Drafting copy…</Text>
+        )
+      )}
+
     </Card>
   )
 }
@@ -2183,6 +2199,7 @@ function GenerateWizard({
   onBack,
   onComplete,
   creditsExhausted,
+  initialFilters,
 }: {
   productId: Id<'products'>
   product: { name: string }
@@ -2190,6 +2207,7 @@ function GenerateWizard({
   onBack: () => void
   onComplete: () => void
   creditsExhausted: boolean
+  initialFilters?: TemplateFilters
 }) {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [mode, setMode] = useState<Mode>('exact')
@@ -2199,11 +2217,11 @@ function GenerateWizard({
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Template browse filters
+  // Template browse filters — seeded from initialFilters on first render
   const [search, setSearch] = useState('')
-  const [filterCategory, setFilterCategory] = useState<string | null>(null)
-  const [filterImageStyle, setFilterImageStyle] = useState<string | null>(null)
-  const [filterSetting, setFilterSetting] = useState<string | null>(null)
+  const [filterCategory, setFilterCategory] = useState<string | null>(initialFilters?.productCategory ?? null)
+  const [filterImageStyle, setFilterImageStyle] = useState<string | null>(initialFilters?.imageStyle ?? null)
+  const [filterSetting, setFilterSetting] = useState<string | null>(initialFilters?.setting ?? null)
   const [filterAspectRatio, setFilterAspectRatio] = useState<string | null>(null)
   const { data: filterOptions } = useQuery(
     convexQuery(api.products.listTemplateFilterOptions, {}),
