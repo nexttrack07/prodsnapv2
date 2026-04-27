@@ -375,6 +375,20 @@ export const generateFromTemplateWorkflow = workflow.define({
         runId: gen.runId,
       })
     }
+    // Generate ad copy alongside the image (best-effort — failures don't block the visual).
+    try {
+      const copy = await step.runAction(internal.ai.composeAdCopyForGeneration, { generationId })
+      if (copy) {
+        await step.runMutation(internal.studio.saveAdCopyOnGeneration, {
+          generationId,
+          headlines: copy.headlines,
+          primaryTexts: copy.primaryTexts,
+          ctas: copy.ctas,
+        })
+      }
+    } catch (err) {
+      console.warn('Ad copy generation failed for', generationId, err)
+    }
   },
 })
 
@@ -416,6 +430,20 @@ export const generateFromAngleWorkflow = workflow.define({
         generationId,
         error: err instanceof Error ? err.message : String(err),
       })
+    }
+    // Generate ad copy alongside the image (best-effort — failures don't block the visual).
+    try {
+      const copy = await step.runAction(internal.ai.composeAdCopyForGeneration, { generationId })
+      if (copy) {
+        await step.runMutation(internal.studio.saveAdCopyOnGeneration, {
+          generationId,
+          headlines: copy.headlines,
+          primaryTexts: copy.primaryTexts,
+          ctas: copy.ctas,
+        })
+      }
+    } catch (err) {
+      console.warn('Ad copy generation failed for', generationId, err)
     }
   },
 })
@@ -460,6 +488,20 @@ export const generateVariationWorkflow = workflow.define({
         generationId,
         error: err instanceof Error ? err.message : String(err),
       })
+    }
+    // Generate ad copy alongside the image (best-effort — failures don't block the visual).
+    try {
+      const copy = await step.runAction(internal.ai.composeAdCopyForGeneration, { generationId })
+      if (copy) {
+        await step.runMutation(internal.studio.saveAdCopyOnGeneration, {
+          generationId,
+          headlines: copy.headlines,
+          primaryTexts: copy.primaryTexts,
+          ctas: copy.ctas,
+        })
+      }
+    } catch (err) {
+      console.warn('Ad copy generation failed for', generationId, err)
     }
   },
 })
@@ -551,6 +593,20 @@ export const markGenerationFailed = internalMutation({
       error,
       currentStep: undefined,
       finishedAt: Date.now(),
+    })
+  },
+})
+
+export const saveAdCopyOnGeneration = internalMutation({
+  args: {
+    generationId: v.id('templateGenerations'),
+    headlines: v.array(v.string()),
+    primaryTexts: v.array(v.string()),
+    ctas: v.array(v.string()),
+  },
+  handler: async (ctx, { generationId, headlines, primaryTexts, ctas }) => {
+    await ctx.db.patch(generationId, {
+      adCopy: { headlines, primaryTexts, ctas, generatedAt: Date.now() },
     })
   },
 })

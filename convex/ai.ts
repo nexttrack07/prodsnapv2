@@ -914,6 +914,67 @@ export const enhancePrompt = action({
   },
 })
 
+// ─── Ad copy wrapper for generation rows ─────────────────────────────────
+/**
+ * Fetches generation context and calls generateAdCopyText.
+ * Returns {headlines, primaryTexts, ctas}, or null if context is insufficient.
+ */
+export const composeAdCopyForGeneration = internalAction({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }): Promise<{
+    headlines: string[]
+    primaryTexts: string[]
+    ctas: string[]
+  } | null> => {
+    type GenCtx = {
+      generation: {
+        angleSeed?: { title: string; description: string; hook: string; suggestedAdStyle: string }
+        userId?: string
+      }
+      productContext: {
+        category?: string
+        productDescription?: string
+        targetAudience?: string
+        valueProposition?: string
+        name?: string
+      } | null
+    }
+    const ctxData = (await ctx.runQuery(
+      internal.studio.getGenerationContextInternal,
+      { generationId },
+    )) as GenCtx | null
+    if (!ctxData?.generation) return null
+    const { generation, productContext: prodCtx } = ctxData
+    if (!prodCtx) return null
+
+    let angle: { title: string; description: string; hook: string; suggestedAdStyle: string }
+    if (generation.angleSeed) {
+      angle = generation.angleSeed
+    } else {
+      angle = {
+        title: prodCtx.category ?? 'Product ad',
+        description: prodCtx.productDescription ?? '',
+        hook: '',
+        suggestedAdStyle: 'product hero',
+      }
+    }
+
+    const brandKit = (generation.userId
+      ? await ctx.runQuery(internal.brandKits.getBrandKitInternal, { userId: generation.userId })
+      : null) as { voice?: string; tagline?: string } | null
+
+    return await ctx.runAction(internal.ai.generateAdCopyText, {
+      productName: prodCtx.name ?? 'Product',
+      productDescription: prodCtx.productDescription,
+      targetAudience: prodCtx.targetAudience,
+      valueProposition: prodCtx.valueProposition,
+      angle,
+      brandVoice: brandKit?.voice,
+      brandTagline: brandKit?.tagline,
+    })
+  },
+})
+
 // ─── Background Removal ───────────────────────────────────────────────────
 
 /**
