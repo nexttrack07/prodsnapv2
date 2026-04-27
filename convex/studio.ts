@@ -606,6 +606,8 @@ export const retryGeneration = mutation({
     }
     if (gen.variationSource) {
       await workflow.start(ctx, internal.studio.generateVariationWorkflow, { generationId })
+    } else if (gen.mode === 'angle') {
+      await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, { generationId })
     } else {
       await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, { generationId })
     }

@@ -140,6 +140,68 @@ export async function requireProductLimit(
   return billing
 }
 
+/**
+ * Like `requireProductLimit` but accepts an explicit `userId` instead of
+ * reading from `ctx.auth`. Use this from internal mutations that run without
+ * an auth context (e.g. `createProductFromImport`).
+ */
+export async function requireProductLimitForUser(
+  ctx: MutationCtx,
+  userId: string,
+  mutationName: string,
+): Promise<void> {
+  if (!isBillingEnabled()) return
+
+  const row = await ctx.db
+    .query('userPlans')
+    .withIndex('by_userId', (q) => q.eq('userId', userId))
+    .unique()
+
+  if (!row || !row.plan) {
+    // No plan row → treat as unknown plan and deny.
+    await ctx.db.insert('billingEvents', {
+      userId,
+      mutationName,
+      capability: 'product-limit',
+      allowed: false,
+      timestamp: Date.now(),
+      context: 'enforcement',
+    })
+    throw new Error('No active subscription — choose a plan at /pricing')
+  }
+
+  const plan = PLAN_CONFIG[row.plan]
+  if (!plan) {
+    // Unknown plan slug — allow through (forward-compat).
+    return
+  }
+  const limit = plan.productLimit
+  if (limit === Infinity) return
+
+  const existing = await ctx.db
+    .query('products')
+    .withIndex('by_userId_archived', (q) =>
+      q.eq('userId', userId).eq('archivedAt', undefined),
+    )
+    .collect()
+
+  if (existing.length >= limit) {
+    await ctx.db.insert('billingEvents', {
+      userId,
+      mutationName,
+      capability: 'product-limit',
+      allowed: false,
+      claimedPlan: row.plan,
+      timestamp: Date.now(),
+      context: 'enforcement',
+    })
+    throw new Error(
+      `You have ${existing.length} products but your plan allows ${limit}. ` +
+        `Archive products or upgrade.`,
+    )
+  }
+}
+
 // ─── Monthly credit quota ─────────────────────────────────────────────────
 
 /**

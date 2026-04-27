@@ -8,6 +8,13 @@ import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import { internal } from './_generated/api'
 import { workflow } from './studio'
+import { enforceGenerationRateLimit } from './products'
+import {
+  CAPABILITIES,
+  recordCreditUse,
+  requireCapability,
+  requireCredit,
+} from './lib/billing'
 
 const aspectRatio = v.union(
   v.literal('1:1'),
@@ -27,6 +34,8 @@ export const submitAngleGeneration = mutation({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
+
+    await enforceGenerationRateLimit(ctx, userId, 'submitAngleGeneration')
 
     if (count < 1 || count > 4) {
       throw new Error('Count must be 1-4')
@@ -55,6 +64,13 @@ export const submitAngleGeneration = mutation({
     if (!primaryImage) throw new Error('Primary image not found')
     const productImageUrl = primaryImage.imageUrl
 
+    // Billing gates: capability, batch guard, credit reservation.
+    const billing = await requireCapability(ctx, CAPABILITIES.GENERATE_VARIATIONS, 'submitAngleGeneration')
+    if (count > 2) {
+      await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitAngleGeneration')
+    }
+    await requireCredit(ctx, 'submitAngleGeneration', count)
+
     // Insert one row per requested variation, then start a workflow per row.
     for (let i = 0; i < count; i++) {
       const generationId = await ctx.db.insert('templateGenerations', {
@@ -75,6 +91,7 @@ export const submitAngleGeneration = mutation({
         status: 'queued',
         model: model ?? 'nano-banana-2',
       })
+      await recordCreditUse(ctx, billing, 'submitAngleGeneration', CAPABILITIES.GENERATE_VARIATIONS)
       await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, {
         generationId,
       })

@@ -18,6 +18,7 @@ import {
   requireCapability,
   requireCredit,
   requireProductLimit,
+  requireProductLimitForUser,
 } from './lib/billing'
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ const RATE_LIMIT_MAX_CALLS = 20
  *
  * For higher-scale throttling see the Convex Rate Limiter component — future work.
  */
-async function enforceGenerationRateLimit(
+export async function enforceGenerationRateLimit(
   ctx: MutationCtx,
   userId: string,
   mutationName: string,
@@ -249,6 +250,7 @@ export const createProductFromImport = internalMutation({
     if (imageUrls.length === 0) {
       throw new Error('At least one product image is required')
     }
+    await requireProductLimitForUser(ctx, userId, 'createProductFromImport')
     const primaryImageUrl = imageUrls[0]
     const productId = await ctx.db.insert('products', {
       name,
