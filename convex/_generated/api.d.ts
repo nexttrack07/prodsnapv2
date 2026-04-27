@@ -13,6 +13,7 @@ import type * as admin_audit from "../admin/audit.js";
 import type * as admin_playground from "../admin/playground.js";
 import type * as admin_playgroundActions from "../admin/playgroundActions.js";
 import type * as ai from "../ai.js";
+import type * as angleGenerations from "../angleGenerations.js";
 import type * as billing_syncPlan from "../billing/syncPlan.js";
 import type * as billing_webhookHandler from "../billing/webhookHandler.js";
 import type * as board from "../board.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   "admin/playground": typeof admin_playground;
   "admin/playgroundActions": typeof admin_playgroundActions;
   ai: typeof ai;
+  angleGenerations: typeof angleGenerations;
   "billing/syncPlan": typeof billing_syncPlan;
   "billing/webhookHandler": typeof billing_webhookHandler;
   board: typeof board;

@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { internalMutation, mutation, query } from './_generated/server'
+import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 
 async function requireAuth(
   ctx: { auth: { getUserIdentity: () => Promise<unknown> } },
@@ -20,6 +20,16 @@ export const getBrandKit = query({
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .first()
     return kit
+  },
+})
+
+export const getBrandKitInternal = internalQuery({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    return await ctx.db
+      .query('brandKits')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .first()
   },
 })
 

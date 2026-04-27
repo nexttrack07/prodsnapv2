@@ -578,6 +578,111 @@ export const generateFromTemplate = internalAction({
   },
 })
 
+// ─── From-angle composition (no template) ────────────────────────────────
+/**
+ * Composes a nano-banana prompt for a fresh ad scene seeded by a marketing
+ * angle (no source template). Looks at the user's product image, the angle's
+ * positioning + hook, and the user's brand kit if any.
+ */
+export const composeFromAnglePrompt = internalAction({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }): Promise<{ prompt: string }> => {
+    if (isTestMode()) {
+      await mockDelay()
+      return { prompt: mockComposedPrompt }
+    }
+    const ctxData = await ctx.runQuery(internal.studio.getGenerationContextInternal, {
+      generationId,
+    })
+    if (!ctxData?.generation) throw new Error('Generation not found')
+    const { generation, productContext: prodCtx } = ctxData
+    if (!prodCtx) throw new Error('Product context not found for generation')
+    if (!generation.angleSeed) throw new Error('angleSeed missing — composeFromAnglePrompt is angle-driven only')
+
+    const angle = generation.angleSeed
+    const userId = generation.userId
+    const brandKit = userId
+      ? await ctx.runQuery(internal.brandKits.getBrandKitInternal, { userId })
+      : null
+
+    const prodLines: string[] = []
+    if (prodCtx.category) prodLines.push(`Product category: ${prodCtx.category}`)
+    if (prodCtx.productDescription) prodLines.push(`Product description: ${prodCtx.productDescription}`)
+    if (prodCtx.targetAudience) prodLines.push(`Target audience: ${prodCtx.targetAudience}`)
+
+    const brandLines: string[] = []
+    if (brandKit?.colors?.length) brandLines.push(`Brand colors: ${brandKit.colors.join(', ')}`)
+    if (brandKit?.primaryFont) brandLines.push(`Brand font feel: ${brandKit.primaryFont}`)
+    if (brandKit?.tagline) brandLines.push(`Brand tagline: ${brandKit.tagline}`)
+    if (brandKit?.voice) brandLines.push(`Brand voice: ${brandKit.voice}`)
+
+    const userText = [
+      'IMAGE = the user\'s product photo on a plain background.',
+      'TASK: design a single Facebook ad image (no template, no reference scene) that delivers the angle below.',
+      '',
+      prodLines.length ? prodLines.join('\n') : '(no product analysis available)',
+      '',
+      `Marketing angle: ${angle.title}`,
+      `Why this angle works: ${angle.description}`,
+      `Sample hook: "${angle.hook}"`,
+      `Suggested ad style: ${angle.suggestedAdStyle}`,
+      '',
+      brandLines.length ? brandLines.join('\n') : '(no brand kit set — use a clean, modern look)',
+      '',
+      'Compose the nano-banana prompt now. Place the user\'s real product (from the IMAGE) front-and-center. Choose a background, lighting, and supporting graphics that fit the angle and brand. Include a short headline rendered in-image (8 words or fewer) consistent with the angle\'s hook. Return ONLY the prompt text.',
+    ].join('\n')
+
+    const text = await callVision({
+      imageUrls: [generation.productImageUrl],
+      prompt: userText,
+      systemPrompt:
+        'You are an expert ad-image prompt composer. Write nano-banana prompts that produce scroll-stopping Facebook ad images grounded in the user\'s real product photo. Be specific about composition, lighting, palette, and visible text.',
+    })
+
+    const prompt = text.trim()
+    if (!prompt) throw new Error('Composer returned an empty prompt')
+    return { prompt }
+  },
+})
+
+/**
+ * Calls nano-banana with [productImage] only and the dynamic prompt the
+ * angle composer wrote. Uploads the result to R2 and returns the URL.
+ */
+export const generateFromAngle = internalAction({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (
+    ctx,
+    { generationId },
+  ): Promise<{ outputUrl: string }> => {
+    if (isTestMode()) {
+      await mockDelay(500)
+      return { outputUrl: mockGeneratedImageUrl }
+    }
+
+    const ctxData = await ctx.runQuery(internal.studio.getGenerationContextInternal, {
+      generationId,
+    })
+    if (!ctxData?.generation) throw new Error('Generation not found')
+    const { generation } = ctxData
+    if (!generation.dynamicPrompt) {
+      throw new Error('Dynamic prompt missing — composer step did not complete')
+    }
+    const aspectRatio = generation.aspectRatio ?? '1:1'
+
+    const { generatedUrl } = await callImageEditModel({
+      model: (generation.model ?? 'nano-banana-2') as ImageEditModel,
+      prompt: generation.dynamicPrompt,
+      imageUrls: [generation.productImageUrl],
+      aspectRatio,
+    })
+
+    const key = `studio/outputs/${generation.productId ?? 'angle'}/${generation.variationIndex}-${nanoid(6)}.png`
+    const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
+    return { outputUrl }
+  },
+})
+
 // ─── Variation generation ─────────────────────────────────────────────────
 
 /**

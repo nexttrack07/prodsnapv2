@@ -379,6 +379,48 @@ export const generateFromTemplateWorkflow = workflow.define({
 })
 
 /**
+ * Workflow for generating ads from a marketing angle (no template).
+ * Same shape as generateFromTemplateWorkflow but uses the angle composer
+ * and the product-only image generation action.
+ */
+export const generateFromAngleWorkflow = workflow.define({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (step, { generationId }) => {
+    const gen = await step.runQuery(internal.studio.getGenerationInternal, { generationId })
+    if (!gen) return
+    await step.runMutation(internal.studio.markGenerationRunning, { generationId })
+    try {
+      await step.runMutation(internal.studio.setGenerationStep, {
+        generationId,
+        currentStep: 'Designing the scene',
+      })
+      const { prompt } = await step.runAction(internal.ai.composeFromAnglePrompt, { generationId })
+      await step.runMutation(internal.studio.saveDynamicPrompt, {
+        generationId,
+        dynamicPrompt: prompt,
+      })
+
+      await step.runMutation(internal.studio.setGenerationStep, {
+        generationId,
+        currentStep: 'Generating',
+      })
+      const { outputUrl } = await step.runAction(internal.ai.generateFromAngle, {
+        generationId,
+      })
+      await step.runMutation(internal.studio.markGenerationComplete, {
+        generationId,
+        outputUrl,
+      })
+    } catch (err) {
+      await step.runMutation(internal.studio.markGenerationFailed, {
+        generationId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  },
+})
+
+/**
  * Workflow for generating variations from an existing generated image.
  * Changes text, icons, and/or colors based on user selection.
  */

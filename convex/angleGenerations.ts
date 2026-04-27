@@ -1,0 +1,85 @@
+/**
+ * From-angle generation: kicks off a batch of templateGenerations seeded by
+ * a marketing angle (no source template). Each row goes through the
+ * generateFromAngleWorkflow and lands in the same gallery as template-driven
+ * generations.
+ */
+import { v } from 'convex/values'
+import { mutation } from './_generated/server'
+import { internal } from './_generated/api'
+import { workflow } from './studio'
+
+const aspectRatio = v.union(
+  v.literal('1:1'),
+  v.literal('4:5'),
+  v.literal('9:16'),
+)
+
+export const submitAngleGeneration = mutation({
+  args: {
+    productId: v.id('products'),
+    angleIndex: v.number(),
+    aspectRatio,
+    count: v.number(),
+    model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
+  },
+  handler: async (ctx, { productId, angleIndex, aspectRatio: ar, count, model }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    const userId = identity.tokenIdentifier
+
+    if (count < 1 || count > 4) {
+      throw new Error('Count must be 1-4')
+    }
+
+    const product = await ctx.db.get(productId)
+    if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to generate for this product')
+    }
+    if (product.status !== 'ready') {
+      throw new Error('Product analysis is not ready yet')
+    }
+    if (!product.marketingAngles || product.marketingAngles.length === 0) {
+      throw new Error('No marketing angles available — re-run analysis first')
+    }
+    if (angleIndex < 0 || angleIndex >= product.marketingAngles.length) {
+      throw new Error('Invalid angle index')
+    }
+    const angle = product.marketingAngles[angleIndex]
+
+    if (!product.primaryImageId) {
+      throw new Error('Product has no primary image set')
+    }
+    const primaryImage = await ctx.db.get(product.primaryImageId)
+    if (!primaryImage) throw new Error('Primary image not found')
+    const productImageUrl = primaryImage.imageUrl
+
+    // Insert one row per requested variation, then start a workflow per row.
+    for (let i = 0; i < count; i++) {
+      const generationId = await ctx.db.insert('templateGenerations', {
+        productId,
+        productImageId: product.primaryImageId,
+        userId,
+        productImageUrl,
+        aspectRatio: ar,
+        mode: 'angle',
+        colorAdapt: false,
+        variationIndex: i,
+        angleSeed: {
+          title: angle.title,
+          description: angle.description,
+          hook: angle.hook,
+          suggestedAdStyle: angle.suggestedAdStyle,
+        },
+        status: 'queued',
+        model: model ?? 'nano-banana-2',
+      })
+      await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, {
+        generationId,
+      })
+    }
+
+    return { ok: true, count }
+  },
+})

@@ -490,12 +490,17 @@ function MarketingAnalysisPanel({
   productId: Id<'products'>
 }) {
   const generateAdCopy = useAction(api.adCopy.generateAdCopy)
+  const submitAngle = useConvexMutation(api.angleGenerations.submitAngleGeneration)
   const [copyState, setCopyState] = useState<{
     angleIndex: number
     angleTitle: string
     loading: boolean
     error?: string
     result?: AdCopyResult
+  } | null>(null)
+  const [angleGenState, setAngleGenState] = useState<{
+    angleIndex: number
+    angleTitle: string
   } | null>(null)
 
   if (product.status === 'analyzing') {
@@ -513,14 +518,6 @@ function MarketingAnalysisPanel({
 
   if (product.status !== 'ready' || !product.marketingAngles?.length) {
     return null
-  }
-
-  const handlePlaceholder = (action: string, angleTitle: string) => {
-    notifications.show({
-      title: 'Coming soon',
-      message: `${action} for "${angleTitle}" — wiring this up next.`,
-      color: 'blue',
-    })
   }
 
   const handleWriteCopy = async (angleIndex: number, angleTitle: string) => {
@@ -585,7 +582,9 @@ function MarketingAnalysisPanel({
                       variant="light"
                       color="brand"
                       leftSection={<IconSparkles size={12} />}
-                      onClick={() => handlePlaceholder('Generate visuals', angle.title)}
+                      onClick={() =>
+                        setAngleGenState({ angleIndex: index, angleTitle: angle.title })
+                      }
                     >
                       Generate visuals
                     </Button>
@@ -607,7 +606,115 @@ function MarketingAnalysisPanel({
       </Paper>
 
       <AdCopyModal state={copyState} onClose={() => setCopyState(null)} />
+      <GenerateFromAngleModal
+        state={angleGenState}
+        onClose={() => setAngleGenState(null)}
+        onSubmit={async ({ aspectRatio, count }) => {
+          if (!angleGenState) return
+          try {
+            await submitAngle({
+              productId,
+              angleIndex: angleGenState.angleIndex,
+              aspectRatio,
+              count,
+            })
+            notifications.show({
+              title: 'Generating',
+              message: `${count} variant${count === 1 ? '' : 's'} for "${angleGenState.angleTitle}". Watch the gallery.`,
+              color: 'green',
+            })
+            setAngleGenState(null)
+          } catch (err) {
+            notifications.show({
+              title: 'Couldn\'t start generation',
+              message: err instanceof Error ? err.message : String(err),
+              color: 'red',
+            })
+          }
+        }}
+      />
     </>
+  )
+}
+
+function GenerateFromAngleModal({
+  state,
+  onClose,
+  onSubmit,
+}: {
+  state: { angleIndex: number; angleTitle: string } | null
+  onClose: () => void
+  onSubmit: (args: { aspectRatio: '1:1' | '4:5' | '9:16'; count: number }) => Promise<void>
+}) {
+  const [aspectRatio, setAspectRatio] = useState<'1:1' | '4:5' | '9:16'>('1:1')
+  const [count, setCount] = useState(2)
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async () => {
+    setSubmitting(true)
+    try {
+      await onSubmit({ aspectRatio, count })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal
+      opened={!!state}
+      onClose={onClose}
+      title={state ? `Generate visuals for "${state.angleTitle}"` : 'Generate from angle'}
+      size="md"
+      radius="md"
+      centered
+    >
+      <Stack gap="md">
+        <Box>
+          <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
+            Aspect ratio
+          </Text>
+          <SegmentedControl
+            fullWidth
+            value={aspectRatio}
+            onChange={(v) => setAspectRatio(v as '1:1' | '4:5' | '9:16')}
+            data={[
+              { label: '1:1', value: '1:1' },
+              { label: '4:5', value: '4:5' },
+              { label: '9:16', value: '9:16' },
+            ]}
+          />
+        </Box>
+        <Box>
+          <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
+            Variations
+          </Text>
+          <SegmentedControl
+            fullWidth
+            value={String(count)}
+            onChange={(v) => setCount(Number(v))}
+            data={[
+              { label: '1', value: '1' },
+              { label: '2', value: '2' },
+              { label: '3', value: '3' },
+              { label: '4', value: '4' },
+            ]}
+          />
+        </Box>
+        <Group justify="flex-end" mt="sm">
+          <Button variant="default" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            color="brand"
+            loading={submitting}
+            onClick={handleSubmit}
+            leftSection={<IconSparkles size={14} />}
+          >
+            Generate {count} variant{count === 1 ? '' : 's'}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }
 
