@@ -290,17 +290,31 @@ const schema = defineSchema({
     userId: v.optional(v.string()), // optional for migration of existing data
     // Legacy run reference (deprecated, optional for migration)
     runId: v.optional(v.id('studioRuns')),
-    templateId: v.id('adTemplates'),
+    // Optional: present for template-driven generations; absent when the
+    // generation seeds from a marketing angle (mode === 'angle').
+    templateId: v.optional(v.id('adTemplates')),
     // Snapshot of inputs at generation time
     productImageUrl: v.string(), // kept for quick access + legacy
-    templateImageUrl: v.string(),
+    templateImageUrl: v.optional(v.string()),
     templateSnapshot: v.optional(v.object({
       name: v.optional(v.string()),
       aspectRatio: v.optional(aspectRatio),
     })),
+    // Snapshot of the seeding marketing angle (only set when mode === 'angle').
+    angleSeed: v.optional(v.object({
+      title: v.string(),
+      description: v.string(),
+      hook: v.string(),
+      suggestedAdStyle: v.string(),
+    })),
     // Generation settings
     aspectRatio: v.optional(aspectRatio), // moved from run to generation
-    mode: v.union(v.literal('exact'), v.literal('remix'), v.literal('variation')),
+    mode: v.union(
+      v.literal('exact'),
+      v.literal('remix'),
+      v.literal('variation'),
+      v.literal('angle'),
+    ),
     colorAdapt: v.boolean(),
     variationIndex: v.number(),
     // For variation mode - reference to source generation

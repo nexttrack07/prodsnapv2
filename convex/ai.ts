@@ -425,9 +425,21 @@ export const composePrompt = internalAction({
     if (!ctxData || !ctxData.generation) {
       throw new Error('Generation not found')
     }
-    const { generation, productContext: prodCtx, template } = ctxData
+    const { generation, productContext: prodCtx } = ctxData
     if (!prodCtx) throw new Error('Product/run context not found for generation')
-    if (!template) throw new Error('Template not found for generation')
+    if (!ctxData.template) throw new Error('Template not found for generation')
+    // Narrow: this code path only runs for template-driven generations, so the
+    // doc returned by getGenerationContextInternal must be an adTemplates row.
+    const template = ctxData.template as {
+      category?: string
+      subcategory?: string
+      sceneTypes?: string[]
+      moods?: string[]
+      sceneDescription?: string
+      aspectRatio?: string
+    }
+    const templateImageUrl = generation.templateImageUrl
+    if (!templateImageUrl) throw new Error('Template image URL missing on generation')
 
     const promptCfg = await ctx.runQuery(internal.prompts.getPromptConfigInternal, {})
 
@@ -466,7 +478,7 @@ export const composePrompt = internalAction({
     ].join('\n')
 
     const text = await callVision({
-      imageUrls: [generation.templateImageUrl, generation.productImageUrl],
+      imageUrls: [templateImageUrl, generation.productImageUrl],
       prompt: userText,
       systemPrompt,
     })
@@ -541,17 +553,22 @@ export const generateFromTemplate = internalAction({
       generationId,
     })
     if (!ctxData?.generation) throw new Error('Generation not found')
-    const { generation, template } = ctxData
+    const { generation } = ctxData
     if (!generation.dynamicPrompt) {
       throw new Error('Dynamic prompt missing — composer step did not complete')
     }
+    const templateImageUrl = generation.templateImageUrl
+    if (!templateImageUrl) {
+      throw new Error('Template image URL missing — generateFromTemplate is template-driven only')
+    }
+    const template = ctxData.template as { aspectRatio?: string } | null
 
-    const aspectRatio = template?.aspectRatio ?? '1:1'
+    const aspectRatio = template?.aspectRatio ?? generation.aspectRatio ?? '1:1'
 
     const { generatedUrl } = await callImageEditModel({
       model: (generation.model ?? 'nano-banana-2') as ImageEditModel,
       prompt: generation.dynamicPrompt,
-      imageUrls: [generation.templateImageUrl, generation.productImageUrl],
+      imageUrls: [templateImageUrl, generation.productImageUrl],
       aspectRatio,
     })
 

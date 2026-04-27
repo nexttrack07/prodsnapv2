@@ -163,11 +163,12 @@ export const getGenerations = query({
       .query('templateGenerations')
       .withIndex('by_run', (q) => q.eq('runId', runId))
       .collect()
-    // Attach template for display
+    // Attach template for display (skip when this generation seeds from an
+    // angle, not a template).
     const withTemplate = await Promise.all(
       rows.map(async (r) => ({
         ...r,
-        template: await ctx.db.get(r.templateId),
+        template: r.templateId ? await ctx.db.get(r.templateId) : null,
       })),
     )
     return withTemplate.sort((a, b) => a.variationIndex - b.variationIndex)
@@ -441,7 +442,7 @@ export const getGenerationContextInternal = internalQuery({
     const [product, run, template] = await Promise.all([
       generation.productId ? ctx.db.get(generation.productId) : null,
       generation.runId ? ctx.db.get(generation.runId) : null,
-      ctx.db.get(generation.templateId),
+      generation.templateId ? ctx.db.get(generation.templateId) : null,
     ])
 
     // Normalize to a common "productContext" shape for downstream consumers
