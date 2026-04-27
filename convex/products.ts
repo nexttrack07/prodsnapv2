@@ -214,6 +214,12 @@ export const saveProductAnalysis = internalMutation({
           description: v.string(),
           hook: v.string(),
           suggestedAdStyle: v.string(),
+          angleType: v.optional(v.union(
+            v.literal('comparison'),
+            v.literal('curiosity-narrative'),
+            v.literal('social-proof'),
+            v.literal('problem-callout'),
+          )),
           tags: v.optional(v.object({
             productCategory: v.optional(v.string()),
             imageStyle: v.optional(v.string()),
@@ -788,10 +794,11 @@ export const listTemplates = query({
     setting: v.optional(v.string()),
     primaryColor: v.optional(v.string()),
     aspectRatio: v.optional(aspectRatioValidator),
+    angleType: v.optional(v.string()),
   },
   handler: async (
     ctx,
-    { cursor, limit = 24, search, productCategory, imageStyle, setting, primaryColor, aspectRatio },
+    { cursor, limit = 24, search, productCategory, imageStyle, setting, primaryColor, aspectRatio, angleType },
   ) => {
     const hasFilter =
       !!search ||
@@ -799,7 +806,8 @@ export const listTemplates = query({
       !!imageStyle ||
       !!setting ||
       !!primaryColor ||
-      !!aspectRatio
+      !!aspectRatio ||
+      !!angleType
 
     if (!hasFilter) {
       // Fast path: cursor-based pagination over the by_status index.
@@ -839,6 +847,7 @@ export const listTemplates = query({
       if (setting && t.setting !== setting) return false
       if (primaryColor && t.primaryColor !== primaryColor) return false
       if (aspectRatio && t.aspectRatio !== aspectRatio) return false
+      if (angleType && t.angleType !== angleType) return false
       if (!needle) return true
       const haystack = [
         t.productCategory,
@@ -887,17 +896,20 @@ export const listTemplateFilterOptions = query({
     const imageStyles = new Set<string>()
     const settings = new Set<string>()
     const primaryColors = new Set<string>()
+    const angleTypes = new Set<string>()
     for (const r of rows) {
       if (r.productCategory) productCategories.add(r.productCategory)
       if (r.imageStyle) imageStyles.add(r.imageStyle)
       if (r.setting) settings.add(r.setting)
       if (r.primaryColor) primaryColors.add(r.primaryColor)
+      if (r.angleType) angleTypes.add(r.angleType)
     }
     return {
       productCategories: [...productCategories].sort(),
       imageStyles: [...imageStyles].sort(),
       settings: [...settings].sort(),
       primaryColors: [...primaryColors].sort(),
+      angleTypes: [...angleTypes].sort(),
     }
   },
 })

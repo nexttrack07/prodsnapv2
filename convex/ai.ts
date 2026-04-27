@@ -196,11 +196,14 @@ function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
 }
 
 // ─── Product analysis (vision) ─────────────────────────────────────────────
+const ANGLE_TYPES = ['comparison', 'curiosity-narrative', 'social-proof', 'problem-callout'] as const
+
 const marketingAngleSchema = z.object({
   title: z.string().min(3).max(80),
   description: z.string().min(15).max(280),
   hook: z.string().min(5).max(200),
   suggestedAdStyle: z.string().min(3).max(80),
+  angleType: z.enum(ANGLE_TYPES).optional(),
   tags: z.object({
     productCategory: z.enum(PRODUCT_CATEGORIES).optional(),
     imageStyle: z.enum(IMAGE_STYLES).optional(),
@@ -240,6 +243,7 @@ export const analyzeProduct = internalAction({
       "description": "<1-2 sentence positioning explanation, why this angle works for this product and audience>",
       "hook": "<a single ad headline or opening line in this angle's voice, under 25 words>",
       "suggestedAdStyle": "<one of: lifestyle UGC, before/after demo, founder story, problem/solution, social proof, comparison, ingredient close-up, in-use demo>",
+      "angleType": "<one of: comparison, curiosity-narrative, social-proof, problem-callout>",
       "tags": {
         "productCategory": "<one of: ${PRODUCT_CATEGORIES.join(', ')}>",
         "imageStyle": "<one of: ${IMAGE_STYLES.join(', ')}>",
@@ -251,6 +255,7 @@ export const analyzeProduct = internalAction({
 }
 
 Generate 3-5 distinct marketing angles. Each angle should target a different buyer motivation (status, savings, anxiety relief, identity, convenience, etc.). Avoid repeating the same hook idea twice.
+Generate a DIVERSE mix of angle types across your 3-5 angles. Don't return 5 'comparison' angles — vary across the four types (comparison, curiosity-narrative, social-proof, problem-callout) so the user can test different psychological levers.
 For each angle, also predict the structured filter tags from the enums above. These tags help the user find templates that fit the angle. If you're not confident, omit the field rather than guess.
 
 Return ONLY the JSON object, no other text.`,
@@ -291,6 +296,8 @@ export const generateAdCopyText = internalAction({
     }),
     brandVoice: v.optional(v.string()),
     brandTagline: v.optional(v.string()),
+    currentOffer: v.optional(v.string()),
+    customerLanguage: v.optional(v.array(v.string())),
   },
   handler: async (_ctx, args) => {
     if (isTestMode()) {
@@ -319,6 +326,10 @@ export const generateAdCopyText = internalAction({
     lines.push(`Suggested ad style: ${args.angle.suggestedAdStyle}`)
     if (args.brandVoice) lines.push(`Brand voice: ${args.brandVoice}`)
     if (args.brandTagline) lines.push(`Brand tagline: ${args.brandTagline}`)
+    if (args.currentOffer) lines.push(`Current offer: ${args.currentOffer}`)
+    if (args.customerLanguage && args.customerLanguage.length > 0) {
+      lines.push(`Authentic phrases customers use:\n${args.customerLanguage.map((s) => `- ${s}`).join('\n')}`)
+    }
 
     const prompt = `${lines.join('\n')}
 
@@ -334,6 +345,11 @@ Rules:
 - Specific over generic. No filler superlatives ("amazing", "revolutionary").
 - No emojis unless the brand voice clearly invites them.
 - Headlines should pay off the angle's hook in the user's frame, not the product's.
+- Write at a 5th-grade reading level. Use simple, direct words a 10-year-old would understand.
+- Benefits, not features. Every line must describe what the buyer GETS, not what the product is.
+- Lead with the visceral benefit + timeline if known (e.g., 'overnight', 'in 14 days', 'in one wash').
+- At least one headline should be a pattern disrupt — unusual phrasing or unexpected angle that makes someone pause.
+- If customer language snippets are provided above, draw from that authentic phrasing when natural.
 
 Return ONLY the JSON object, no other text.`
 
@@ -359,6 +375,8 @@ const structuredTagsSchema = z.object({
   // Optional refinements
   subcategory: z.string().max(40).nullable(),
   sceneDescription: z.string().min(20).max(600),
+  // Playbook angle type — optional, only emit if confident
+  angleType: z.enum(ANGLE_TYPES).optional(),
   // Legacy fields for backward compatibility
   moods: z.array(z.enum(AD_MOODS)).min(1).max(3),
 })
@@ -397,10 +415,11 @@ Return a JSON object with these EXACT fields:
   "textAmount": "<one of: ${TEXT_AMOUNTS.join(', ')}>",
   "subcategory": "<specific product type like 'serum', 'protein powder', or null>",
   "sceneDescription": "<2-3 SHORT sentences about lighting, props, and framing - max 100 words>",
+  "angleType": "<optional — one of: comparison, curiosity-narrative, social-proof, problem-callout — only include if you are confident this template clearly aligns with one of these high-converting angle types>",
   "moods": ["<1-3 moods from: ${AD_MOODS.join(', ')}>"]
 }
 
-CRITICAL: Pick EXACTLY ONE value from each category. Return ONLY the JSON object.`,
+CRITICAL: Pick EXACTLY ONE value from each category. angleType is optional — omit it rather than guess. Return ONLY the JSON object.`,
       systemPrompt: `You are a visual ad classifier for product photography templates. Your job is to categorize ad images with STRUCTURED tags that enable filtering and search.
 
 CRITICAL RULES:
@@ -488,6 +507,12 @@ export const composePrompt = internalAction({
       productContextStr || '(no product analysis available)',
       '',
       templateContext || '(no template tags available)',
+      '',
+      'Visual hierarchy rules (apply to the rendered ad):',
+      '1. The largest text element is the main headline — communicates the value proposition or visceral benefit. Readable at thumbnail size in <1 second.',
+      '2. Sub-callouts list 2-3 benefits in smaller arrow-pointed text. Benefits, not features.',
+      '3. Any offer ("15% off", "Buy 2 Get 1 Free") appears at the very bottom in a tertiary block, smaller than callouts.',
+      '4. Pattern disrupt: the composition or copy should be unusual enough to make a viewer pause — unexpected crop, surprising contrast, or curiosity-inducing headline.',
       '',
       'Compose the nano-banana prompt now. Return ONLY the prompt text.',
     ].join('\n')
@@ -658,6 +683,13 @@ export const composeFromAnglePrompt = internalAction({
       `Suggested ad style: ${angle.suggestedAdStyle}`,
       '',
       brandLines.length ? brandLines.join('\n') : '(no brand kit set — use a clean, modern look)',
+      ...(brandKit?.currentOffer ? [`Current offer to display at the bottom: "${brandKit.currentOffer}"`] : []),
+      '',
+      'Visual hierarchy rules (apply to the rendered ad):',
+      '1. The largest text element is the main headline — communicates the value proposition or visceral benefit. Readable at thumbnail size in <1 second.',
+      '2. Sub-callouts list 2-3 benefits in smaller arrow-pointed text. Benefits, not features.',
+      '3. Any offer ("15% off", "Buy 2 Get 1 Free") appears at the very bottom in a tertiary block, smaller than callouts.',
+      '4. Pattern disrupt: the composition or copy should be unusual enough to make a viewer pause — unexpected crop, surprising contrast, or curiosity-inducing headline.',
       '',
       'Compose the nano-banana prompt now. Place the user\'s real product (from the IMAGE) front-and-center. Choose a background, lighting, and supporting graphics that fit the angle and brand. Include a short headline rendered in-image (8 words or fewer) consistent with the angle\'s hook. Return ONLY the prompt text.',
     ].join('\n')
@@ -961,7 +993,7 @@ export const composeAdCopyForGeneration = internalAction({
 
     const brandKit = (generation.userId
       ? await ctx.runQuery(internal.brandKits.getBrandKitInternal, { userId: generation.userId })
-      : null) as { voice?: string; tagline?: string } | null
+      : null) as { voice?: string; tagline?: string; currentOffer?: string; customerLanguage?: string[] } | null
 
     return await ctx.runAction(internal.ai.generateAdCopyText, {
       productName: prodCtx.name ?? 'Product',
@@ -971,6 +1003,8 @@ export const composeAdCopyForGeneration = internalAction({
       angle,
       brandVoice: brandKit?.voice,
       brandTagline: brandKit?.tagline,
+      currentOffer: brandKit?.currentOffer,
+      customerLanguage: brandKit?.customerLanguage,
     })
   },
 })

@@ -43,6 +43,8 @@ export const updateBrandKit = mutation({
     voice: v.optional(v.string()),
     tagline: v.optional(v.string()),
     websiteUrl: v.optional(v.string()),
+    currentOffer: v.optional(v.string()),
+    customerLanguage: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
@@ -99,6 +101,8 @@ export const upsertBrandKitFromImport = internalMutation({
     voice: v.optional(v.string()),
     tagline: v.optional(v.string()),
     websiteUrl: v.optional(v.string()),
+    currentOffer: v.optional(v.string()),
+    customerLanguage: v.optional(v.array(v.string())),
   },
   handler: async (ctx, { userId, ...incoming }) => {
     const existing = await ctx.db
@@ -114,6 +118,8 @@ export const upsertBrandKitFromImport = internalMutation({
     if (incoming.voice) cleaned.voice = incoming.voice
     if (incoming.tagline) cleaned.tagline = incoming.tagline
     if (incoming.websiteUrl) cleaned.websiteUrl = incoming.websiteUrl
+    if (incoming.currentOffer) cleaned.currentOffer = incoming.currentOffer
+    if (incoming.customerLanguage && incoming.customerLanguage.length > 0) cleaned.customerLanguage = incoming.customerLanguage
 
     const now = Date.now()
     if (existing) {

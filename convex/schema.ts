@@ -38,6 +38,13 @@ const marketingAngle = v.object({
   description: v.string(),         // 1-2 sentence positioning explanation
   hook: v.string(),                // a sample headline/opening line
   suggestedAdStyle: v.string(),    // e.g. "lifestyle UGC", "before/after demo"
+  // Playbook angle type — classifies the psychological lever being used.
+  angleType: v.optional(v.union(
+    v.literal('comparison'),          // Interest Loop
+    v.literal('curiosity-narrative'), // Personal Narrative
+    v.literal('social-proof'),
+    v.literal('problem-callout'),
+  )),
   // Structured filter tags — when an angle is "explored", these become the
   // pre-applied filters on the template picker. Optional because legacy rows
   // and analyses pre-dating this field won't have them.
@@ -179,6 +186,8 @@ const schema = defineSchema({
     composition: v.optional(v.string()),      // centered, rule-of-thirds, scattered, etc.
     textAmount: v.optional(v.string()),       // no-text, minimal-text, text-heavy, etc.
     subcategory: v.optional(v.string()),      // free-form specific product type
+    // Playbook angle type — classifies the psychological lever this template fits best.
+    angleType: v.optional(v.string()),
     // ─── Legacy fields (kept for backward compatibility) ──────────────────
     category: v.optional(v.string()),         // @deprecated use productCategory
     sceneTypes: v.optional(v.array(v.string())),
@@ -369,6 +378,9 @@ const schema = defineSchema({
     voice: v.optional(v.string()),          // free-form notes about brand voice
     tagline: v.optional(v.string()),
     websiteUrl: v.optional(v.string()),     // source URL if auto-imported
+    // Playbook fields — used to seed copy generation
+    currentOffer: v.optional(v.string()),              // e.g. "15% off your first order"
+    customerLanguage: v.optional(v.array(v.string())), // authentic review snippets
     updatedAt: v.number(),
   }).index('by_userId', ['userId']),
 

@@ -18,6 +18,7 @@ type FirecrawlExtractedJson = {
   brandPrimaryColor?: string
   brandSecondaryColor?: string
   brandTagline?: string
+  reviewSnippets?: string[]
 }
 
 type FirecrawlScrapeResponse = {
@@ -60,6 +61,11 @@ const FIRECRAWL_EXTRACTION_SCHEMA = {
     brandTagline: {
       type: 'string',
       description: "The brand's tagline or short positioning line",
+    },
+    reviewSnippets: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Up to 5 short authentic phrases from customer reviews on this page (1-2 sentences each). Skip generic praise; pick specific, descriptive language about outcomes or experiences. Empty array if no reviews are visible.',
     },
   },
 }
@@ -194,7 +200,11 @@ export const runUrlImport = internalAction({
         }
       }
 
-      const hasBrandData = brandLogoR2Url || colors.length > 0 || extracted.brandTagline
+      const reviewSnippets = Array.isArray(extracted.reviewSnippets) && extracted.reviewSnippets.length > 0
+        ? extracted.reviewSnippets
+        : undefined
+
+      const hasBrandData = brandLogoR2Url || colors.length > 0 || extracted.brandTagline || reviewSnippets
       if (hasBrandData) {
         await ctx.runMutation(internal.brandKits.upsertBrandKitFromImport, {
           userId: importRow.userId,
@@ -203,6 +213,7 @@ export const runUrlImport = internalAction({
           colors: colors.length > 0 ? colors : undefined,
           tagline: extracted.brandTagline,
           websiteUrl: importRow.sourceUrl,
+          customerLanguage: reviewSnippets,
         })
         brandKitUpdated = true
       }
