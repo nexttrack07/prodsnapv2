@@ -374,7 +374,8 @@ const schema = defineSchema({
     finishedAt: v.optional(v.number()),
   })
     .index('by_userId', ['userId'])
-    .index('by_status', ['status']),
+    .index('by_status', ['status'])
+    .index('by_userId_sourceUrl', ['userId', 'sourceUrl']),
 
   // ─── Webhook event deduplication log ────────────────────────────────────
   webhookEvents: defineTable({

@@ -1944,6 +1944,7 @@ function GenerationCard({
       case 'exact': return 'Exact'
       case 'remix': return 'Remix'
       case 'variation': return 'Variation'
+      case 'angle': return 'From Angle'
       default: return mode
     }
   }
@@ -1952,6 +1953,7 @@ function GenerationCard({
     switch (mode) {
       case 'variation': return 'violet'
       case 'remix': return 'orange'
+      case 'angle': return 'lime'
       default: return 'teal'
     }
   }

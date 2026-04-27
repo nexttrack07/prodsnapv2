@@ -53,6 +53,21 @@ export const createUrlImport = mutation({
   handler: async (ctx, { url }) => {
     const userId = await requireAuth(ctx)
     const sourceUrl = normalizeUrl(url)
+
+    const inflight = await ctx.db
+      .query('urlImports')
+      .withIndex('by_userId_sourceUrl', (q) => q.eq('userId', userId).eq('sourceUrl', sourceUrl))
+      .filter((q) =>
+        q.or(
+          q.eq(q.field('status'), 'pending'),
+          q.eq(q.field('status'), 'scraping'),
+          q.eq(q.field('status'), 'extracting'),
+          q.eq(q.field('status'), 'uploading'),
+        ),
+      )
+      .first()
+    if (inflight) return inflight._id
+
     const importId = await ctx.db.insert('urlImports', {
       userId,
       sourceUrl,

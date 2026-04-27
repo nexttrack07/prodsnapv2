@@ -854,7 +854,10 @@ export const listTemplates = query({
     let startIdx = 0
     if (cursor) {
       const idx = matched.findIndex((t) => t._id === cursor)
-      if (idx >= 0) startIdx = idx + 1
+      if (idx < 0) {
+        return { items: [], nextCursor: null, hasMore: false }
+      }
+      startIdx = idx + 1
     }
     const slice = matched.slice(startIdx, startIdx + limit + 1)
     const hasMore = slice.length > limit

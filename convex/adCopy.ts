@@ -5,8 +5,58 @@
  * cheap and users can re-run if they lose the results).
  */
 import { v } from 'convex/values'
-import { action, type ActionCtx } from './_generated/server'
+import { action, internalMutation, internalQuery, type ActionCtx } from './_generated/server'
 import { api, internal } from './_generated/api'
+
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX_CALLS = 20
+
+export const checkAdCopyRateLimit = internalQuery({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const since = Date.now() - RATE_LIMIT_WINDOW_MS
+    const recent = await ctx.db
+      .query('billingEvents')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .filter((q) =>
+        q.and(
+          q.gte(q.field('timestamp'), since),
+          q.or(
+            q.eq(q.field('context'), 'usage'),
+            q.eq(q.field('context'), 'rate-limited'),
+          ),
+        ),
+      )
+      .collect()
+    return recent.length
+  },
+})
+
+export const recordAdCopyRateLimited = internalMutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    await ctx.db.insert('billingEvents', {
+      userId,
+      mutationName: 'generateAdCopy',
+      allowed: false,
+      timestamp: Date.now(),
+      context: 'rate-limited',
+    })
+  },
+})
+
+export const recordAdCopyUsage = internalMutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    await ctx.db.insert('billingEvents', {
+      userId,
+      mutationName: 'generateAdCopy',
+      allowed: true,
+      timestamp: Date.now(),
+      context: 'usage',
+    })
+  },
+})
 
 export const generateAdCopy = action({
   args: {
@@ -23,6 +73,13 @@ export const generateAdCopy = action({
   }> => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
+    const userId = identity.tokenIdentifier
+
+    const recentCount = await ctx.runQuery(internal.adCopy.checkAdCopyRateLimit, { userId })
+    if (recentCount >= RATE_LIMIT_MAX_CALLS) {
+      await ctx.runMutation(internal.adCopy.recordAdCopyRateLimited, { userId })
+      throw new Error('Too many requests — please wait a moment before generating again.')
+    }
 
     const product = await ctx.runQuery(api.products.getProduct, { productId })
     if (!product) throw new Error('Product not found')
@@ -39,7 +96,7 @@ export const generateAdCopy = action({
     const angle = product.marketingAngles[angleIndex]
     const brandKit = await ctx.runQuery(api.brandKits.getBrandKit, {})
 
-    return await ctx.runAction(internal.ai.generateAdCopyText, {
+    const result = await ctx.runAction(internal.ai.generateAdCopyText, {
       productName: product.name,
       productDescription: product.productDescription,
       targetAudience: product.targetAudience,
@@ -53,5 +110,9 @@ export const generateAdCopy = action({
       brandVoice: brandKit?.voice,
       brandTagline: brandKit?.tagline,
     })
+
+    await ctx.runMutation(internal.adCopy.recordAdCopyUsage, { userId })
+
+    return result
   },
 })
