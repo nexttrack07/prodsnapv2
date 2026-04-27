@@ -217,7 +217,10 @@ export const runUrlImport = internalAction({
         finishedAt: Date.now(),
       })
     } catch (err) {
-      // TODO(R2-sweeper): on failure, clean up uploaded keys
+      // TODO(R2-sweeper): if image upload(s) succeeded but a later step
+      // (createProductFromImport, brand-kit upsert) threw, the R2 objects we wrote
+      // are orphaned. A periodic sweeper that cross-references the imports/{importId}/
+      // prefix against successful import rows can reclaim them.
       const message = err instanceof Error ? err.message : String(err)
       await ctx.runMutation(internal.urlImports.patchImportStatus, {
         importId,

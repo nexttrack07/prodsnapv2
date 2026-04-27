@@ -213,7 +213,10 @@ export const deleteProductImage = mutation({
       .withIndex('by_product', (q) => q.eq('productId', image.productId))
       .collect()
 
-    // Only delete the single image that was clicked (no cascade to enhancements)
+    // Intentional: no cascade to enhancement children (bg-removed, upscaled).
+    // Deleting an "original" leaves its children intact so the user can keep
+    // derivatives even after replacing the source. Orphaned enhancements may
+    // accumulate in storage; a future R2 sweeper job can reconcile.
     const imagesToDelete: Id<'productImages'>[] = [imageId]
 
     // Calculate remaining images BEFORE any mutations
