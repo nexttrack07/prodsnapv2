@@ -765,39 +765,130 @@ export const generateFromProduct = mutation({
 /**
  * List all published templates with cursor-based pagination for infinite scroll.
  * Shows all templates regardless of aspect ratio.
+ *
+ * Supports search (substring across the structured tag fields) and single-value
+ * filters (productCategory / imageStyle / setting / primaryColor / aspectRatio).
+ * For the current library size (<500) all matching is done in-memory after a
+ * single index scan; for larger libraries this should switch to the dedicated
+ * structured-tag indexes already declared on adTemplates.
  */
 export const listTemplates = query({
   args: {
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
+    search: v.optional(v.string()),
+    productCategory: v.optional(v.string()),
+    imageStyle: v.optional(v.string()),
+    setting: v.optional(v.string()),
+    primaryColor: v.optional(v.string()),
+    aspectRatio: v.optional(aspectRatioValidator),
   },
-  handler: async (ctx, { cursor, limit = 24 }) => {
-    let q = ctx.db
+  handler: async (
+    ctx,
+    { cursor, limit = 24, search, productCategory, imageStyle, setting, primaryColor, aspectRatio },
+  ) => {
+    const hasFilter =
+      !!search ||
+      !!productCategory ||
+      !!imageStyle ||
+      !!setting ||
+      !!primaryColor ||
+      !!aspectRatio
+
+    if (!hasFilter) {
+      // Fast path: cursor-based pagination over the by_status index.
+      let q = ctx.db
+        .query('adTemplates')
+        .withIndex('by_status', (q) => q.eq('status', 'published'))
+        .order('desc')
+      if (cursor) {
+        const cursorDoc = await ctx.db.get(cursor as Id<'adTemplates'>)
+        if (cursorDoc) {
+          q = ctx.db
+            .query('adTemplates')
+            .withIndex('by_status', (q) => q.eq('status', 'published'))
+            .order('desc')
+            .filter((q) => q.lt(q.field('_creationTime'), cursorDoc._creationTime))
+        }
+      }
+      const results = await q.take(limit + 1)
+      const hasMore = results.length > limit
+      const items = hasMore ? results.slice(0, limit) : results
+      const nextCursor = hasMore ? items[items.length - 1]._id : null
+      return { items, nextCursor, hasMore }
+    }
+
+    // Filtered path: scan all published, filter in-memory, paginate by cursor.
+    const all = await ctx.db
       .query('adTemplates')
       .withIndex('by_status', (q) => q.eq('status', 'published'))
       .order('desc')
+      .collect()
 
+    const needle = (search ?? '').trim().toLowerCase()
+
+    const matched = all.filter((t) => {
+      if (productCategory && t.productCategory !== productCategory) return false
+      if (imageStyle && t.imageStyle !== imageStyle) return false
+      if (setting && t.setting !== setting) return false
+      if (primaryColor && t.primaryColor !== primaryColor) return false
+      if (aspectRatio && t.aspectRatio !== aspectRatio) return false
+      if (!needle) return true
+      const haystack = [
+        t.productCategory,
+        t.subcategory,
+        t.imageStyle,
+        t.setting,
+        t.composition,
+        t.primaryColor,
+        t.sceneDescription,
+      ]
+        .filter((v): v is string => typeof v === 'string')
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(needle)
+    })
+
+    let startIdx = 0
     if (cursor) {
-      // Cursor is the _id of the last item from previous page
-      const cursorDoc = await ctx.db.get(cursor as Id<'adTemplates'>)
-      if (cursorDoc) {
-        q = ctx.db
-          .query('adTemplates')
-          .withIndex('by_status', (q) => q.eq('status', 'published'))
-          .order('desc')
-          .filter((q) => q.lt(q.field('_creationTime'), cursorDoc._creationTime))
-      }
+      const idx = matched.findIndex((t) => t._id === cursor)
+      if (idx >= 0) startIdx = idx + 1
     }
-
-    const results = await q.take(limit + 1)
-    const hasMore = results.length > limit
-    const items = hasMore ? results.slice(0, limit) : results
+    const slice = matched.slice(startIdx, startIdx + limit + 1)
+    const hasMore = slice.length > limit
+    const items = hasMore ? slice.slice(0, limit) : slice
     const nextCursor = hasMore ? items[items.length - 1]._id : null
+    return { items, nextCursor, hasMore }
+  },
+})
 
+/**
+ * Distinct values currently in use across published templates, for the
+ * user-facing filter UI. Cheap to compute given current library size.
+ */
+export const listTemplateFilterOptions = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query('adTemplates')
+      .withIndex('by_status', (q) => q.eq('status', 'published'))
+      .collect()
+
+    const productCategories = new Set<string>()
+    const imageStyles = new Set<string>()
+    const settings = new Set<string>()
+    const primaryColors = new Set<string>()
+    for (const r of rows) {
+      if (r.productCategory) productCategories.add(r.productCategory)
+      if (r.imageStyle) imageStyles.add(r.imageStyle)
+      if (r.setting) settings.add(r.setting)
+      if (r.primaryColor) primaryColors.add(r.primaryColor)
+    }
     return {
-      items,
-      nextCursor,
-      hasMore,
+      productCategories: [...productCategories].sort(),
+      imageStyles: [...imageStyles].sort(),
+      settings: [...settings].sort(),
+      primaryColors: [...primaryColors].sort(),
     }
   },
 })

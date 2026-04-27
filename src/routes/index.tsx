@@ -357,7 +357,8 @@ function Home() {
             </Title>
             <Text className="landing-section-copy">
               Skip the guesswork. Every template is hand-picked from Facebook ads that have already proven themselves
-              in the wild. Browse the feed, pick up to three templates per batch, and generate.
+              in the wild. Search and filter by category, style, setting, or aspect ratio — then pick up to three
+              templates per batch and generate.
             </Text>
           </Stack>
 

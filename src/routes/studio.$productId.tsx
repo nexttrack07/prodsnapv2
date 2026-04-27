@@ -35,6 +35,7 @@ import {
   ThemeIcon,
   Skeleton,
   Alert,
+  Select,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -2191,12 +2192,37 @@ function GenerateWizard({
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Template browse filters
+  const [search, setSearch] = useState('')
+  const [filterCategory, setFilterCategory] = useState<string | null>(null)
+  const [filterImageStyle, setFilterImageStyle] = useState<string | null>(null)
+  const [filterSetting, setFilterSetting] = useState<string | null>(null)
+  const [filterAspectRatio, setFilterAspectRatio] = useState<string | null>(null)
+  const { data: filterOptions } = useQuery(
+    convexQuery(api.products.listTemplateFilterOptions, {}),
+  )
+
   // Mobile detection for responsive layout
   const isMobile = useMediaQuery('(max-width: 768px)')
 
   const convex = useConvex()
   const generateFromProduct = useConvexMutation(api.products.generateFromProduct)
   const generateMutation = useMutation({ mutationFn: generateFromProduct })
+
+  const filterArgs = {
+    search: search.trim() || undefined,
+    productCategory: filterCategory ?? undefined,
+    imageStyle: filterImageStyle ?? undefined,
+    setting: filterSetting ?? undefined,
+    aspectRatio:
+      (filterAspectRatio as '1:1' | '4:5' | '9:16' | undefined) ?? undefined,
+  }
+  const filtersActive =
+    !!filterArgs.search ||
+    !!filterArgs.productCategory ||
+    !!filterArgs.imageStyle ||
+    !!filterArgs.setting ||
+    !!filterArgs.aspectRatio
 
   const {
     data: templatesData,
@@ -2205,11 +2231,19 @@ function GenerateWizard({
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['listTemplates'],
+    queryKey: [
+      'listTemplates',
+      filterArgs.search,
+      filterArgs.productCategory,
+      filterArgs.imageStyle,
+      filterArgs.setting,
+      filterArgs.aspectRatio,
+    ],
     queryFn: async ({ pageParam }) => {
       return convex.query(api.products.listTemplates, {
         cursor: pageParam,
         limit: 24,
+        ...filterArgs,
       })
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -2315,11 +2349,77 @@ function GenerateWizard({
           <Text size="sm" c="dark.2">{templates.length} available</Text>
         </Group>
         <Group gap="sm">
-          {/* Placeholder for future filters */}
           <Badge size="md" variant="light" color="brand" radius="md">
             {pickedIds.length}/3 selected
           </Badge>
         </Group>
+      </Group>
+
+      <Group gap="sm" wrap="wrap" mb="md" align="flex-end">
+        <TextInput
+          placeholder="Search templates"
+          value={search}
+          onChange={(e) => setSearch(e.currentTarget.value)}
+          leftSection={<IconPhoto size={14} />}
+          size="sm"
+          style={{ flex: 1, minWidth: 200 }}
+        />
+        <Select
+          placeholder="Category"
+          clearable
+          data={filterOptions?.productCategories ?? []}
+          value={filterCategory}
+          onChange={setFilterCategory}
+          size="sm"
+          w={150}
+        />
+        <Select
+          placeholder="Style"
+          clearable
+          data={filterOptions?.imageStyles ?? []}
+          value={filterImageStyle}
+          onChange={setFilterImageStyle}
+          size="sm"
+          w={150}
+        />
+        <Select
+          placeholder="Setting"
+          clearable
+          data={filterOptions?.settings ?? []}
+          value={filterSetting}
+          onChange={setFilterSetting}
+          size="sm"
+          w={150}
+        />
+        <Select
+          placeholder="Aspect"
+          clearable
+          data={[
+            { value: '1:1', label: '1:1' },
+            { value: '4:5', label: '4:5' },
+            { value: '9:16', label: '9:16' },
+          ]}
+          value={filterAspectRatio}
+          onChange={setFilterAspectRatio}
+          size="sm"
+          w={110}
+        />
+        {filtersActive && (
+          <Button
+            variant="subtle"
+            size="sm"
+            color="gray"
+            onClick={() => {
+              setSearch('')
+              setFilterCategory(null)
+              setFilterImageStyle(null)
+              setFilterSetting(null)
+              setFilterAspectRatio(null)
+            }}
+          >
+            Clear
+          </Button>
+        )}
       </Group>
 
       <Box style={{
