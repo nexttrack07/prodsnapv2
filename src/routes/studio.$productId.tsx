@@ -36,7 +36,7 @@ import {
   Skeleton,
   Alert,
   Select,
-  Accordion,
+  Tabs,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -76,7 +76,7 @@ export const Route = createFileRoute('/studio/$productId')({
 
 type AspectRatio = '1:1' | '4:5' | '9:16'
 type Mode = 'exact' | 'remix'
-type View = 'gallery' | 'generate'
+type View = 'gallery' | 'generate' | 'analysis'
 
 // Type for generation data from the query
 interface GenerationData {
@@ -236,6 +236,8 @@ function ProductWorkspacePage() {
   const completedGenerations = (generations?.filter((g) => g.status === 'complete') || []) as GenerationData[]
   const pendingGenerations = (generations?.filter((g) => g.status !== 'complete' && g.status !== 'failed') || []) as GenerationData[]
 
+  const anglesCount = product.marketingAngles?.length ?? 0
+
   return (
     <Container size="lg" py={40}>
       {/* US-U06: Credits exhausted banner */}
@@ -262,22 +264,34 @@ function ProductWorkspacePage() {
         </Anchor>
       </Box>
 
-      {/* Product Header - hidden in generate mode */}
-      {view === 'gallery' && <ProductHeader product={product} primaryImageUrl={primaryImageUrl} />}
+      {/* Product Header - persistent context, hidden only in generate mode */}
+      {view !== 'generate' && <ProductHeader product={product} primaryImageUrl={primaryImageUrl} />}
 
-      {view === 'gallery' && (
-        <MarketingAnalysisPanel
-          product={product}
-          productId={productId as Id<'products'>}
-          onExploreAngle={(filters) => {
-            setInitialFilters(filters)
-            setView('generate')
-          }}
-        />
+      {/* Tabs — visible only outside generate mode */}
+      {view !== 'generate' && (
+        <Tabs
+          value={view}
+          onChange={(v) => setView(v as View)}
+          mb="xl"
+          variant="default"
+        >
+          <Tabs.List>
+            <Tabs.Tab value="gallery">Gallery</Tabs.Tab>
+            <Tabs.Tab value="analysis">
+              <Group gap={6}>
+                Marketing analysis
+                {anglesCount > 0 && (
+                  <Badge size="xs" variant="outline" color="gray" radius="sm">
+                    {anglesCount} {anglesCount === 1 ? 'angle' : 'angles'}
+                  </Badge>
+                )}
+              </Group>
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs>
       )}
 
-      {/* View Toggle */}
-      {view === 'gallery' ? (
+      {view === 'gallery' && (
         <GalleryView
           product={product}
           productId={productId as Id<'products'>}
@@ -288,7 +302,20 @@ function ProductWorkspacePage() {
           onGenerateMore={() => setView('generate')}
           creditsExhausted={creditsExhausted}
         />
-      ) : (
+      )}
+
+      {view === 'analysis' && (
+        <MarketingAnalysisPanel
+          product={product}
+          productId={productId as Id<'products'>}
+          onExploreAngle={(filters) => {
+            setInitialFilters(filters)
+            setView('generate')
+          }}
+        />
+      )}
+
+      {view === 'generate' && (
         <GenerateWizard
           productId={productId as Id<'products'>}
           product={product}
@@ -488,6 +515,46 @@ function ProductHeader({
   )
 }
 
+function ReanalyzeMissingState({ productId }: { productId: Id<'products'> }) {
+  const reanalyzeProduct = useConvexMutation(api.products.reanalyzeProduct)
+  const reanalyzeMutation = useMutation({ mutationFn: reanalyzeProduct })
+
+  async function handleReanalyze() {
+    try {
+      await reanalyzeMutation.mutateAsync({ productId })
+      notifications.show({
+        title: 'Analysis restarted',
+        message: 'We are analyzing this product again.',
+        color: 'green',
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Retry failed',
+        message: err instanceof Error ? err.message : 'Could not restart analysis',
+        color: 'red',
+      })
+    }
+  }
+
+  return (
+    <Box py={60} ta="center">
+      <Text size="sm" c="dark.1" mb="md">
+        No marketing analysis yet.
+      </Text>
+      <Button
+        size="sm"
+        variant="light"
+        color="brand"
+        leftSection={<IconRefresh size={14} />}
+        loading={reanalyzeMutation.isPending}
+        onClick={handleReanalyze}
+      >
+        Re-run analysis
+      </Button>
+    </Box>
+  )
+}
+
 function MarketingAnalysisPanel({
   product,
   productId,
@@ -524,117 +591,100 @@ function MarketingAnalysisPanel({
 
   if (product.status === 'analyzing') {
     return (
-      <Paper withBorder radius="md" p="lg" mb="md">
-        <Group gap="sm">
-          <Loader size="xs" />
-          <Text size="sm" c="dark.1">
-            Analyzing your product to suggest marketing angles…
-          </Text>
-        </Group>
-      </Paper>
+      <Box py={60} ta="center">
+        <Loader size="sm" mb="md" />
+        <Text size="sm" c="dark.1">
+          Analyzing your product to suggest marketing angles…
+        </Text>
+      </Box>
     )
   }
 
-  if (product.status !== 'ready' || !product.marketingAngles?.length) {
-    return null
+  if (product.status === 'failed' || !product.marketingAngles?.length) {
+    return (
+      <ReanalyzeMissingState productId={productId} />
+    )
   }
-
-  const angleCount = product.marketingAngles.length
 
   return (
     <>
-      <Accordion
-        variant="separated"
-        chevronPosition="right"
-        defaultValue={null}
-        mb="md"
-        styles={{
-          item: {
-            borderColor: 'var(--mantine-color-dark-5)',
-            backgroundColor: 'var(--mantine-color-dark-8)',
-          },
-        }}
-      >
-        <Accordion.Item value="analysis">
-          <Accordion.Control>
-            <Group gap="sm" wrap="nowrap">
-              <Badge size="sm" variant="light" color="brand" radius="sm">
-                Marketing analysis
-              </Badge>
-              {product.valueProposition && (
-                <Text size="sm" fw={600} c="white" lineClamp={1} style={{ flex: 1 }}>
-                  {product.valueProposition}
-                </Text>
-              )}
-              <Badge size="xs" variant="outline" color="gray" radius="sm">
-                {angleCount} angle{angleCount !== 1 ? 's' : ''}
-              </Badge>
-            </Group>
-          </Accordion.Control>
-          <Accordion.Panel>
-            <Stack gap="sm">
-              {product.marketingAngles.map((angle, index) => (
-                <Paper
-                  key={`${angle.title}-${index}`}
-                  withBorder
-                  radius="md"
-                  p="md"
-                  style={{ background: 'rgba(255,255,255,0.02)' }}
-                >
-                  <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
-                    <Box style={{ flex: 1, minWidth: 200 }}>
-                      <Group gap="sm" align="center">
-                        <Text size="sm" fw={700} c="white">
-                          {angle.title}
-                        </Text>
-                        <Badge size="xs" color="teal" variant="light" radius="sm">
-                          {angle.suggestedAdStyle}
-                        </Badge>
-                      </Group>
-                      <Text mt={6} size="sm" c="dark.1">
-                        {angle.description}
+      <Stack gap="lg">
+        {product.valueProposition && (
+          <Box>
+            <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
+              Value proposition
+            </Text>
+            <Title order={3} c="white">
+              {product.valueProposition}
+            </Title>
+          </Box>
+        )}
+        <Box>
+          <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
+            Marketing angles
+          </Text>
+          <Stack gap="md">
+            {product.marketingAngles.map((angle, index) => (
+              <Paper
+                key={`${angle.title}-${index}`}
+                withBorder
+                radius="md"
+                p="lg"
+                style={{ background: 'rgba(255,255,255,0.02)' }}
+              >
+                <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+                  <Box style={{ flex: 1, minWidth: 200 }}>
+                    <Group gap="sm" align="center">
+                      <Text size="sm" fw={700} c="white">
+                        {angle.title}
                       </Text>
-                      <Text mt="xs" size="sm" c="dark.0" fs="italic">
-                        "{angle.hook}"
-                      </Text>
-                    </Box>
-                    <Stack gap={6}>
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color="brand"
-                        leftSection={<IconSparkles size={12} />}
-                        onClick={() =>
-                          setAngleGenState({ angleIndex: index, angleTitle: angle.title })
-                        }
-                      >
-                        Generate visuals
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="default"
-                        leftSection={<IconLayoutGrid size={12} />}
-                        onClick={() => {
-                          const filters: TemplateFilters = angle.tags
-                            ? {
-                                productCategory: angle.tags.productCategory,
-                                imageStyle: angle.tags.imageStyle,
-                                setting: angle.tags.setting,
-                              }
-                            : {}
-                          onExploreAngle(filters)
-                        }}
-                      >
-                        Explore templates
-                      </Button>
-                    </Stack>
-                  </Group>
-                </Paper>
-              ))}
-            </Stack>
-          </Accordion.Panel>
-        </Accordion.Item>
-      </Accordion>
+                      <Badge size="xs" color="teal" variant="light" radius="sm">
+                        {angle.suggestedAdStyle}
+                      </Badge>
+                    </Group>
+                    <Text mt={6} size="sm" c="dark.1">
+                      {angle.description}
+                    </Text>
+                    <Text mt="xs" size="sm" c="dark.0" fs="italic">
+                      "{angle.hook}"
+                    </Text>
+                  </Box>
+                  <Stack gap={6}>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="brand"
+                      leftSection={<IconSparkles size={12} />}
+                      onClick={() =>
+                        setAngleGenState({ angleIndex: index, angleTitle: angle.title })
+                      }
+                    >
+                      Generate visuals
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconLayoutGrid size={12} />}
+                      onClick={() => {
+                        const filters: TemplateFilters = angle.tags
+                          ? {
+                              productCategory: angle.tags.productCategory,
+                              imageStyle: angle.tags.imageStyle,
+                              setting: angle.tags.setting,
+                            }
+                          : {}
+                        onExploreAngle(filters)
+                      }}
+                    >
+                      Explore templates
+                    </Button>
+                  </Stack>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
+        </Box>
+      </Stack>
 
       <GenerateFromAngleModal
         state={angleGenState}
