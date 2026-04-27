@@ -75,6 +75,10 @@ export const generateAdCopy = action({
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
 
+    // TOCTOU: query-then-act allows a small overshoot under concurrent calls.
+    // Same pattern as enforceGenerationRateLimit in products.ts; acceptable for
+    // 20/min thresholds. Migrate to the Convex Rate Limiter component for tighter
+    // guarantees later.
     const recentCount = await ctx.runQuery(internal.adCopy.checkAdCopyRateLimit, { userId })
     if (recentCount >= RATE_LIMIT_MAX_CALLS) {
       await ctx.runMutation(internal.adCopy.recordAdCopyRateLimited, { userId })
@@ -114,6 +118,9 @@ export const generateAdCopy = action({
       brandTagline: brandKit?.tagline,
     })
 
+    // Usage recorded only on success — failed AI calls don't count against the
+    // rate limit. If we want to also rate-limit error bursts, move this above the
+    // generateAdCopyText call and treat it as an optimistic reservation.
     await ctx.runMutation(internal.adCopy.recordAdCopyUsage, { userId })
 
     return result

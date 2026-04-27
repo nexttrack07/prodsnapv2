@@ -27,7 +27,6 @@ export type TemplateContext = {
   moods?: string[]
   sceneDescription?: string
   aspectRatio?: '1:1' | '4:5' | '9:16' | '16:9'
-  imageUrl?: string
 }
 
 // Model constants
@@ -609,6 +608,9 @@ export const composeFromAnglePrompt = internalAction({
       : null
 
     let productImageUrl = generation.productImageUrl
+    if (!productImageUrl) {
+      throw new Error('Product image URL missing on generation — composeFromAnglePrompt requires a primary product image')
+    }
     if (generation.productId) {
       const images = await ctx.runQuery(internal.productImages.listByProductInternal, {
         productId: generation.productId,
