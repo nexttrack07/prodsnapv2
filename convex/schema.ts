@@ -38,6 +38,15 @@ const marketingAngle = v.object({
   description: v.string(),         // 1-2 sentence positioning explanation
   hook: v.string(),                // a sample headline/opening line
   suggestedAdStyle: v.string(),    // e.g. "lifestyle UGC", "before/after demo"
+  // Structured filter tags — when an angle is "explored", these become the
+  // pre-applied filters on the template picker. Optional because legacy rows
+  // and analyses pre-dating this field won't have them.
+  tags: v.optional(v.object({
+    productCategory: v.optional(v.string()),
+    imageStyle: v.optional(v.string()),
+    setting: v.optional(v.string()),
+    primaryColor: v.optional(v.string()),
+  })),
 })
 
 // URL import job lifecycle.
@@ -333,6 +342,12 @@ const schema = defineSchema({
     // nano-banana. Stored for debugging / future "view prompt" UI.
     dynamicPrompt: v.optional(v.string()),
     outputUrl: v.optional(v.string()),
+    adCopy: v.optional(v.object({
+      headlines: v.array(v.string()),
+      primaryTexts: v.array(v.string()),
+      ctas: v.array(v.string()),
+      generatedAt: v.number(),
+    })),
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),

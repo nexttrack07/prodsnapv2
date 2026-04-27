@@ -19,12 +19,24 @@ export const mockVisionResponse = {
       description: 'Position as the smart-money pick for buyers who notice quality but watch the budget.',
       hook: "Premium feel, mid-range price. The teams in the know already switched.",
       suggestedAdStyle: 'before/after demo',
+      tags: {
+        productCategory: 'electronics',
+        imageStyle: 'product-hero',
+        setting: 'studio',
+        primaryColor: 'cool',
+      },
     },
     {
       title: 'Built for power users',
       description: 'Lean into pro features that hobbyist tools skip.',
       hook: "If you've outgrown the basic option, you already know.",
       suggestedAdStyle: 'lifestyle UGC',
+      tags: {
+        productCategory: 'electronics',
+        imageStyle: 'lifestyle',
+        setting: 'home',
+        primaryColor: 'neutral',
+      },
     },
   ],
 }

@@ -201,6 +201,12 @@ const marketingAngleSchema = z.object({
   description: z.string().min(15).max(280),
   hook: z.string().min(5).max(200),
   suggestedAdStyle: z.string().min(3).max(80),
+  tags: z.object({
+    productCategory: z.enum(PRODUCT_CATEGORIES).optional(),
+    imageStyle: z.enum(IMAGE_STYLES).optional(),
+    setting: z.enum(SETTINGS).optional(),
+    primaryColor: z.enum(PRIMARY_COLORS).optional(),
+  }).optional(),
 })
 
 const productAnalysisSchema = z.object({
@@ -233,12 +239,19 @@ export const analyzeProduct = internalAction({
       "title": "<short label, 3-6 words, e.g. 'Late-night skincare ritual'>",
       "description": "<1-2 sentence positioning explanation, why this angle works for this product and audience>",
       "hook": "<a single ad headline or opening line in this angle's voice, under 25 words>",
-      "suggestedAdStyle": "<one of: lifestyle UGC, before/after demo, founder story, problem/solution, social proof, comparison, ingredient close-up, in-use demo>"
+      "suggestedAdStyle": "<one of: lifestyle UGC, before/after demo, founder story, problem/solution, social proof, comparison, ingredient close-up, in-use demo>",
+      "tags": {
+        "productCategory": "<one of: ${PRODUCT_CATEGORIES.join(', ')}>",
+        "imageStyle": "<one of: ${IMAGE_STYLES.join(', ')}>",
+        "setting": "<one of: ${SETTINGS.join(', ')}>",
+        "primaryColor": "<one of: ${PRIMARY_COLORS.join(', ')}>"
+      }
     }
   ]
 }
 
 Generate 3-5 distinct marketing angles. Each angle should target a different buyer motivation (status, savings, anxiety relief, identity, convenience, etc.). Avoid repeating the same hook idea twice.
+For each angle, also predict the structured filter tags from the enums above. These tags help the user find templates that fit the angle. If you're not confident, omit the field rather than guess.
 
 Return ONLY the JSON object, no other text.`,
       systemPrompt:

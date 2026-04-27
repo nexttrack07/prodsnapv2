@@ -214,6 +214,12 @@ export const saveProductAnalysis = internalMutation({
           description: v.string(),
           hook: v.string(),
           suggestedAdStyle: v.string(),
+          tags: v.optional(v.object({
+            productCategory: v.optional(v.string()),
+            imageStyle: v.optional(v.string()),
+            setting: v.optional(v.string()),
+            primaryColor: v.optional(v.string()),
+          })),
         }),
       ),
     ),
