@@ -62,6 +62,8 @@ export function BrandKitPage() {
   const [primaryFont, setPrimaryFont] = useState('')
   const [voice, setVoice] = useState('')
   const [tagline, setTagline] = useState('')
+  const [currentOffer, setCurrentOffer] = useState('')
+  const [customerLanguageText, setCustomerLanguageText] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -75,6 +77,8 @@ export function BrandKitPage() {
     setPrimaryFont(kit.primaryFont ?? '')
     setVoice(kit.voice ?? '')
     setTagline(kit.tagline ?? '')
+    setCurrentOffer(kit.currentOffer ?? '')
+    setCustomerLanguageText(kit.customerLanguage?.join('\n') ?? '')
   }, [kit])
 
   if (isLoading) {
@@ -132,6 +136,11 @@ export function BrandKitPage() {
         primaryFont: primaryFont.trim() || undefined,
         voice: voice.trim() || undefined,
         tagline: tagline.trim() || undefined,
+        currentOffer: currentOffer.trim() || undefined,
+        customerLanguage: customerLanguageText
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean),
       })
       notifications.show({
         title: 'Saved',
@@ -259,6 +268,27 @@ export function BrandKitPage() {
               maxRows={6}
               value={voice}
               onChange={(e) => setVoice(e.currentTarget.value)}
+            />
+          </Stack>
+        </Paper>
+
+        <Paper withBorder radius="md" p="lg">
+          <Stack gap="md">
+            <TextInput
+              label="Current offer"
+              placeholder="e.g. 15% off your first order, Buy 2 Get 1 Free"
+              description="Shown at the bottom of generated ads. Update when your promotions change."
+              value={currentOffer}
+              onChange={(e) => setCurrentOffer(e.currentTarget.value)}
+            />
+            <Textarea
+              label="Customer language"
+              description="Authentic phrases from your customer reviews. One per line. Used to make ad copy sound like real customer language. Auto-populated by URL imports."
+              placeholder={"My skin felt like glass overnight\nI was shocked at how fast it worked"}
+              autosize
+              minRows={4}
+              value={customerLanguageText}
+              onChange={(e) => setCustomerLanguageText(e.currentTarget.value)}
             />
           </Stack>
         </Paper>

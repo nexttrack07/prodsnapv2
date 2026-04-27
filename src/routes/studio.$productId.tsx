@@ -149,6 +149,22 @@ type TemplateFilters = {
   productCategory?: string | null
   imageStyle?: string | null
   setting?: string | null
+  angleType?: string | null
+}
+
+const ANGLE_TYPE_META: Record<string, { color: string; label: string }> = {
+  comparison: { color: 'blue', label: 'Comparison' },
+  'curiosity-narrative': { color: 'grape', label: 'Curiosity' },
+  'social-proof': { color: 'lime', label: 'Social proof' },
+  'problem-callout': { color: 'orange', label: 'Problem callout' },
+}
+
+function angleTypeColor(type: string): string {
+  return ANGLE_TYPE_META[type]?.color ?? 'gray'
+}
+
+function angleTypeLabel(type: string): string {
+  return ANGLE_TYPE_META[type]?.label ?? type
 }
 
 function ProductWorkspacePage() {
@@ -568,6 +584,7 @@ function MarketingAnalysisPanel({
       description: string
       hook: string
       suggestedAdStyle: string
+      angleType?: string
       tags?: {
         productCategory?: string
         imageStyle?: string
@@ -641,6 +658,11 @@ function MarketingAnalysisPanel({
                       <Badge size="xs" color="teal" variant="light" radius="sm">
                         {angle.suggestedAdStyle}
                       </Badge>
+                      {angle.angleType && (
+                        <Badge size="xs" color={angleTypeColor(angle.angleType)} variant="light" radius="sm">
+                          {angleTypeLabel(angle.angleType)}
+                        </Badge>
+                      )}
                     </Group>
                     <Text mt={6} size="sm" c="dark.1">
                       {angle.description}
@@ -666,13 +688,16 @@ function MarketingAnalysisPanel({
                       variant="default"
                       leftSection={<IconLayoutGrid size={12} />}
                       onClick={() => {
-                        const filters: TemplateFilters = angle.tags
-                          ? {
-                              productCategory: angle.tags.productCategory,
-                              imageStyle: angle.tags.imageStyle,
-                              setting: angle.tags.setting,
-                            }
-                          : {}
+                        const filters: TemplateFilters = {
+                          ...(angle.tags
+                            ? {
+                                productCategory: angle.tags.productCategory,
+                                imageStyle: angle.tags.imageStyle,
+                                setting: angle.tags.setting,
+                              }
+                            : {}),
+                          ...(angle.angleType ? { angleType: angle.angleType } : {}),
+                        }
                         onExploreAngle(filters)
                       }}
                     >
@@ -2272,6 +2297,7 @@ function GenerateWizard({
   const [filterCategory, setFilterCategory] = useState<string | null>(initialFilters?.productCategory ?? null)
   const [filterImageStyle, setFilterImageStyle] = useState<string | null>(initialFilters?.imageStyle ?? null)
   const [filterSetting, setFilterSetting] = useState<string | null>(initialFilters?.setting ?? null)
+  const [filterAngleType, setFilterAngleType] = useState<string | null>(initialFilters?.angleType ?? null)
   const [filterAspectRatio, setFilterAspectRatio] = useState<string | null>(null)
   const { data: filterOptions } = useQuery(
     convexQuery(api.products.listTemplateFilterOptions, {}),
@@ -2289,6 +2315,7 @@ function GenerateWizard({
     productCategory: filterCategory ?? undefined,
     imageStyle: filterImageStyle ?? undefined,
     setting: filterSetting ?? undefined,
+    angleType: filterAngleType ?? undefined,
     aspectRatio:
       (filterAspectRatio as '1:1' | '4:5' | '9:16' | undefined) ?? undefined,
   }
@@ -2297,6 +2324,7 @@ function GenerateWizard({
     !!filterArgs.productCategory ||
     !!filterArgs.imageStyle ||
     !!filterArgs.setting ||
+    !!filterArgs.angleType ||
     !!filterArgs.aspectRatio
 
   const {
@@ -2312,6 +2340,7 @@ function GenerateWizard({
       filterArgs.productCategory,
       filterArgs.imageStyle,
       filterArgs.setting,
+      filterArgs.angleType,
       filterArgs.aspectRatio,
     ],
     queryFn: async ({ pageParam }) => {
@@ -2467,6 +2496,19 @@ function GenerateWizard({
           w={150}
         />
         <Select
+          placeholder="Angle type"
+          clearable
+          data={
+            filterOptions?.angleTypes
+              ? filterOptions.angleTypes.map((t: string) => ({ value: t, label: angleTypeLabel(t) }))
+              : []
+          }
+          value={filterAngleType}
+          onChange={setFilterAngleType}
+          size="sm"
+          w={150}
+        />
+        <Select
           placeholder="Aspect"
           clearable
           data={[
@@ -2489,6 +2531,7 @@ function GenerateWizard({
               setFilterCategory(null)
               setFilterImageStyle(null)
               setFilterSetting(null)
+              setFilterAngleType(null)
               setFilterAspectRatio(null)
             }}
           >
