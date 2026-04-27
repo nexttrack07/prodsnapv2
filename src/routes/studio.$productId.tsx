@@ -249,7 +249,12 @@ function ProductWorkspacePage() {
       {/* Product Header - hidden in generate mode */}
       {view === 'gallery' && <ProductHeader product={product} primaryImageUrl={primaryImageUrl} />}
 
-      {view === 'gallery' && <MarketingAnalysisPanel product={product} />}
+      {view === 'gallery' && (
+        <MarketingAnalysisPanel
+          product={product}
+          productId={productId as Id<'products'>}
+        />
+      )}
 
       {/* View Toggle */}
       {view === 'gallery' ? (
@@ -462,8 +467,15 @@ function ProductHeader({
   )
 }
 
+type AdCopyResult = {
+  headlines: string[]
+  primaryTexts: string[]
+  ctas: string[]
+}
+
 function MarketingAnalysisPanel({
   product,
+  productId,
 }: {
   product: {
     status: 'analyzing' | 'ready' | 'failed'
@@ -475,7 +487,17 @@ function MarketingAnalysisPanel({
       suggestedAdStyle: string
     }>
   }
+  productId: Id<'products'>
 }) {
+  const generateAdCopy = useAction(api.adCopy.generateAdCopy)
+  const [copyState, setCopyState] = useState<{
+    angleIndex: number
+    angleTitle: string
+    loading: boolean
+    error?: string
+    result?: AdCopyResult
+  } | null>(null)
+
   if (product.status === 'analyzing') {
     return (
       <Paper withBorder radius="md" p="lg" mb="md">
@@ -501,71 +523,214 @@ function MarketingAnalysisPanel({
     })
   }
 
-  return (
-    <Paper withBorder radius="md" p="lg" mb="md">
-      <Stack gap="md">
-        <Box>
-          <Text size="xs" tt="uppercase" fw={700} c="dark.2">
-            Marketing analysis
-          </Text>
-          {product.valueProposition && (
-            <Text mt="xs" size="md" fw={600} c="white">
-              {product.valueProposition}
-            </Text>
-          )}
-        </Box>
+  const handleWriteCopy = async (angleIndex: number, angleTitle: string) => {
+    setCopyState({ angleIndex, angleTitle, loading: true })
+    try {
+      const result = await generateAdCopy({ productId, angleIndex })
+      setCopyState({ angleIndex, angleTitle, loading: false, result })
+    } catch (err) {
+      setCopyState({
+        angleIndex,
+        angleTitle,
+        loading: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
 
-        <Stack gap="sm">
-          {product.marketingAngles.map((angle, index) => (
-            <Paper
-              key={`${angle.title}-${index}`}
-              withBorder
-              radius="md"
-              p="md"
-              style={{ background: 'rgba(255,255,255,0.02)' }}
-            >
-              <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
-                <Box style={{ flex: 1, minWidth: 200 }}>
-                  <Group gap="sm" align="center">
-                    <Text size="sm" fw={700} c="white">
-                      {angle.title}
+  return (
+    <>
+      <Paper withBorder radius="md" p="lg" mb="md">
+        <Stack gap="md">
+          <Box>
+            <Text size="xs" tt="uppercase" fw={700} c="dark.2">
+              Marketing analysis
+            </Text>
+            {product.valueProposition && (
+              <Text mt="xs" size="md" fw={600} c="white">
+                {product.valueProposition}
+              </Text>
+            )}
+          </Box>
+
+          <Stack gap="sm">
+            {product.marketingAngles.map((angle, index) => (
+              <Paper
+                key={`${angle.title}-${index}`}
+                withBorder
+                radius="md"
+                p="md"
+                style={{ background: 'rgba(255,255,255,0.02)' }}
+              >
+                <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+                  <Box style={{ flex: 1, minWidth: 200 }}>
+                    <Group gap="sm" align="center">
+                      <Text size="sm" fw={700} c="white">
+                        {angle.title}
+                      </Text>
+                      <Badge size="xs" color="teal" variant="light" radius="sm">
+                        {angle.suggestedAdStyle}
+                      </Badge>
+                    </Group>
+                    <Text mt={6} size="sm" c="dark.1">
+                      {angle.description}
                     </Text>
-                    <Badge size="xs" color="teal" variant="light" radius="sm">
-                      {angle.suggestedAdStyle}
-                    </Badge>
-                  </Group>
-                  <Text mt={6} size="sm" c="dark.1">
-                    {angle.description}
-                  </Text>
-                  <Text mt="xs" size="sm" c="dark.0" fs="italic">
-                    “{angle.hook}”
-                  </Text>
-                </Box>
-                <Stack gap={6}>
-                  <Button
-                    size="xs"
-                    variant="light"
-                    color="brand"
-                    leftSection={<IconSparkles size={12} />}
-                    onClick={() => handlePlaceholder('Generate visuals', angle.title)}
-                  >
-                    Generate visuals
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="default"
-                    leftSection={<IconAlignLeft size={12} />}
-                    onClick={() => handlePlaceholder('Write copy', angle.title)}
-                  >
-                    Write copy
-                  </Button>
-                </Stack>
-              </Group>
-            </Paper>
-          ))}
+                    <Text mt="xs" size="sm" c="dark.0" fs="italic">
+                      “{angle.hook}”
+                    </Text>
+                  </Box>
+                  <Stack gap={6}>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="brand"
+                      leftSection={<IconSparkles size={12} />}
+                      onClick={() => handlePlaceholder('Generate visuals', angle.title)}
+                    >
+                      Generate visuals
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconAlignLeft size={12} />}
+                      onClick={() => handleWriteCopy(index, angle.title)}
+                      loading={copyState?.angleIndex === index && copyState.loading}
+                    >
+                      Write copy
+                    </Button>
+                  </Stack>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
         </Stack>
+      </Paper>
+
+      <AdCopyModal state={copyState} onClose={() => setCopyState(null)} />
+    </>
+  )
+}
+
+function AdCopyModal({
+  state,
+  onClose,
+}: {
+  state: {
+    angleIndex: number
+    angleTitle: string
+    loading: boolean
+    error?: string
+    result?: AdCopyResult
+  } | null
+  onClose: () => void
+}) {
+  const opened = !!state && (state.loading || !!state.result || !!state.error)
+
+  const copyToClipboard = (value: string, label: string) => {
+    navigator.clipboard
+      .writeText(value)
+      .then(() =>
+        notifications.show({ title: 'Copied', message: label, color: 'green', autoClose: 1500 }),
+      )
+      .catch(() =>
+        notifications.show({ title: 'Copy failed', message: 'Try selecting and copying manually.', color: 'red' }),
+      )
+  }
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={state ? `Ad copy for "${state.angleTitle}"` : 'Ad copy'}
+      size="lg"
+      radius="md"
+      centered
+    >
+      {state?.loading && (
+        <Group gap="sm" py="md" justify="center">
+          <Loader size="sm" />
+          <Text size="sm" c="dark.1">
+            Drafting headlines, body copy, and CTAs…
+          </Text>
+        </Group>
+      )}
+      {state?.error && (
+        <Alert color="red" variant="light" icon={<IconAlertTriangle size={16} />}>
+          {state.error}
+        </Alert>
+      )}
+      {state?.result && (
+        <Stack gap="md">
+          <CopySection
+            label="Headlines"
+            items={state.result.headlines}
+            onCopy={copyToClipboard}
+          />
+          <CopySection
+            label="Primary text"
+            items={state.result.primaryTexts}
+            onCopy={copyToClipboard}
+          />
+          <CopySection
+            label="CTAs"
+            items={state.result.ctas}
+            onCopy={copyToClipboard}
+            inline
+          />
+        </Stack>
+      )}
+    </Modal>
+  )
+}
+
+function CopySection({
+  label,
+  items,
+  onCopy,
+  inline,
+}: {
+  label: string
+  items: string[]
+  onCopy: (value: string, label: string) => void
+  inline?: boolean
+}) {
+  return (
+    <Box>
+      <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
+        {label}
+      </Text>
+      <Stack gap="xs">
+        {items.map((item, idx) => (
+          <Group
+            key={`${label}-${idx}`}
+            gap="sm"
+            justify="space-between"
+            align="center"
+            wrap="nowrap"
+            style={{
+              padding: '8px 12px',
+              background: 'rgba(255,255,255,0.04)',
+              borderRadius: 6,
+            }}
+          >
+            <Text
+              size={inline ? 'sm' : 'sm'}
+              c="white"
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {item}
+            </Text>
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              onClick={() => onCopy(item, `${label.toLowerCase()} copied`)}
+            >
+              Copy
+            </Button>
+          </Group>
+        ))}
       </Stack>
-    </Paper>
+    </Box>
   )
 }
 

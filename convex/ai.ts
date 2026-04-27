@@ -248,6 +248,83 @@ Return ONLY the JSON object, no other text.`,
   },
 })
 
+// ─── Ad copy generation (text only) ───────────────────────────────────────
+const adCopyResultSchema = z.object({
+  headlines: z.array(z.string().min(3).max(60)).min(2).max(4),
+  primaryTexts: z.array(z.string().min(10).max(220)).min(2).max(3),
+  ctas: z.array(z.string().min(2).max(20)).min(2).max(4),
+})
+
+export const generateAdCopyText = internalAction({
+  args: {
+    productName: v.string(),
+    productDescription: v.optional(v.string()),
+    targetAudience: v.optional(v.string()),
+    valueProposition: v.optional(v.string()),
+    angle: v.object({
+      title: v.string(),
+      description: v.string(),
+      hook: v.string(),
+      suggestedAdStyle: v.string(),
+    }),
+    brandVoice: v.optional(v.string()),
+    brandTagline: v.optional(v.string()),
+  },
+  handler: async (_ctx, args) => {
+    if (isTestMode()) {
+      await mockDelay()
+      return {
+        headlines: [
+          `${args.angle.title}, in 60 seconds`,
+          `Why ${args.productName} actually works`,
+        ],
+        primaryTexts: [
+          `${args.angle.description} ${args.productName} is the version teams in the know already switched to.`,
+          `${args.angle.hook} Try ${args.productName} risk-free for 7 days.`,
+        ],
+        ctas: ['Try free', 'See it in action', 'Get started'],
+      }
+    }
+
+    const lines: string[] = [
+      `Product: ${args.productName}`,
+    ]
+    if (args.productDescription) lines.push(`Description: ${args.productDescription}`)
+    if (args.targetAudience) lines.push(`Target audience: ${args.targetAudience}`)
+    if (args.valueProposition) lines.push(`Value proposition: ${args.valueProposition}`)
+    lines.push(`Angle: ${args.angle.title} — ${args.angle.description}`)
+    lines.push(`Sample hook: "${args.angle.hook}"`)
+    lines.push(`Suggested ad style: ${args.angle.suggestedAdStyle}`)
+    if (args.brandVoice) lines.push(`Brand voice: ${args.brandVoice}`)
+    if (args.brandTagline) lines.push(`Brand tagline: ${args.brandTagline}`)
+
+    const prompt = `${lines.join('\n')}
+
+Write Facebook ad copy in this angle's voice. Return a JSON object with these exact fields:
+{
+  "headlines": [<2-3 attention-grabbing headlines, each under 40 characters>],
+  "primaryTexts": [<2-3 body copy variants, each 1-2 sentences, under 200 characters>],
+  "ctas": [<2-3 short button labels, each under 16 characters, action verbs>]
+}
+
+Rules:
+- Match the angle and brand voice. Use the brand tagline as a tonal reference, never copy it verbatim.
+- Specific over generic. No filler superlatives ("amazing", "revolutionary").
+- No emojis unless the brand voice clearly invites them.
+- Headlines should pay off the angle's hook in the user's frame, not the product's.
+
+Return ONLY the JSON object, no other text.`
+
+    const response = await callText({
+      prompt,
+      systemPrompt:
+        'You are a senior performance copywriter for DTC Facebook ads. Concrete, specific, results-focused. Return valid JSON only.',
+    })
+
+    return parseJsonFromResponse(response, adCopyResultSchema)
+  },
+})
+
 // ─── Structured Tags Schema ───────────────────────────────────────────────
 const structuredTagsSchema = z.object({
   // Required: Pick exactly ONE from each category
