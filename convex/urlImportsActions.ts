@@ -8,6 +8,7 @@ import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import { internal } from './_generated/api'
 import { uploadFromUrl } from './r2'
+import { nanoid } from 'nanoid'
 
 type FirecrawlExtractedJson = {
   productName?: string
@@ -148,7 +149,7 @@ export const runUrlImport = internalAction({
       for (let i = 0; i < candidateImages.length; i++) {
         const sourceUrl = candidateImages[i]
         const ext = guessExtension(sourceUrl)
-        const key = `imports/${importId}/${i}-${randomToken()}${ext}`
+        const key = `imports/${importId}/${i}-${nanoid(8)}${ext}`
         try {
           const url = await uploadFromUrl(sourceUrl, key)
           uploadedUrls.push(url)
@@ -171,7 +172,6 @@ export const runUrlImport = internalAction({
         userId: importRow.userId,
         name: productName,
         imageUrls: uploadedUrls,
-        sourceUrl: importRow.sourceUrl,
       })
 
       // 5. Upsert the brand kit (best-effort)
@@ -185,7 +185,7 @@ export const runUrlImport = internalAction({
       if (extracted.brandLogoUrl && /^https?:\/\//i.test(extracted.brandLogoUrl)) {
         try {
           const ext = guessExtension(extracted.brandLogoUrl)
-          const key = `imports/${importId}/logo-${randomToken()}${ext}`
+          const key = `imports/${importId}/logo-${nanoid(8)}${ext}`
           brandLogoR2Url = await uploadFromUrl(extracted.brandLogoUrl, key)
           brandLogoStorageKey = key
         } catch (err) {
@@ -217,6 +217,7 @@ export const runUrlImport = internalAction({
         finishedAt: Date.now(),
       })
     } catch (err) {
+      // TODO(R2-sweeper): on failure, clean up uploaded keys
       const message = err instanceof Error ? err.message : String(err)
       await ctx.runMutation(internal.urlImports.patchImportStatus, {
         importId,
@@ -251,10 +252,6 @@ function guessExtension(url: string): string {
     /* ignore */
   }
   return ''
-}
-
-function randomToken(): string {
-  return Math.random().toString(36).slice(2, 10)
 }
 
 async function safeReadText(res: Response): Promise<string> {

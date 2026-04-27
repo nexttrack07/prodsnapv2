@@ -20,6 +20,16 @@ import {
 // Configure fal client with API key
 fal.config({ credentials: process.env.FAL_KEY })
 
+export type TemplateContext = {
+  category?: string
+  subcategory?: string
+  sceneTypes?: string[]
+  moods?: string[]
+  sceneDescription?: string
+  aspectRatio?: '1:1' | '4:5' | '9:16' | '16:9'
+  imageUrl?: string
+}
+
 // Model constants
 const VISION_MODEL = 'google/gemini-2.5-flash'
 
@@ -430,14 +440,7 @@ export const composePrompt = internalAction({
     if (!ctxData.template) throw new Error('Template not found for generation')
     // Narrow: this code path only runs for template-driven generations, so the
     // doc returned by getGenerationContextInternal must be an adTemplates row.
-    const template = ctxData.template as {
-      category?: string
-      subcategory?: string
-      sceneTypes?: string[]
-      moods?: string[]
-      sceneDescription?: string
-      aspectRatio?: string
-    }
+    const template = ctxData.template as TemplateContext
     const templateImageUrl = generation.templateImageUrl
     if (!templateImageUrl) throw new Error('Template image URL missing on generation')
 
@@ -561,7 +564,7 @@ export const generateFromTemplate = internalAction({
     if (!templateImageUrl) {
       throw new Error('Template image URL missing — generateFromTemplate is template-driven only')
     }
-    const template = ctxData.template as { aspectRatio?: string } | null
+    const template = ctxData.template as TemplateContext | null
 
     const aspectRatio = template?.aspectRatio ?? generation.aspectRatio ?? '1:1'
 
@@ -605,6 +608,18 @@ export const composeFromAnglePrompt = internalAction({
       ? await ctx.runQuery(internal.brandKits.getBrandKitInternal, { userId })
       : null
 
+    let productImageUrl = generation.productImageUrl
+    if (generation.productId) {
+      const images = await ctx.runQuery(internal.productImages.listByProductInternal, {
+        productId: generation.productId,
+      })
+      const bgRemoved = images?.find(
+        (i: { type: string; status: string; imageUrl: string }) =>
+          i.type === 'background-removed' && i.status === 'ready',
+      )
+      if (bgRemoved) productImageUrl = bgRemoved.imageUrl
+    }
+
     const prodLines: string[] = []
     if (prodCtx.category) prodLines.push(`Product category: ${prodCtx.category}`)
     if (prodCtx.productDescription) prodLines.push(`Product description: ${prodCtx.productDescription}`)
@@ -617,7 +632,7 @@ export const composeFromAnglePrompt = internalAction({
     if (brandKit?.voice) brandLines.push(`Brand voice: ${brandKit.voice}`)
 
     const userText = [
-      'IMAGE = the user\'s product photo on a plain background.',
+      'IMAGE = the user\'s product photo. The product is the focal element; design the surrounding scene.',
       'TASK: design a single Facebook ad image (no template, no reference scene) that delivers the angle below.',
       '',
       prodLines.length ? prodLines.join('\n') : '(no product analysis available)',
@@ -633,7 +648,7 @@ export const composeFromAnglePrompt = internalAction({
     ].join('\n')
 
     const text = await callVision({
-      imageUrls: [generation.productImageUrl],
+      imageUrls: [productImageUrl],
       prompt: userText,
       systemPrompt:
         'You are an expert ad-image prompt composer. Write nano-banana prompts that produce scroll-stopping Facebook ad images grounded in the user\'s real product photo. Be specific about composition, lighting, palette, and visible text.',

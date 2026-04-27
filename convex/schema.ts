@@ -348,7 +348,7 @@ const schema = defineSchema({
     userId: v.string(),
     logoUrl: v.optional(v.string()),
     logoStorageKey: v.optional(v.string()), // R2 object key for management/deletion
-    // Hex color strings; first entry is primary by convention.
+    // Hex color strings (#rrggbb); first entry is primary by convention.
     colors: v.optional(v.array(v.string())),
     primaryFont: v.optional(v.string()),
     voice: v.optional(v.string()),          // free-form notes about brand voice

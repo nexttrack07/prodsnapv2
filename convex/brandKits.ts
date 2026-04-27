@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { internal } from './_generated/api'
 
 async function requireAuth(
   ctx: { auth: { getUserIdentity: () => Promise<unknown> } },
@@ -72,11 +73,15 @@ export const clearBrandLogo = mutation({
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .first()
     if (!existing) return
+    const keyToDelete = existing.logoStorageKey
     await ctx.db.patch(existing._id, {
       logoUrl: undefined,
       logoStorageKey: undefined,
       updatedAt: Date.now(),
     })
+    if (keyToDelete) {
+      await ctx.scheduler.runAfter(0, internal.r2.clearBrandLogoStorage, { key: keyToDelete })
+    }
   },
 })
 

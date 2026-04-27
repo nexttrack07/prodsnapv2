@@ -504,6 +504,11 @@ function MarketingAnalysisPanel({
     angleTitle: string
   } | null>(null)
 
+  useEffect(() => {
+    setCopyState(null)
+    setAngleGenState(null)
+  }, [productId])
+
   if (product.status === 'analyzing') {
     return (
       <Paper withBorder radius="md" p="lg" mb="md">

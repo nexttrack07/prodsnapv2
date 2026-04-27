@@ -82,6 +82,9 @@ export const generateAdCopy = action({
     }
 
     const product = await ctx.runQuery(api.products.getProduct, { productId })
+    // Returns "Product not found" rather than "Not authorized" to avoid leaking
+    // product existence to non-owners. getProduct returns null when the product
+    // belongs to a different user.
     if (!product) throw new Error('Product not found')
     if (product.status !== 'ready') {
       throw new Error('Product analysis is not ready yet')

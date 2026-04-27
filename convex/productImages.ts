@@ -103,6 +103,15 @@ export const getProductImageInternal = internalQuery({
   handler: async (ctx, { imageId }) => ctx.db.get(imageId),
 })
 
+export const listByProductInternal = internalQuery({
+  args: { productId: v.id('products') },
+  handler: async (ctx, { productId }) =>
+    ctx.db
+      .query('productImages')
+      .withIndex('by_product', (q) => q.eq('productId', productId))
+      .collect(),
+})
+
 // ─── Product Image Mutations ───────────────────────────────────────────────
 
 /**
@@ -204,12 +213,8 @@ export const deleteProductImage = mutation({
       .withIndex('by_product', (q) => q.eq('productId', image.productId))
       .collect()
 
-    // If this is an original, get its enhancements
+    // Only delete the single image that was clicked (no cascade to enhancements)
     const imagesToDelete: Id<'productImages'>[] = [imageId]
-    if (image.type === 'original') {
-      const enhancements = allImages.filter((img) => img.parentImageId === imageId)
-      imagesToDelete.push(...enhancements.map((e) => e._id))
-    }
 
     // Calculate remaining images BEFORE any mutations
     const remaining = allImages.filter((img) => !imagesToDelete.includes(img._id))

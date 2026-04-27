@@ -1,10 +1,10 @@
 'use node'
 
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { nanoid } from 'nanoid'
 import { v } from 'convex/values'
-import { action } from './_generated/server'
+import { action, internalAction } from './_generated/server'
 
 // ─── Security: Allowed image MIME types ──────────────────────────────────────
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -235,6 +235,23 @@ export const uploadTemplateImage = action({
       aspectRatio: aspectRatio as '1:1' | '4:5' | '9:16' | '16:9',
       width,
       height,
+    }
+  },
+})
+
+export async function deleteFromR2(key: string): Promise<void> {
+  const bucket = process.env.R2_BUCKET_NAME!
+  await getR2Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+}
+
+export const clearBrandLogoStorage = internalAction({
+  args: { key: v.string() },
+  handler: async (_ctx, { key }) => {
+    try {
+      await deleteFromR2(key)
+    } catch (err) {
+      // best-effort; log and continue
+      console.warn(`clearBrandLogoStorage: failed to delete R2 key ${key}:`, err)
     }
   },
 })

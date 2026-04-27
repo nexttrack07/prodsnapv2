@@ -244,9 +244,8 @@ export const createProductFromImport = internalMutation({
     userId: v.string(),
     name: v.string(),
     imageUrls: v.array(v.string()),
-    sourceUrl: v.optional(v.string()),
   },
-  handler: async (ctx, { userId, name, imageUrls, sourceUrl }) => {
+  handler: async (ctx, { userId, name, imageUrls }) => {
     if (imageUrls.length === 0) {
       throw new Error('At least one product image is required')
     }
@@ -270,7 +269,6 @@ export const createProductFromImport = internalMutation({
       imageIds.push(id)
     }
     await ctx.db.patch(productId, { primaryImageId: imageIds[0] })
-    void sourceUrl // unused for now; reserved for provenance/audit
     await ctx.scheduler.runAfter(0, internal.products.runProductAnalysis, {
       productId,
     })
