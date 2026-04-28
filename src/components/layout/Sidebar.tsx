@@ -20,7 +20,6 @@ import {
   IconLayoutGrid,
   IconBrush,
   IconLibrary,
-  IconBriefcase,
   IconSparkles,
   IconReceipt,
   IconBolt,
@@ -55,12 +54,6 @@ const PRIMARY_NAV: ReadonlyArray<NavItem> = [
     label: 'Library',
     disabled: true,
     comingSoonNote: 'Library — coming soon',
-  },
-  {
-    icon: IconBriefcase,
-    label: 'Strategy',
-    disabled: true,
-    comingSoonNote: 'Strategy — coming soon',
   },
   { to: '/account/brand', icon: IconBrush, label: 'Brand kit' },
 ]

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useAction, useQuery as useConvexQuery } from 'convex/react'
@@ -11,6 +11,7 @@ import {
   Title,
   Text,
   Box,
+  Center,
   Group,
   Stack,
   Button,
@@ -36,7 +37,6 @@ import {
   Skeleton,
   Alert,
   Select,
-  Tabs,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -65,6 +65,10 @@ import {
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
+import {
+  ImageEnhancerModal,
+  type ImageEnhancerImage,
+} from '../components/product/ImageEnhancerModal'
 import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 import { ModelSelect } from '../components/ModelSelect'
 import { mapGenerationError } from '../lib/billing/mapBillingError'
@@ -76,7 +80,7 @@ export const Route = createFileRoute('/studio/$productId')({
 
 type AspectRatio = '1:1' | '4:5' | '9:16'
 type Mode = 'exact' | 'remix'
-type View = 'gallery' | 'generate' | 'analysis'
+type View = 'gallery' | 'generate'
 
 // Type for generation data from the query
 interface GenerationData {
@@ -169,6 +173,10 @@ function angleTypeLabel(type: string): string {
 
 function ProductWorkspacePage() {
   const { productId } = Route.useParams()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // Nested routes (e.g. /studio/$productId/strategy) take over the page —
+  // render only the child Outlet and skip the workspace content.
+  const isChildActive = pathname !== `/studio/${productId}`
   const [view, setView] = useState<View>('gallery')
   const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
 
@@ -203,6 +211,10 @@ function ProductWorkspacePage() {
           day: 'numeric',
         })
       : null
+
+  if (isChildActive) {
+    return <Outlet />
+  }
 
   if (productLoading) {
     return (
@@ -255,7 +267,7 @@ function ProductWorkspacePage() {
   const anglesCount = product.marketingAngles?.length ?? 0
 
   return (
-    <Container size="lg" py={40}>
+    <Container size="lg" py="md">
       {/* US-U06: Credits exhausted banner */}
       {creditsExhausted && (
         <Alert
@@ -270,41 +282,16 @@ function ProductWorkspacePage() {
         </Alert>
       )}
 
-      {/* Breadcrumb */}
-      <Box mb="md">
-        <Anchor component={Link} to="/studio" size="sm" c="dark.2">
-          <Group gap={4}>
-            <IconChevronLeft size={16} />
-            Back to products
-          </Group>
-        </Anchor>
-      </Box>
-
-      {/* Product Header - persistent context, hidden only in generate mode */}
-      {view !== 'generate' && <ProductHeader product={product} primaryImageUrl={primaryImageUrl} />}
-
-      {/* Tabs — visible only outside generate mode */}
+      {/* Rich product card - hidden only in generate mode */}
       {view !== 'generate' && (
-        <Tabs
-          value={view}
-          onChange={(v) => setView(v as View)}
-          mb="xl"
-          variant="default"
-        >
-          <Tabs.List>
-            <Tabs.Tab value="gallery">Gallery</Tabs.Tab>
-            <Tabs.Tab value="analysis">
-              <Group gap={6}>
-                Marketing analysis
-                {anglesCount > 0 && (
-                  <Badge size="xs" variant="outline" color="gray" radius="sm">
-                    {anglesCount} {anglesCount === 1 ? 'angle' : 'angles'}
-                  </Badge>
-                )}
-              </Group>
-            </Tabs.Tab>
-          </Tabs.List>
-        </Tabs>
+        <ProductHeader
+          product={product}
+          productId={productId as Id<'products'>}
+          primaryImageUrl={primaryImageUrl}
+          anglesCount={anglesCount}
+          onNewAd={() => setView('generate')}
+          creditsExhausted={creditsExhausted}
+        />
       )}
 
       {view === 'gallery' && (
@@ -317,17 +304,6 @@ function ProductWorkspacePage() {
           pendingGenerations={pendingGenerations}
           onGenerateMore={() => setView('generate')}
           creditsExhausted={creditsExhausted}
-        />
-      )}
-
-      {view === 'analysis' && (
-        <MarketingAnalysisPanel
-          product={product}
-          productId={productId as Id<'products'>}
-          onExploreAngle={(filters) => {
-            setInitialFilters(filters)
-            setView('generate')
-          }}
         />
       )}
 
@@ -348,7 +324,11 @@ function ProductWorkspacePage() {
 
 function ProductHeader({
   product,
+  productId,
   primaryImageUrl,
+  anglesCount,
+  onNewAd,
+  creditsExhausted,
 }: {
   product: {
     _id: Id<'products'>
@@ -357,17 +337,35 @@ function ProductHeader({
     category?: string
     productDescription?: string
     generationCount: number
+    primaryImageId?: Id<'productImages'>
   }
+  productId: Id<'products'>
   primaryImageUrl?: string
+  anglesCount: number
+  onNewAd: () => void
+  creditsExhausted: boolean
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [isEditingName, setIsEditingName] = useState(false)
   const [editedName, setEditedName] = useState('')
+  const [activeImage, setActiveImage] = useState<ImageEnhancerImage | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
 
   const updateProduct = useConvexMutation(api.products.updateProduct)
   const updateMutation = useMutation({ mutationFn: updateProduct })
   const reanalyzeProduct = useConvexMutation(api.products.reanalyzeProduct)
   const reanalyzeMutation = useMutation({ mutationFn: reanalyzeProduct })
+
+  const { data: productImages } = useQuery(
+    convexQuery(api.productImages.getProductImagesList, { productId }),
+  )
+
+  const uploadAction = useAction(api.r2.uploadProductImage)
+  const addImage = useConvexMutation(api.productImages.addProductImage)
+  const addImageMutation = useMutation({ mutationFn: addImage })
+
+  const sourceImages = (productImages ?? []).filter((img) => img.type === 'original')
+  const originalCount = sourceImages.length
 
   async function handleSaveName() {
     if (!editedName.trim()) return
@@ -400,134 +398,379 @@ function ProductHeader({
     }
   }
 
-  const imageSize = isMobile ? 80 : 120
+  async function handleUploadSourceImage(files: File[]) {
+    const file = files[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      notifications.show({
+        title: 'Too large',
+        message: 'Image must be under 10 MB',
+        color: 'red',
+      })
+      return
+    }
+    setIsUploadingImage(true)
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce(
+          (data, byte) => data + String.fromCharCode(byte),
+          '',
+        ),
+      )
+      const { url } = await uploadAction({
+        name: file.name,
+        base64,
+        contentType: file.type,
+      })
+      await addImageMutation.mutateAsync({ productId, imageUrl: url })
+      notifications.show({ title: 'Added', message: 'Source image added.', color: 'green' })
+    } catch (err) {
+      notifications.show({
+        title: 'Upload failed',
+        message: err instanceof Error ? err.message : 'Try again',
+        color: 'red',
+      })
+    } finally {
+      setIsUploadingImage(false)
+    }
+  }
 
   return (
-    <Paper
-      radius="lg"
-      p={isMobile ? 'md' : 'xl'}
-      mb="xl"
+    <>
+      <Paper
+        radius="lg"
+        p={isMobile ? 'md' : 'xl'}
+        mb="xl"
+        style={{
+          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
+          border: '1px solid var(--mantine-color-dark-6)',
+        }}
+      >
+        <Group
+          align="flex-start"
+          gap={isMobile ? 'md' : 'xl'}
+          wrap={isMobile ? 'wrap' : 'nowrap'}
+        >
+          {/* Primary image — bigger on the left */}
+          <Box
+            w={isMobile ? '100%' : 240}
+            h={isMobile ? 220 : 240}
+            style={{
+              borderRadius: 'var(--mantine-radius-lg)',
+              overflow: 'hidden',
+              flexShrink: 0,
+              border: '1px solid var(--mantine-color-dark-5)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+            }}
+            bg="dark.7"
+          >
+            {primaryImageUrl ? (
+              <Image src={primaryImageUrl} alt={product.name} fit="cover" h="100%" w="100%" />
+            ) : (
+              <Center h="100%">
+                <IconPhoto size={36} color="var(--mantine-color-dark-3)" />
+              </Center>
+            )}
+          </Box>
+
+          {/* Right column */}
+          <Stack gap="md" style={{ flex: 1, minWidth: 0 }}>
+            {/* Name (editable) + Strategy link */}
+            <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                {isEditingName ? (
+                  <Group gap="xs">
+                    <TextInput
+                      value={editedName}
+                      onChange={(e) => setEditedName(e.target.value)}
+                      size="lg"
+                      variant="unstyled"
+                      styles={{
+                        input: {
+                          fontSize: '1.5rem',
+                          fontWeight: 700,
+                          borderBottom: '2px solid var(--mantine-color-brand-6)',
+                          color: 'white',
+                        },
+                      }}
+                      autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+                    />
+                    <Button size="xs" variant="light" color="brand" onClick={handleSaveName}>
+                      Save
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => setIsEditingName(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </Group>
+                ) : (
+                  <Title
+                    order={1}
+                    fz={isMobile ? 22 : 28}
+                    fw={700}
+                    c="white"
+                    mb={4}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Edit product name: ${product.name}`}
+                    style={{ cursor: 'pointer', letterSpacing: '-0.02em' }}
+                    onClick={() => {
+                      setEditedName(product.name)
+                      setIsEditingName(true)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setEditedName(product.name)
+                        setIsEditingName(true)
+                      }
+                    }}
+                    title="Click to edit"
+                  >
+                    {capitalizeWords(product.name)}
+                  </Title>
+                )}
+                <Group gap={6} mt={6}>
+                  {product.category && (
+                    <Badge size="sm" variant="light" color="brand" radius="sm">
+                      {product.category}
+                    </Badge>
+                  )}
+                  <Badge size="sm" variant="outline" color="gray" radius="sm">
+                    {product.generationCount}{' '}
+                    {product.generationCount === 1 ? 'ad' : 'ads'}
+                  </Badge>
+                  <StatusBadge status={product.status} />
+                </Group>
+              </Box>
+
+              <Link
+                to="/studio/$productId/strategy"
+                params={{ productId: product._id }}
+                style={{
+                  textDecoration: 'none',
+                  color: 'var(--mantine-color-brand-4)',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  flexShrink: 0,
+                }}
+              >
+                <Group gap={4}>
+                  Strategy
+                  {anglesCount > 0 && (
+                    <Badge size="xs" variant="light" color="brand" radius="sm">
+                      {anglesCount}
+                    </Badge>
+                  )}
+                  <IconArrowRight size={14} />
+                </Group>
+              </Link>
+            </Group>
+
+            {/* Description */}
+            {product.productDescription && (
+              <Text size="sm" c="dark.1" lh={1.6} maw={680}>
+                {product.productDescription}
+              </Text>
+            )}
+
+            {/* Source images strip */}
+            <Stack gap={6}>
+              <Text size="xs" tt="uppercase" fw={700} c="dark.2">
+                Source images
+              </Text>
+              <Group gap="xs" wrap="wrap">
+                {sourceImages.map((img) => {
+                  const isPrimary = img._id === product.primaryImageId
+                  return (
+                    <SourceImageTile
+                      key={img._id}
+                      imageUrl={img.imageUrl}
+                      status={img.status}
+                      isPrimary={isPrimary}
+                      onClick={() =>
+                        setActiveImage({
+                          _id: img._id,
+                          imageUrl: img.imageUrl,
+                          type: img.type,
+                          status: img.status,
+                          parentImageId: img.parentImageId,
+                          error: img.error,
+                          _creationTime: img._creationTime,
+                        })
+                      }
+                    />
+                  )
+                })}
+                <SourceImageDropzone
+                  onDrop={handleUploadSourceImage}
+                  loading={isUploadingImage}
+                />
+              </Group>
+            </Stack>
+
+            {/* Actions row */}
+            <Group justify="flex-end" gap="sm">
+              <Button
+                color="brand"
+                size="md"
+                leftSection={<IconPlus size={16} />}
+                disabled={creditsExhausted || product.status !== 'ready'}
+                onClick={onNewAd}
+              >
+                New ad
+              </Button>
+            </Group>
+
+            {product.status === 'failed' && (
+              <Alert
+                color="red"
+                variant="light"
+                title="Product analysis failed"
+                icon={<IconAlertTriangle size={16} />}
+              >
+                <Stack gap="sm">
+                  <Text size="sm">Retry analysis to unlock generation for this product.</Text>
+                  <Button
+                    w="fit-content"
+                    size="xs"
+                    color="red"
+                    variant="light"
+                    leftSection={<IconRefresh size={13} />}
+                    loading={reanalyzeMutation.isPending}
+                    onClick={handleRetryAnalysis}
+                  >
+                    Retry analysis
+                  </Button>
+                </Stack>
+              </Alert>
+            )}
+          </Stack>
+        </Group>
+      </Paper>
+
+      <ImageEnhancerModal
+        opened={activeImage !== null}
+        onClose={() => setActiveImage(null)}
+        image={activeImage}
+        productId={productId}
+        productName={product.name}
+        isPrimary={
+          activeImage !== null && activeImage._id === product.primaryImageId
+        }
+        originalCount={originalCount}
+      />
+    </>
+  )
+}
+
+function SourceImageTile({
+  imageUrl,
+  status,
+  isPrimary,
+  onClick,
+}: {
+  imageUrl: string
+  status: 'processing' | 'ready' | 'failed'
+  isPrimary: boolean
+  onClick: () => void
+}) {
+  return (
+    <Box
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      w={64}
+      h={64}
+      pos="relative"
       style={{
-        background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
-        border: '1px solid var(--mantine-color-dark-6)',
+        borderRadius: 8,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        backgroundColor: 'var(--mantine-color-dark-6)',
+        border: isPrimary
+          ? '2px solid var(--mantine-color-brand-5)'
+          : '1px solid var(--mantine-color-dark-5)',
+        flexShrink: 0,
+        transition: 'transform 120ms ease',
       }}
     >
-      <Group align="flex-start" gap={isMobile ? 'md' : 'xl'} wrap={isMobile ? 'wrap' : 'nowrap'}>
+      {status === 'processing' ? (
+        <Center h="100%">
+          <Loader size="xs" color="brand" />
+        </Center>
+      ) : (
+        <Image src={imageUrl} alt="" fit="cover" w="100%" h="100%" />
+      )}
+      {isPrimary && (
         <Box
-          w={imageSize}
-          h={imageSize}
+          pos="absolute"
+          top={2}
+          right={2}
           style={{
-            borderRadius: 'var(--mantine-radius-lg)',
-            overflow: 'hidden',
-            flexShrink: 0,
-            border: '1px solid var(--mantine-color-dark-5)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+            width: 18,
+            height: 18,
+            borderRadius: '50%',
+            backgroundColor: 'var(--mantine-color-brand-6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
           }}
-          bg="dark.7"
         >
-          <Image src={primaryImageUrl || ''} alt={product.name} fit="cover" h="100%" w="100%" />
+          <IconStarFilled size={10} />
         </Box>
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          {isEditingName ? (
-            <Group gap="xs">
-              <TextInput
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                size="lg"
-                variant="unstyled"
-                styles={{
-                  input: {
-                    fontSize: '1.5rem',
-                    fontWeight: 700,
-                    borderBottom: '2px solid var(--mantine-color-brand-6)',
-                    color: 'white',
-                  },
-                }}
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
-              />
-              <Button size="xs" variant="light" color="brand" onClick={handleSaveName}>
-                Save
-              </Button>
-              <Button size="xs" variant="subtle" color="gray" onClick={() => setIsEditingName(false)}>
-                Cancel
-              </Button>
-            </Group>
-          ) : (
-            <Title
-              order={1}
-              fz={isMobile ? 20 : 28}
-              fw={700}
-              c="white"
-              mb={4}
-              tabIndex={0}
-              role="button"
-              aria-label={`Edit product name: ${product.name}`}
-              style={{ cursor: 'pointer', letterSpacing: '-0.02em' }}
-              onClick={() => {
-                setEditedName(product.name)
-                setIsEditingName(true)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  setEditedName(product.name)
-                  setIsEditingName(true)
-                }
-              }}
-              title="Click to edit"
-            >
-              {capitalizeWords(product.name)}
-            </Title>
-          )}
-          <Group gap="sm" mt="sm" justify="space-between" align="center">
-            <Group gap="sm">
-              {product.category && (
-                <Badge size="sm" variant="light" color="brand" radius="sm">
-                  {product.category}
-                </Badge>
-              )}
-              <Badge size="sm" variant="outline" color="gray" radius="sm">
-                {product.generationCount} {product.generationCount === 1 ? 'generation' : 'generations'}
-              </Badge>
-              <StatusBadge status={product.status} />
-            </Group>
-            <CreditsIndicator />
-          </Group>
-          {product.productDescription && (
-            <Text size="sm" c="dark.1" mt="md" lh={1.6} maw={600}>
-              {product.productDescription}
-            </Text>
-          )}
-          {product.status === 'failed' && (
-            <Alert
-              color="red"
-              variant="light"
-              mt="md"
-              title="Product analysis failed"
-              icon={<IconAlertTriangle size={16} />}
-            >
-              <Stack gap="sm">
-                <Text size="sm">
-                  Retry analysis to unlock generation for this product.
-                </Text>
-                <Button
-                  w="fit-content"
-                  size="xs"
-                  color="red"
-                  variant="light"
-                  leftSection={<IconRefresh size={13} />}
-                  loading={reanalyzeMutation.isPending}
-                  onClick={handleRetryAnalysis}
-                >
-                  Retry analysis
-                </Button>
-              </Stack>
-            </Alert>
-          )}
-        </Box>
-      </Group>
-    </Paper>
+      )}
+    </Box>
+  )
+}
+
+function SourceImageDropzone({
+  onDrop,
+  loading,
+}: {
+  onDrop: (files: File[]) => void
+  loading: boolean
+}) {
+  return (
+    <Dropzone
+      onDrop={onDrop}
+      accept={IMAGE_MIME_TYPE}
+      maxSize={10 * 1024 * 1024}
+      multiple={false}
+      disabled={loading}
+      style={{
+        border: '1px dashed var(--mantine-color-dark-4)',
+        borderRadius: 8,
+        backgroundColor: 'var(--mantine-color-dark-7)',
+        width: 64,
+        height: 64,
+        padding: 0,
+        minHeight: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+      }}
+    >
+      {loading ? (
+        <Loader size="xs" color="brand" />
+      ) : (
+        <IconPlus size={20} color="var(--mantine-color-dark-2)" />
+      )}
+    </Dropzone>
   )
 }
 
@@ -1517,41 +1760,12 @@ function GalleryView({
 
   return (
     <Box>
-      {/* Image Gallery Section */}
-      <ImageGallerySection product={product} productId={productId} legacyImageUrl={legacyImageUrl} />
-
-      {/* Action bar */}
-      <Group justify="space-between" mb="lg">
-        <Box>
-          <Title order={2} fz="xl" fw={600} c="white" mb={4}>Generations</Title>
-          <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
-        </Box>
-        <Tooltip
-          label={creditsExhausted ? 'No credits remaining this billing period' : product.status === 'analyzing' ? 'Product is still being analyzed...' : 'Product analysis failed'}
-          disabled={product.status === 'ready' && !creditsExhausted}
-          withArrow
-          position="bottom"
-          events={{ hover: true, focus: true, touch: true }}
-        >
-          <span>
-            <Button
-              onClick={onGenerateMore}
-              disabled={product.status !== 'ready' || creditsExhausted}
-              color="brand"
-              size="md"
-              fz="sm"
-              rightSection={<IconArrowRight size={16} />}
-              styles={{
-                root: {
-                  boxShadow: '0 4px 14px rgba(84, 116, 180, 0.25)',
-                },
-              }}
-            >
-              Generate More
-            </Button>
-          </span>
-        </Tooltip>
-      </Group>
+      {/* Section header — source images live in the product card above; this
+          section is now the ads gallery only. */}
+      <Box mb="lg">
+        <Title order={2} fz="xl" fw={600} c="white" mb={4}>Generations</Title>
+        <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
+      </Box>
 
       {/* Pending generations */}
       {pendingGenerations.length > 0 && (

@@ -28,6 +28,7 @@ import { Route as AdminPlaygroundRouteImport } from './routes/admin.playground'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AccountBrandRouteImport } from './routes/account.brand'
 import { Route as AccountBillingRouteImport } from './routes/account.billing'
+import { Route as StudioProductIdStrategyRouteImport } from './routes/studio.$productId.strategy'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -124,6 +125,11 @@ const AccountBillingRoute = AccountBillingRouteImport.update({
   path: '/account/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudioProductIdStrategyRoute = StudioProductIdStrategyRouteImport.update({
+  id: '/strategy',
+  path: '/strategy',
+  getParentRoute: () => StudioProductIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -142,9 +148,10 @@ export interface FileRoutesByFullPath {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
-  '/studio/$productId': typeof StudioProductIdRoute
+  '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin/': typeof AdminIndexRoute
   '/studio/': typeof StudioIndexRoute
+  '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -161,9 +168,10 @@ export interface FileRoutesByTo {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
-  '/studio/$productId': typeof StudioProductIdRoute
+  '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin': typeof AdminIndexRoute
   '/studio': typeof StudioIndexRoute
+  '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -183,9 +191,10 @@ export interface FileRoutesById {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
-  '/studio/$productId': typeof StudioProductIdRoute
+  '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin/': typeof AdminIndexRoute
   '/studio/': typeof StudioIndexRoute
+  '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -209,6 +218,7 @@ export interface FileRouteTypes {
     | '/studio/$productId'
     | '/admin/'
     | '/studio/'
+    | '/studio/$productId/strategy'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -228,6 +238,7 @@ export interface FileRouteTypes {
     | '/studio/$productId'
     | '/admin'
     | '/studio'
+    | '/studio/$productId/strategy'
   id:
     | '__root__'
     | '/'
@@ -249,6 +260,7 @@ export interface FileRouteTypes {
     | '/studio/$productId'
     | '/admin/'
     | '/studio/'
+    | '/studio/$productId/strategy'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -401,6 +413,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountBillingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/studio/$productId/strategy': {
+      id: '/studio/$productId/strategy'
+      path: '/strategy'
+      fullPath: '/studio/$productId/strategy'
+      preLoaderRoute: typeof StudioProductIdStrategyRouteImport
+      parentRoute: typeof StudioProductIdRoute
+    }
   }
 }
 
@@ -422,13 +441,25 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface StudioProductIdRouteChildren {
+  StudioProductIdStrategyRoute: typeof StudioProductIdStrategyRoute
+}
+
+const StudioProductIdRouteChildren: StudioProductIdRouteChildren = {
+  StudioProductIdStrategyRoute: StudioProductIdStrategyRoute,
+}
+
+const StudioProductIdRouteWithChildren = StudioProductIdRoute._addFileChildren(
+  StudioProductIdRouteChildren,
+)
+
 interface StudioRouteChildren {
-  StudioProductIdRoute: typeof StudioProductIdRoute
+  StudioProductIdRoute: typeof StudioProductIdRouteWithChildren
   StudioIndexRoute: typeof StudioIndexRoute
 }
 
 const StudioRouteChildren: StudioRouteChildren = {
-  StudioProductIdRoute: StudioProductIdRoute,
+  StudioProductIdRoute: StudioProductIdRouteWithChildren,
   StudioIndexRoute: StudioIndexRoute,
 }
 
