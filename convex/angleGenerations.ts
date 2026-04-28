@@ -29,8 +29,10 @@ export const submitAngleGeneration = mutation({
     aspectRatio,
     count: v.number(),
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
+    /** Optional: pick a specific source image. Defaults to the primary. */
+    productImageId: v.optional(v.id('productImages')),
   },
-  handler: async (ctx, { productId, angleIndex, aspectRatio: ar, count, model }) => {
+  handler: async (ctx, { productId, angleIndex, aspectRatio: ar, count, model, productImageId }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -57,12 +59,29 @@ export const submitAngleGeneration = mutation({
     }
     const angle = product.marketingAngles[angleIndex]
 
-    if (!product.primaryImageId) {
-      throw new Error('Product has no primary image set')
+    // Resolve source: caller-supplied productImageId wins; fall back to primary.
+    let resolvedImageId: typeof product.primaryImageId
+    let productImageUrl: string
+    if (productImageId) {
+      const picked = await ctx.db.get(productImageId)
+      if (!picked) throw new Error('Source image not found')
+      if (picked.productId !== productId) {
+        throw new Error('Source image does not belong to this product')
+      }
+      if (picked.status !== 'ready') {
+        throw new Error('Source image not ready')
+      }
+      resolvedImageId = picked._id
+      productImageUrl = picked.imageUrl
+    } else {
+      if (!product.primaryImageId) {
+        throw new Error('Product has no primary image set')
+      }
+      const primaryImage = await ctx.db.get(product.primaryImageId)
+      if (!primaryImage) throw new Error('Primary image not found')
+      resolvedImageId = product.primaryImageId
+      productImageUrl = primaryImage.imageUrl
     }
-    const primaryImage = await ctx.db.get(product.primaryImageId)
-    if (!primaryImage) throw new Error('Primary image not found')
-    const productImageUrl = primaryImage.imageUrl
 
     // Billing gates: capability, batch guard, credit reservation.
     const billing = await requireCapability(ctx, CAPABILITIES.GENERATE_VARIATIONS, 'submitAngleGeneration')
@@ -75,7 +94,7 @@ export const submitAngleGeneration = mutation({
     for (let i = 0; i < count; i++) {
       const generationId = await ctx.db.insert('templateGenerations', {
         productId,
-        productImageId: product.primaryImageId,
+        productImageId: resolvedImageId,
         userId,
         productImageUrl,
         aspectRatio: ar,

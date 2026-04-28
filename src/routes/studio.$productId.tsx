@@ -2410,6 +2410,7 @@ function GenerateWizard({
   productId: Id<'products'>
   product: {
     name: string
+    primaryImageId?: Id<'productImages'>
     marketingAngles?: Array<{
       title: string
       description: string
@@ -2446,6 +2447,30 @@ function GenerateWizard({
   const [prompt, setPrompt] = useState('')
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null)
+
+  // ── Source image picker ────────────────────────────────────────────────────
+  // Defaults to the product's primary image; user can pick any other ready
+  // source image for THIS run without changing the product's primary.
+  const [sourceImageId, setSourceImageId] = useState<Id<'productImages'> | null>(
+    product.primaryImageId ?? null,
+  )
+  const { data: sourceImages } = useQuery(
+    convexQuery(api.productImages.getProductImagesList, { productId }),
+  )
+  const readySourceImages = (sourceImages ?? []).filter(
+    (img) => img.status === 'ready',
+  )
+  // Keep the picker in sync if the primary changes after the wizard mounts
+  // (e.g. user set a new primary in another tab).
+  useEffect(() => {
+    if (sourceImageId === null && product.primaryImageId) {
+      setSourceImageId(product.primaryImageId)
+    }
+  }, [product.primaryImageId, sourceImageId])
+  const activeSourceImage =
+    readySourceImages.find((img) => img._id === sourceImageId) ??
+    readySourceImages.find((img) => img._id === product.primaryImageId) ??
+    readySourceImages[0]
 
   // ── Prefill from ad ────────────────────────────────────────────────────────
   const [prefillApplied, setPrefillApplied] = useState(false)
@@ -2582,18 +2607,19 @@ function GenerateWizard({
   }
 
   // ── Generate logic ─────────────────────────────────────────────────────────
-  // Determine which path to use based on accumulated selections
+  // The active segment dictates which generation path runs. Selections from
+  // the other segment are kept in state (so switching back doesn't lose
+  // them) but ignored at submit time.
   const hasAngle = selectedAngleIndex !== null
   const hasTemplates = pickedIds.length > 0
-  const canGenerate = hasAngle || hasTemplates
-
-  // Show inline note when both selected — template path wins for v1
-  const bothSelected = hasAngle && hasTemplates
+  const useTemplatePath = activeSegment === 'template' && hasTemplates
+  const useAnglePath = activeSegment === 'custom' && hasAngle
+  const canGenerate = useTemplatePath || useAnglePath
 
   const variationsCount = parseInt(variationsPerTemplate, 10)
-  const totalCount = hasTemplates
+  const totalCount = useTemplatePath
     ? pickedIds.length * variationsCount
-    : hasAngle
+    : useAnglePath
       ? variationsCount
       : 0
 
@@ -2601,8 +2627,7 @@ function GenerateWizard({
     if (!canGenerate) return
     setIsSubmitting(true)
     try {
-      if (hasTemplates) {
-        // Template path (preferred when both selected)
+      if (useTemplatePath) {
         await generateMutation.mutateAsync({
           productId,
           templateIds: pickedIds,
@@ -2611,16 +2636,17 @@ function GenerateWizard({
           variationsPerTemplate: variationsCount,
           aspectRatio,
           model: wizardModel,
+          productImageId: sourceImageId ?? undefined,
         })
         notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
-      } else if (hasAngle) {
-        // Angle path
+      } else if (useAnglePath) {
         await submitAngleMutation({
           productId,
           angleIndex: selectedAngleIndex!,
           aspectRatio,
           count: variationsCount,
           model: wizardModel,
+          productImageId: sourceImageId ?? undefined,
         })
         const angleTitle = product.marketingAngles?.[selectedAngleIndex!]?.title ?? 'angle'
         notifications.show({
@@ -2788,8 +2814,9 @@ function GenerateWizard({
               {!canGenerate && (
                 <Alert color="gray" variant="light" radius="md">
                   <Text size="sm" c="dark.1">
-                    Pick an angle above, or switch to the Template or Angle tab to select what to generate.
-                    Free-form prompt generation is coming soon.
+                    Pick an angle above, or switch to the Template tab to
+                    generate from a template. Free-form prompt generation is
+                    coming soon.
                   </Text>
                 </Alert>
               )}
@@ -3014,16 +3041,79 @@ function GenerateWizard({
             order: 2,
           }}
         >
-          {/* Product preview */}
-          <Paper p="xs" mb="md" bg="dark.7" radius="md" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
-            <Group gap="xs">
-              <Image src={primaryImageUrl || ''} alt={product.name} w={40} h={40} radius="sm" fit="cover" style={{ border: '1px solid var(--mantine-color-dark-5)' }} />
-              <Box>
-                <Text size="sm" fw={600} c="white" lineClamp={1}>{capitalizeWords(product.name)}</Text>
-                <Text size="xs" c="dark.2">Your product</Text>
-              </Box>
-            </Group>
-          </Paper>
+          {/* Source image picker */}
+          <Box mb="md">
+            <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb="xs">
+              Source image
+            </Text>
+            <Paper p="sm" bg="dark.7" radius="md" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
+              <Group gap="sm" align="center" mb={readySourceImages.length > 1 ? 'sm' : 0}>
+                <Box
+                  w={56}
+                  h={56}
+                  style={{
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    border: '1px solid var(--mantine-color-brand-5)',
+                  }}
+                >
+                  <Image
+                    src={activeSourceImage?.imageUrl || primaryImageUrl || ''}
+                    alt={product.name}
+                    fit="cover"
+                    w="100%"
+                    h="100%"
+                  />
+                </Box>
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="sm" fw={600} c="white" lineClamp={1}>
+                    {capitalizeWords(product.name)}
+                  </Text>
+                  <Text size="xs" c="dark.2">
+                    {activeSourceImage?.type === 'background-removed'
+                      ? 'Background removed'
+                      : activeSourceImage?._id === product.primaryImageId
+                        ? 'Primary'
+                        : 'Original'}
+                  </Text>
+                </Box>
+              </Group>
+              {readySourceImages.length > 1 && (
+                <>
+                  <Text size="xs" c="dark.2" mb={6}>
+                    Pick a different image:
+                  </Text>
+                  <Group gap={6} wrap="wrap">
+                    {readySourceImages.map((img) => {
+                      const isActive =
+                        (sourceImageId ?? product.primaryImageId) === img._id
+                      return (
+                        <UnstyledButton
+                          key={img._id}
+                          onClick={() => setSourceImageId(img._id)}
+                          aria-label="Use this source image"
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                            border: isActive
+                              ? '2px solid var(--mantine-color-brand-5)'
+                              : '1px solid var(--mantine-color-dark-5)',
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Image src={img.imageUrl} alt="" fit="cover" w="100%" h="100%" />
+                        </UnstyledButton>
+                      )
+                    })}
+                  </Group>
+                </>
+              )}
+            </Paper>
+          </Box>
 
           {/* Segment-aware selection summary */}
           <Box mb="md">
@@ -3223,7 +3313,7 @@ function GenerateWizard({
           <Box pt="lg" mt="lg" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
             {!canGenerate ? (
               <Text size="sm" c="dark.2" ta="center" mb="md">
-                Pick an angle or template
+                {activeSegment === 'template' ? 'Pick a template' : 'Pick an angle'}
               </Text>
             ) : (
               <Paper p="sm" mb="md" radius="md" bg="dark.7">
@@ -3232,16 +3322,11 @@ function GenerateWizard({
                   <Text size="lg" fw={700} c="white">{totalCount}</Text>
                 </Group>
                 <Text size="xs" c="dark.2" mt={4}>
-                  {hasTemplates
+                  {useTemplatePath
                     ? `${pickedIds.length} template${pickedIds.length > 1 ? 's' : ''} × ${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''}`
                     : `${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''} from angle`}
                 </Text>
               </Paper>
-            )}
-            {bothSelected && (
-              <Text size="xs" c="yellow.5" ta="center" mb="xs">
-                Generating with template; angle selection ignored
-              </Text>
             )}
             <Button
               fullWidth

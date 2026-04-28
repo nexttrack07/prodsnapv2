@@ -763,6 +763,8 @@ export const generateFromProduct = mutation({
     variationsPerTemplate: v.number(),
     aspectRatio: aspectRatioValidator,
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
+    /** Optional: pick a specific source image. Defaults to the primary. */
+    productImageId: v.optional(v.id('productImages')),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
@@ -804,11 +806,24 @@ export const generateFromProduct = mutation({
     const totalCredits = args.templateIds.length * args.variationsPerTemplate
     await requireCredit(ctx, 'generateFromProduct', totalCredits)
 
-    // Get the primary image to use for generation
+    // Resolve the source image: caller-supplied productImageId wins (so the
+    // wizard can pick a non-primary source for this run); falls back to the
+    // product's primary image; legacy fallback to the deprecated imageUrl.
     let productImageUrl: string
     let productImageId: Id<'productImages'> | undefined
 
-    if (product.primaryImageId) {
+    if (args.productImageId) {
+      const picked = await ctx.db.get(args.productImageId)
+      if (!picked) throw new Error('Source image not found')
+      if (picked.productId !== args.productId) {
+        throw new Error('Source image does not belong to this product')
+      }
+      if (picked.status !== 'ready') {
+        throw new Error('Source image not ready')
+      }
+      productImageUrl = picked.imageUrl
+      productImageId = picked._id
+    } else if (product.primaryImageId) {
       const primaryImage = await ctx.db.get(product.primaryImageId)
       if (!primaryImage || primaryImage.status !== 'ready') {
         throw new Error('Primary image not available')
