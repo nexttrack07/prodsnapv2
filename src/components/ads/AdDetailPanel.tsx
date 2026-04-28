@@ -270,7 +270,11 @@ export function AdDetailContent({
 
   const handleEditInCompose = useCallback(() => {
     if (!ad?.productId) return
-    navigate({ to: '/studio/$productId', params: { productId: ad.productId } })
+    navigate({
+      to: '/studio/$productId',
+      params: { productId: ad.productId },
+      search: { compose: ad._id as string },
+    })
   }, [ad, navigate])
 
   // ─── Loading / empty states ────────────────────────────────────────────────

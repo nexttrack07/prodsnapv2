@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, useRouterState } from '@tanstack/react-router'
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useAction, useQuery as useConvexQuery } from 'convex/react'
@@ -74,7 +74,15 @@ import { mapGenerationError } from '../lib/billing/mapBillingError'
 import { fetchDownloadAsset } from '../utils/downloads'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 
+type ProductSearch = { compose?: string }
+
 export const Route = createFileRoute('/studio/$productId')({
+  validateSearch: (search: Record<string, unknown>): ProductSearch => {
+    const compose = typeof search.compose === 'string' && search.compose.length > 0
+      ? search.compose
+      : undefined
+    return compose ? { compose } : {}
+  },
   component: ProductWorkspacePage,
 })
 
@@ -173,12 +181,34 @@ function angleTypeLabel(type: string): string {
 
 function ProductWorkspacePage() {
   const { productId } = Route.useParams()
+  const search = Route.useSearch()
+  const navigate = useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // Nested routes (e.g. /studio/$productId/strategy) take over the page —
   // render only the child Outlet and skip the workspace content.
   const isChildActive = pathname !== `/studio/${productId}`
-  const [view, setView] = useState<View>('gallery')
+  const [view, setView] = useState<View>(search.compose ? 'generate' : 'gallery')
   const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
+
+  // When the URL gets ?compose=:adId (e.g. from "Edit in compose"), open the
+  // generate wizard with that ad as the prefill source.
+  useEffect(() => {
+    if (search.compose && view !== 'generate') {
+      setView('generate')
+    }
+  }, [search.compose, view])
+
+  const closeCompose = () => {
+    setView('gallery')
+    if (search.compose) {
+      navigate({
+        to: '/studio/$productId',
+        params: { productId },
+        search: {},
+        replace: true,
+      })
+    }
+  }
 
   const { data: product, isLoading: productLoading } = useQuery(
     convexQuery(api.products.getProductWithStats, { productId: productId as Id<'products'> }),
@@ -312,10 +342,13 @@ function ProductWorkspacePage() {
           productId={productId as Id<'products'>}
           product={product}
           primaryImageUrl={primaryImageUrl}
-          onBack={() => setView('gallery')}
-          onComplete={() => setView('gallery')}
+          onBack={closeCompose}
+          onComplete={closeCompose}
           creditsExhausted={creditsExhausted}
           initialFilters={initialFilters}
+          prefillFromAdId={
+            (search.compose ?? null) as Id<'templateGenerations'> | null
+          }
         />
       )}
     </Container>
@@ -2368,6 +2401,7 @@ function GenerateWizard({
   onComplete,
   creditsExhausted,
   initialFilters,
+  prefillFromAdId,
 }: {
   productId: Id<'products'>
   product: { name: string }
@@ -2376,6 +2410,7 @@ function GenerateWizard({
   onComplete: () => void
   creditsExhausted: boolean
   initialFilters?: TemplateFilters
+  prefillFromAdId?: Id<'templateGenerations'> | null
 }) {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [mode, setMode] = useState<Mode>('exact')
@@ -2384,6 +2419,40 @@ function GenerateWizard({
   const [wizardModel, setWizardModel] = useState<'nano-banana-2' | 'gpt-image-2'>('nano-banana-2')
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [prefillApplied, setPrefillApplied] = useState(false)
+
+  // When opened via "Edit in compose" from an ad, fetch that ad and hydrate
+  // wizard state from it: same source aspect ratio, template, color-adapt
+  // setting, and model. Only applies once per mount.
+  const { data: prefillAd } = useQuery({
+    ...convexQuery(api.templateGenerations.getAdById, {
+      adId: prefillFromAdId as Id<'templateGenerations'>,
+    }),
+    enabled: !!prefillFromAdId,
+  })
+
+  useEffect(() => {
+    if (prefillApplied || !prefillAd) return
+    if (prefillAd.aspectRatio) {
+      setAspectRatio(prefillAd.aspectRatio as AspectRatio)
+    }
+    if (prefillAd.mode === 'exact' || prefillAd.mode === 'remix') {
+      setMode(prefillAd.mode)
+      if (prefillAd.templateId) {
+        setPickedIds([prefillAd.templateId as Id<'adTemplates'>])
+      }
+    }
+    if (typeof prefillAd.colorAdapt === 'boolean') {
+      setColorAdapt(prefillAd.colorAdapt)
+    }
+    if (prefillAd.model) {
+      setWizardModel(prefillAd.model)
+    }
+    // Iterating on a single ad — default to 1 variation so the user sees the
+    // tweak's effect on a single output before fanning out.
+    setVariationsPerTemplate('1')
+    setPrefillApplied(true)
+  }, [prefillAd, prefillApplied])
 
   // Template browse filters — seeded from initialFilters on first render
   const [search, setSearch] = useState('')
