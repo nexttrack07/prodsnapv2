@@ -146,6 +146,7 @@ const APP_ROUTE_PREFIXES = [
   '/library',
   '/templates',
   '/strategy',
+  '/ads',
 ]
 function isAppRoute(pathname: string): boolean {
   return APP_ROUTE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))

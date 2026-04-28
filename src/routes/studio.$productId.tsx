@@ -29,7 +29,6 @@ import {
   UnstyledButton,
   Modal,
   Drawer,
-  CloseButton,
   SegmentedControl,
   AspectRatio,
   Tooltip,
@@ -73,6 +72,7 @@ import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 import { ModelSelect } from '../components/ModelSelect'
 import { mapGenerationError } from '../lib/billing/mapBillingError'
 import { fetchDownloadAsset } from '../utils/downloads'
+import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 
 export const Route = createFileRoute('/studio/$productId')({
   component: ProductWorkspacePage,
@@ -1066,57 +1066,6 @@ function GenerateFromAngleModal({
   )
 }
 
-function CopySection({
-  label,
-  items,
-  onCopy,
-  inline,
-}: {
-  label: string
-  items: string[]
-  onCopy: (value: string, label: string) => void
-  inline?: boolean
-}) {
-  return (
-    <Box>
-      <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
-        {label}
-      </Text>
-      <Stack gap="xs">
-        {items.map((item, idx) => (
-          <Group
-            key={`${label}-${idx}`}
-            gap="sm"
-            justify="space-between"
-            align="center"
-            wrap="nowrap"
-            style={{
-              padding: '8px 12px',
-              background: 'rgba(255,255,255,0.04)',
-              borderRadius: 6,
-            }}
-          >
-            <Text
-              size={inline ? 'sm' : 'sm'}
-              c="white"
-              style={{ flex: 1, minWidth: 0 }}
-            >
-              {item}
-            </Text>
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              onClick={() => onCopy(item, `${label.toLowerCase()} copied`)}
-            >
-              Copy
-            </Button>
-          </Group>
-        ))}
-      </Stack>
-    </Box>
-  )
-}
-
 interface ProductImageData {
   _id: Id<'productImages'>
   imageUrl: string
@@ -1647,37 +1596,6 @@ function ImageCard({
   )
 }
 
-function LightboxCopySection({
-  adCopy,
-}: {
-  adCopy: { headlines: string[]; primaryTexts: string[]; ctas: string[] }
-}) {
-  const copyToClipboard = (value: string, label: string) => {
-    navigator.clipboard
-      .writeText(value)
-      .then(() =>
-        notifications.show({ title: 'Copied', message: label, color: 'green', autoClose: 1500 }),
-      )
-      .catch(() =>
-        notifications.show({ title: 'Copy failed', message: 'Try selecting and copying manually.', color: 'red' }),
-      )
-  }
-
-  return (
-    <Stack gap="md">
-      {adCopy.headlines.length > 0 && (
-        <CopySection label="Headlines" items={adCopy.headlines} onCopy={copyToClipboard} />
-      )}
-      {adCopy.primaryTexts.length > 0 && (
-        <CopySection label="Primary text" items={adCopy.primaryTexts} onCopy={copyToClipboard} />
-      )}
-      {adCopy.ctas.length > 0 && (
-        <CopySection label="CTAs" items={adCopy.ctas} onCopy={copyToClipboard} inline />
-      )}
-    </Stack>
-  )
-}
-
 function GalleryView({
   product,
   productId,
@@ -1702,16 +1620,19 @@ function GalleryView({
   creditsExhausted: boolean
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
-  const [lightboxGen, setLightboxGen] = useState<GenerationData | null>(null)
+  const [activeAdId, setActiveAdId] = useState<Id<'templateGenerations'> | null>(null)
   const [variationTarget, setVariationTarget] = useState<{ _id: Id<'templateGenerations'>; outputUrl: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Id<'templateGenerations'> | null>(null)
   const [retryingId, setRetryingId] = useState<Id<'templateGenerations'> | null>(null)
   const hasAny = completedGenerations.length > 0 || pendingGenerations.length > 0
 
+  // Build sibling list from completed generations for prev/next nav
+  const siblingIds = completedGenerations.map((g) => g._id)
+
   // Keyboard shortcuts
   useHotkeys([
     ['Escape', () => {
-      if (lightboxGen) setLightboxGen(null)
+      if (activeAdId) setActiveAdId(null)
       else if (variationTarget) setVariationTarget(null)
       else if (deleteTarget) setDeleteTarget(null)
     }],
@@ -1782,7 +1703,7 @@ function GalleryView({
                 key={gen._id}
                 generation={gen}
                 title={`${product.name} #${completedGenerations.length + index + 1}`}
-                onExpand={setLightboxGen}
+                onExpand={(gen) => setActiveAdId(gen._id)}
                 onDelete={handleDelete}
                 onCreateVariations={setVariationTarget}
                 onRetry={handleRetry}
@@ -1853,7 +1774,7 @@ function GalleryView({
               key={gen._id}
               generation={gen}
               title={`${product.name} #${index + 1}`}
-              onExpand={setLightboxGen}
+              onExpand={(g) => setActiveAdId(g._id)}
               onDelete={handleDelete}
               onCreateVariations={setVariationTarget}
               onRetry={handleRetry}
@@ -1863,55 +1784,13 @@ function GalleryView({
         </Box>
       ) : null}
 
-      {/* Lightbox Modal */}
-      <Modal
-        opened={!!lightboxGen}
-        onClose={() => setLightboxGen(null)}
-        fullScreen
-        withCloseButton={false}
-        padding={0}
-        aria-label="Full size image viewer"
-        data-testid="lightbox"
-        styles={{
-          body: {
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'rgba(0, 0, 0, 0.95)',
-          },
-          content: {
-            backgroundColor: 'transparent',
-          },
-        }}
-      >
-        <CloseButton
-          pos="absolute"
-          top={16}
-          right={16}
-          size="lg"
-          variant="subtle"
-          c="white"
-          onClick={() => setLightboxGen(null)}
-          aria-label="Close image viewer"
-        />
-        {lightboxGen?.outputUrl && (
-          <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--mantine-spacing-lg)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <Image
-              src={lightboxGen.outputUrl}
-              alt="Full size generated ad image"
-              fit="contain"
-              maw="80vw"
-              mah="70vh"
-            />
-            {lightboxGen.adCopy && (
-              <Box maw={560} w="100%" px="md">
-                <LightboxCopySection adCopy={lightboxGen.adCopy} />
-              </Box>
-            )}
-          </Box>
-        )}
-      </Modal>
+      {/* Ad Detail Panel (replaces old lightbox) */}
+      <AdDetailPanel
+        opened={!!activeAdId}
+        onClose={() => setActiveAdId(null)}
+        adId={activeAdId}
+        siblings={siblingIds}
+      />
 
       {/* Variation Drawer */}
       <VariationDrawer

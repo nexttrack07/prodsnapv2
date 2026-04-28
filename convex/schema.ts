@@ -361,6 +361,7 @@ const schema = defineSchema({
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
+    isWinner: v.optional(v.boolean()),
   })
     .index('by_product', ['productId'])
     .index('by_productImage', ['productImageId'])
