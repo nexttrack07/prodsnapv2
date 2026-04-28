@@ -36,6 +36,7 @@ import {
   Skeleton,
   Alert,
   Select,
+  Textarea,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -60,6 +61,7 @@ import {
   IconAlertTriangle,
   IconBolt,
   IconLayoutGrid,
+  IconTarget,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -2393,6 +2395,8 @@ function GenerationCard({
   )
 }
 
+type WizardSegment = 'scratch' | 'template' | 'angle'
+
 function GenerateWizard({
   productId,
   product,
@@ -2404,7 +2408,22 @@ function GenerateWizard({
   prefillFromAdId,
 }: {
   productId: Id<'products'>
-  product: { name: string }
+  product: {
+    name: string
+    marketingAngles?: Array<{
+      title: string
+      description: string
+      hook: string
+      suggestedAdStyle: string
+      angleType?: string
+      tags?: {
+        productCategory?: string
+        imageStyle?: string
+        setting?: string
+        primaryColor?: string
+      }
+    }>
+  }
   primaryImageUrl?: string
   onBack: () => void
   onComplete: () => void
@@ -2412,18 +2431,24 @@ function GenerateWizard({
   initialFilters?: TemplateFilters
   prefillFromAdId?: Id<'templateGenerations'> | null
 }) {
+  // ── Segment state ──────────────────────────────────────────────────────────
+  const [activeSegment, setActiveSegment] = useState<WizardSegment>('scratch')
+
+  // ── Shared state (persists across segment switches) ────────────────────────
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [mode, setMode] = useState<Mode>('exact')
   const [colorAdapt, setColorAdapt] = useState(false)
   const [variationsPerTemplate, setVariationsPerTemplate] = useState('2')
   const [wizardModel, setWizardModel] = useState<'nano-banana-2' | 'gpt-image-2'>('nano-banana-2')
-  const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [prefillApplied, setPrefillApplied] = useState(false)
 
-  // When opened via "Edit in compose" from an ad, fetch that ad and hydrate
-  // wizard state from it: same source aspect ratio, template, color-adapt
-  // setting, and model. Only applies once per mount.
+  // ── Per-segment state (all preserved regardless of active segment) ─────────
+  const [prompt, setPrompt] = useState('')
+  const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
+  const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null)
+
+  // ── Prefill from ad ────────────────────────────────────────────────────────
+  const [prefillApplied, setPrefillApplied] = useState(false)
   const { data: prefillAd } = useQuery({
     ...convexQuery(api.templateGenerations.getAdById, {
       adId: prefillFromAdId as Id<'templateGenerations'>,
@@ -2438,8 +2463,22 @@ function GenerateWizard({
     }
     if (prefillAd.mode === 'exact' || prefillAd.mode === 'remix') {
       setMode(prefillAd.mode)
+      setActiveSegment('template')
       if (prefillAd.templateId) {
         setPickedIds([prefillAd.templateId as Id<'adTemplates'>])
+      }
+    }
+    if (prefillAd.mode === 'angle') {
+      // Try to find the matching angle by title in current product angles
+      const matchIdx = product.marketingAngles?.findIndex(
+        (a) => a.title === prefillAd.angleSeed?.title,
+      )
+      if (matchIdx != null && matchIdx >= 0) {
+        setSelectedAngleIndex(matchIdx)
+        setActiveSegment('angle')
+      } else {
+        // Angle no longer exists — fall back to template segment
+        setActiveSegment('template')
       }
     }
     if (typeof prefillAd.colorAdapt === 'boolean') {
@@ -2448,13 +2487,11 @@ function GenerateWizard({
     if (prefillAd.model) {
       setWizardModel(prefillAd.model)
     }
-    // Iterating on a single ad — default to 1 variation so the user sees the
-    // tweak's effect on a single output before fanning out.
     setVariationsPerTemplate('1')
     setPrefillApplied(true)
-  }, [prefillAd, prefillApplied])
+  }, [prefillAd, prefillApplied, product.marketingAngles])
 
-  // Template browse filters — seeded from initialFilters on first render
+  // ── Template browse filters ────────────────────────────────────────────────
   const [search, setSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState<string | null>(initialFilters?.productCategory ?? null)
   const [filterImageStyle, setFilterImageStyle] = useState<string | null>(initialFilters?.imageStyle ?? null)
@@ -2465,13 +2502,15 @@ function GenerateWizard({
     convexQuery(api.products.listTemplateFilterOptions, {}),
   )
 
-  // Mobile detection for responsive layout
   const isMobile = useMediaQuery('(max-width: 768px)')
-
   const convex = useConvex()
+
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const generateFromProduct = useConvexMutation(api.products.generateFromProduct)
   const generateMutation = useMutation({ mutationFn: generateFromProduct })
+  const submitAngleMutation = useConvexMutation(api.angleGenerations.submitAngleGeneration)
 
+  // ── Template infinite query ────────────────────────────────────────────────
   const filterArgs = {
     search: search.trim() || undefined,
     productCategory: filterCategory ?? undefined,
@@ -2544,23 +2583,54 @@ function GenerateWizard({
     })
   }
 
+  // ── Generate logic ─────────────────────────────────────────────────────────
+  // Determine which path to use based on accumulated selections
+  const hasAngle = selectedAngleIndex !== null
+  const hasTemplates = pickedIds.length > 0
+  const canGenerate = hasAngle || hasTemplates
+
+  // Show inline note when both selected — template path wins for v1
+  const bothSelected = hasAngle && hasTemplates
+
+  const variationsCount = parseInt(variationsPerTemplate, 10)
+  const totalCount = hasTemplates
+    ? pickedIds.length * variationsCount
+    : hasAngle
+      ? variationsCount
+      : 0
+
   async function handleGenerate() {
-    if (pickedIds.length === 0) {
-      notifications.show({ title: 'Error', message: 'Pick at least one template', color: 'red' })
-      return
-    }
+    if (!canGenerate) return
     setIsSubmitting(true)
     try {
-      await generateMutation.mutateAsync({
-        productId,
-        templateIds: pickedIds,
-        mode,
-        colorAdapt,
-        variationsPerTemplate: parseInt(variationsPerTemplate, 10),
-        aspectRatio,
-        model: wizardModel,
-      })
-      notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
+      if (hasTemplates) {
+        // Template path (preferred when both selected)
+        await generateMutation.mutateAsync({
+          productId,
+          templateIds: pickedIds,
+          mode,
+          colorAdapt,
+          variationsPerTemplate: variationsCount,
+          aspectRatio,
+          model: wizardModel,
+        })
+        notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
+      } else if (hasAngle) {
+        // Angle path
+        await submitAngleMutation({
+          productId,
+          angleIndex: selectedAngleIndex!,
+          aspectRatio,
+          count: variationsCount,
+          model: wizardModel,
+        })
+        const angleTitle = product.marketingAngles?.[selectedAngleIndex!]?.title ?? 'angle'
+        notifications.show({
+          title: 'Generating',
+          message: `${variationsCount} variant${variationsCount === 1 ? '' : 's'} for "${angleTitle}". Watch the gallery.`,
+          color: 'green',
+        })
+      }
       onComplete()
     } catch (err) {
       const info = mapGenerationError(err)
@@ -2577,19 +2647,25 @@ function GenerateWizard({
     }
   }
 
-  const totalCount = pickedIds.length * parseInt(variationsPerTemplate, 10)
+  // ── Helper: get generate button label ──────────────────────────────────────
+  function getGenerateLabel(): string {
+    if (isSubmitting) return 'Starting...'
+    if (!canGenerate) return 'Generate'
+    return `Generate ${totalCount} Image${totalCount !== 1 ? 's' : ''}`
+  }
+
+  // ── Marketing angles for Scratch chips + Angle segment ─────────────────────
+  const angles = product.marketingAngles ?? []
 
   return (
     <Box>
-      {/* Compact Wizard Header */}
+      {/* Wizard Header */}
       <Group
         justify="space-between"
         mb="md"
         py="sm"
         px="md"
-        style={{
-          borderBottom: '1px solid var(--mantine-color-dark-6)',
-        }}
+        style={{ borderBottom: '1px solid var(--mantine-color-dark-6)' }}
       >
         <Group gap="md">
           <Anchor
@@ -2610,221 +2686,398 @@ function GenerateWizard({
               Back
             </Group>
           </Anchor>
-          <Text fw={600} size="lg" c="white">Pick Templates</Text>
-          <Text size="sm" c="dark.2">·</Text>
-          <Text size="sm" c="dark.2">{templates.length} available</Text>
+          <Text fw={600} size="lg" c="white">Create ad</Text>
         </Group>
         <Group gap="sm">
-          <Badge size="md" variant="light" color="brand" radius="md">
-            {pickedIds.length}/3 selected
-          </Badge>
+          {hasTemplates && (
+            <Badge size="md" variant="light" color="brand" radius="md">
+              {pickedIds.length}/3 templates
+            </Badge>
+          )}
+          {hasAngle && (
+            <Badge size="md" variant="light" color="teal" radius="md">
+              {angles[selectedAngleIndex!]?.title ?? 'Angle'}
+            </Badge>
+          )}
         </Group>
       </Group>
 
-      <Group gap="sm" wrap="wrap" mb="md" align="flex-end">
-        <TextInput
-          placeholder="Search templates"
-          value={search}
-          onChange={(e) => setSearch(e.currentTarget.value)}
-          leftSection={<IconPhoto size={14} />}
-          size="sm"
-          style={{ flex: 1, minWidth: 200 }}
-        />
-        <Select
-          placeholder="Category"
-          clearable
-          data={filterOptions?.productCategories ?? []}
-          value={filterCategory}
-          onChange={setFilterCategory}
-          size="sm"
-          w={150}
-        />
-        <Select
-          placeholder="Style"
-          clearable
-          data={filterOptions?.imageStyles ?? []}
-          value={filterImageStyle}
-          onChange={setFilterImageStyle}
-          size="sm"
-          w={150}
-        />
-        <Select
-          placeholder="Setting"
-          clearable
-          data={filterOptions?.settings ?? []}
-          value={filterSetting}
-          onChange={setFilterSetting}
-          size="sm"
-          w={150}
-        />
-        <Select
-          placeholder="Angle type"
-          clearable
-          data={
-            filterOptions?.angleTypes
-              ? filterOptions.angleTypes.map((t: string) => ({ value: t, label: angleTypeLabel(t) }))
-              : []
-          }
-          value={filterAngleType}
-          onChange={setFilterAngleType}
-          size="sm"
-          w={150}
-        />
-        <Select
-          placeholder="Aspect"
-          clearable
+      {/* Segmented control */}
+      <Box px="md" mb="lg">
+        <SegmentedControl
+          value={activeSegment}
+          onChange={(val) => setActiveSegment(val as WizardSegment)}
           data={[
-            { value: '1:1', label: '1:1' },
-            { value: '4:5', label: '4:5' },
-            { value: '9:16', label: '9:16' },
+            { value: 'scratch', label: 'Scratch' },
+            { value: 'template', label: 'Template' },
+            { value: 'angle', label: 'Angle' },
           ]}
-          value={filterAspectRatio}
-          onChange={setFilterAspectRatio}
-          size="sm"
-          w={110}
+          color="brand"
+          fullWidth={!!isMobile}
         />
-        {filtersActive && (
-          <Button
-            variant="subtle"
-            size="sm"
-            color="gray"
-            onClick={() => {
-              setSearch('')
-              setFilterCategory(null)
-              setFilterImageStyle(null)
-              setFilterSetting(null)
-              setFilterAngleType(null)
-              setFilterAspectRatio(null)
-            }}
-          >
-            Clear
-          </Button>
-        )}
-      </Group>
+      </Box>
 
       <Box style={{
         display: 'grid',
         gridTemplateColumns: isMobile ? '1fr' : '1fr 320px',
-        gap: 'var(--mantine-spacing-lg)'
+        gap: 'var(--mantine-spacing-lg)',
       }}>
-        {/* Template Grid */}
+        {/* ═══ Per-segment content area ═══ */}
         <Box
-          mah={isMobile ? 'none' : 'calc(100vh - 180px)'}
+          mah={isMobile ? 'none' : 'calc(100vh - 220px)'}
           style={{
             overflowY: isMobile ? 'visible' : 'auto',
             paddingRight: isMobile ? 0 : 'var(--mantine-spacing-sm)',
             order: 1,
           }}
         >
-
-          {templatesLoading && templates.length === 0 ? (
-            <Box style={{
-              columnCount: isMobile ? 2 : 4,
-              columnGap: '0.5rem',
-            }}>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Box
-                  key={i}
-                  className="shimmer"
-                  style={{
-                    borderRadius: 'var(--mantine-radius-lg)',
-                    aspectRatio: i % 3 === 0 ? '4/5' : i % 3 === 1 ? '9/16' : '1/1',
-                    breakInside: 'avoid',
-                    marginBottom: '0.5rem',
-                  }}
+          {/* ─── Scratch segment ─── */}
+          {activeSegment === 'scratch' && (
+            <Stack gap="md" px="md">
+              <Box>
+                <Text size="sm" fw={600} c="white" mb="xs">Describe your ad</Text>
+                <Textarea
+                  placeholder="e.g. Product on a marble countertop with soft morning light, lifestyle feel..."
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.currentTarget.value)}
+                  minRows={3}
+                  maxRows={6}
+                  autosize
                 />
-              ))}
-            </Box>
-          ) : templates.length === 0 ? (
-            <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
-          ) : (
-            <>
-              <Box style={{
-                columnCount: isMobile ? 2 : 4,
-                columnGap: '0.5rem',
-              }}>
-                {templates.map((tpl) => {
-                  const picked = pickedIds.includes(tpl._id)
-                  const getAspectStyle = (): React.CSSProperties => {
-                    switch (tpl.aspectRatio) {
-                      case '4:5': return { aspectRatio: '4/5' }
-                      case '9:16': return { aspectRatio: '9/16' }
-                      default: return { aspectRatio: '1/1' }
-                    }
-                  }
-                  return (
-                    <UnstyledButton
-                      key={tpl._id}
-                      onClick={() => toggleTemplate(tpl._id)}
-                      w="100%"
-                      mb="xs"
-                      className="template-card-selectable"
-                      data-testid={`template-card-${tpl._id}`}
-                      aria-pressed={picked}
-                      aria-label={`Select template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`}
-                      style={{
-                        borderRadius: 'var(--mantine-radius-lg)',
-                        overflow: 'hidden',
-                        border: `2px solid ${picked ? 'var(--mantine-color-brand-5)' : 'transparent'}`,
-                        boxShadow: picked ? '0 0 0 3px rgba(84, 116, 180, 0.3)' : 'none',
-                        position: 'relative',
-                        breakInside: 'avoid',
-                        display: 'block',
-                        transition: 'all 200ms ease',
-                        transform: picked ? 'scale(1.02)' : 'scale(1)',
+              </Box>
+              {angles.length > 0 && (
+                <Box>
+                  <Text size="xs" c="dark.2" mb="xs">Or try an angle:</Text>
+                  <Group gap="xs" wrap="wrap">
+                    {angles.slice(0, 5).map((angle, idx) => (
+                      <Button
+                        key={idx}
+                        size="xs"
+                        variant={selectedAngleIndex === idx ? 'filled' : 'light'}
+                        color={selectedAngleIndex === idx ? 'brand' : 'gray'}
+                        radius="xl"
+                        leftSection={<IconTarget size={12} />}
+                        onClick={() => {
+                          if (selectedAngleIndex === idx) {
+                            setSelectedAngleIndex(null)
+                            setPrompt('')
+                          } else {
+                            setSelectedAngleIndex(idx)
+                            setPrompt(angle.hook)
+                          }
+                        }}
+                      >
+                        {angle.title}
+                      </Button>
+                    ))}
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="grape"
+                      radius="xl"
+                      leftSection={<IconSparkles size={12} />}
+                      onClick={() => {
+                        if (angles.length === 0) return
+                        const randomIdx = Math.floor(Math.random() * angles.length)
+                        setSelectedAngleIndex(randomIdx)
+                        setPrompt(angles[randomIdx].hook)
                       }}
                     >
-                      <Box style={getAspectStyle()}>
-                        <Image src={tpl.thumbnailUrl} alt={`Template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`} fit="cover" h="100%" w="100%" />
-                      </Box>
-                      <Badge
-                        size="xs"
-                        variant="filled"
-                        color="brand"
-                        pos="absolute"
-                        bottom={6}
-                        left={6}
-                        style={{ opacity: 0.8 }}
-                      >
-                        {tpl.aspectRatio}
-                      </Badge>
-                      {picked && (
-                        <Box
-                          pos="absolute"
-                          top={8}
-                          right={8}
-                          w={24}
-                          h={24}
-                          bg="brand"
-                          style={{
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            boxShadow: '0 2px 8px rgba(84, 116, 180, 0.4)',
-                          }}
-                        >
-                          <IconCheck size={14} color="white" strokeWidth={3} />
-                        </Box>
-                      )}
-                    </UnstyledButton>
-                  )
-                })}
-              </Box>
-              {hasNextPage && (
-                <Box ref={loadMoreRef} py="md" ta="center">
-                  {isFetchingNextPage ? (
-                    <Loader size="sm" color="brand" />
-                  ) : (
-                    <Text size="sm" c="dark.2">Scroll for more</Text>
-                  )}
+                      Surprise me
+                    </Button>
+                  </Group>
                 </Box>
               )}
-            </>
+              {!canGenerate && (
+                <Alert color="gray" variant="light" radius="md">
+                  <Text size="sm" c="dark.1">
+                    Pick an angle above, or switch to the Template or Angle tab to select what to generate.
+                    Free-form prompt generation is coming soon.
+                  </Text>
+                </Alert>
+              )}
+            </Stack>
+          )}
+
+          {/* ─── Template segment ─── */}
+          {activeSegment === 'template' && (
+            <Box>
+              <Group gap="sm" wrap="wrap" mb="md" align="flex-end">
+                <TextInput
+                  placeholder="Search templates"
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                  leftSection={<IconPhoto size={14} />}
+                  size="sm"
+                  style={{ flex: 1, minWidth: 200 }}
+                />
+                <Select
+                  placeholder="Category"
+                  clearable
+                  data={filterOptions?.productCategories ?? []}
+                  value={filterCategory}
+                  onChange={setFilterCategory}
+                  size="sm"
+                  w={150}
+                />
+                <Select
+                  placeholder="Style"
+                  clearable
+                  data={filterOptions?.imageStyles ?? []}
+                  value={filterImageStyle}
+                  onChange={setFilterImageStyle}
+                  size="sm"
+                  w={150}
+                />
+                <Select
+                  placeholder="Setting"
+                  clearable
+                  data={filterOptions?.settings ?? []}
+                  value={filterSetting}
+                  onChange={setFilterSetting}
+                  size="sm"
+                  w={150}
+                />
+                <Select
+                  placeholder="Angle type"
+                  clearable
+                  data={
+                    filterOptions?.angleTypes
+                      ? filterOptions.angleTypes.map((t: string) => ({ value: t, label: angleTypeLabel(t) }))
+                      : []
+                  }
+                  value={filterAngleType}
+                  onChange={setFilterAngleType}
+                  size="sm"
+                  w={150}
+                />
+                <Select
+                  placeholder="Aspect"
+                  clearable
+                  data={[
+                    { value: '1:1', label: '1:1' },
+                    { value: '4:5', label: '4:5' },
+                    { value: '9:16', label: '9:16' },
+                  ]}
+                  value={filterAspectRatio}
+                  onChange={setFilterAspectRatio}
+                  size="sm"
+                  w={110}
+                />
+                {filtersActive && (
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    color="gray"
+                    onClick={() => {
+                      setSearch('')
+                      setFilterCategory(null)
+                      setFilterImageStyle(null)
+                      setFilterSetting(null)
+                      setFilterAngleType(null)
+                      setFilterAspectRatio(null)
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </Group>
+
+              {templatesLoading && templates.length === 0 ? (
+                <Box style={{
+                  columnCount: isMobile ? 2 : 4,
+                  columnGap: '0.5rem',
+                }}>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <Box
+                      key={i}
+                      className="shimmer"
+                      style={{
+                        borderRadius: 'var(--mantine-radius-lg)',
+                        aspectRatio: i % 3 === 0 ? '4/5' : i % 3 === 1 ? '9/16' : '1/1',
+                        breakInside: 'avoid',
+                        marginBottom: '0.5rem',
+                      }}
+                    />
+                  ))}
+                </Box>
+              ) : templates.length === 0 ? (
+                <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
+              ) : (
+                <>
+                  <Box style={{
+                    columnCount: isMobile ? 2 : 4,
+                    columnGap: '0.5rem',
+                  }}>
+                    {templates.map((tpl) => {
+                      const picked = pickedIds.includes(tpl._id)
+                      const getAspectStyle = (): React.CSSProperties => {
+                        switch (tpl.aspectRatio) {
+                          case '4:5': return { aspectRatio: '4/5' }
+                          case '9:16': return { aspectRatio: '9/16' }
+                          default: return { aspectRatio: '1/1' }
+                        }
+                      }
+                      return (
+                        <UnstyledButton
+                          key={tpl._id}
+                          onClick={() => toggleTemplate(tpl._id)}
+                          w="100%"
+                          mb="xs"
+                          className="template-card-selectable"
+                          data-testid={`template-card-${tpl._id}`}
+                          aria-pressed={picked}
+                          aria-label={`Select template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`}
+                          style={{
+                            borderRadius: 'var(--mantine-radius-lg)',
+                            overflow: 'hidden',
+                            border: `2px solid ${picked ? 'var(--mantine-color-brand-5)' : 'transparent'}`,
+                            boxShadow: picked ? '0 0 0 3px rgba(84, 116, 180, 0.3)' : 'none',
+                            position: 'relative',
+                            breakInside: 'avoid',
+                            display: 'block',
+                            transition: 'all 200ms ease',
+                            transform: picked ? 'scale(1.02)' : 'scale(1)',
+                          }}
+                        >
+                          <Box style={getAspectStyle()}>
+                            <Image src={tpl.thumbnailUrl} alt={`Template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`} fit="cover" h="100%" w="100%" />
+                          </Box>
+                          <Badge
+                            size="xs"
+                            variant="filled"
+                            color="brand"
+                            pos="absolute"
+                            bottom={6}
+                            left={6}
+                            style={{ opacity: 0.8 }}
+                          >
+                            {tpl.aspectRatio}
+                          </Badge>
+                          {picked && (
+                            <Box
+                              pos="absolute"
+                              top={8}
+                              right={8}
+                              w={24}
+                              h={24}
+                              bg="brand"
+                              style={{
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 2px 8px rgba(84, 116, 180, 0.4)',
+                              }}
+                            >
+                              <IconCheck size={14} color="white" strokeWidth={3} />
+                            </Box>
+                          )}
+                        </UnstyledButton>
+                      )
+                    })}
+                  </Box>
+                  {hasNextPage && (
+                    <Box ref={loadMoreRef} py="md" ta="center">
+                      {isFetchingNextPage ? (
+                        <Loader size="sm" color="brand" />
+                      ) : (
+                        <Text size="sm" c="dark.2">Scroll for more</Text>
+                      )}
+                    </Box>
+                  )}
+                </>
+              )}
+            </Box>
+          )}
+
+          {/* ─── Angle segment ─── */}
+          {activeSegment === 'angle' && (
+            <Box px="md">
+              {angles.length === 0 ? (
+                <Box py={60} ta="center">
+                  <Text size="sm" c="dark.2">
+                    No marketing angles available. Run analysis on this product first.
+                  </Text>
+                </Box>
+              ) : (
+                <Stack gap="md">
+                  <Text size="xs" tt="uppercase" fw={700} c="dark.2">
+                    Marketing angles ({angles.length})
+                  </Text>
+                  {angles.map((angle, index) => {
+                    const isSelected = selectedAngleIndex === index
+                    return (
+                      <UnstyledButton
+                        key={`${angle.title}-${index}`}
+                        onClick={() => setSelectedAngleIndex(isSelected ? null : index)}
+                        style={{ display: 'block', width: '100%' }}
+                      >
+                        <Paper
+                          withBorder
+                          radius="md"
+                          p="lg"
+                          style={{
+                            background: isSelected
+                              ? 'rgba(84, 116, 180, 0.08)'
+                              : 'rgba(255,255,255,0.02)',
+                            borderColor: isSelected
+                              ? 'var(--mantine-color-brand-5)'
+                              : 'var(--mantine-color-dark-5)',
+                            transition: 'all 200ms ease',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+                            <Box style={{ flex: 1, minWidth: 200 }}>
+                              <Group gap="sm" align="center">
+                                <Text size="sm" fw={700} c="white">
+                                  {angle.title}
+                                </Text>
+                                <Badge size="xs" color="teal" variant="light" radius="sm">
+                                  {angle.suggestedAdStyle}
+                                </Badge>
+                                {angle.angleType && (
+                                  <Badge size="xs" color={angleTypeColor(angle.angleType)} variant="light" radius="sm">
+                                    {angleTypeLabel(angle.angleType)}
+                                  </Badge>
+                                )}
+                              </Group>
+                              <Text mt={6} size="sm" c="dark.1">
+                                {angle.description}
+                              </Text>
+                              <Text mt="xs" size="sm" c="dark.0" fs="italic">
+                                &ldquo;{angle.hook}&rdquo;
+                              </Text>
+                            </Box>
+                            {isSelected && (
+                              <Box
+                                w={28}
+                                h={28}
+                                bg="brand"
+                                style={{
+                                  borderRadius: '50%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <IconCheck size={16} color="white" strokeWidth={3} />
+                              </Box>
+                            )}
+                          </Group>
+                        </Paper>
+                      </UnstyledButton>
+                    )
+                  })}
+                </Stack>
+              )}
+            </Box>
           )}
         </Box>
 
-        {/* Sidebar - Settings */}
+        {/* ═══ Sidebar — shared settings + Generate CTA ═══ */}
         <Paper
           p="md"
           radius="lg"
@@ -2860,63 +3113,65 @@ function GenerateWizard({
             />
           </Box>
 
-          {/* Mode */}
-          <Box mb="md">
-            <Text size="sm" fw={500} c="white" mb="xs">Mode</Text>
-            <Radio.Group value={mode} onChange={(val) => setMode(val as Mode)}>
-              <Stack gap="xs">
-                <Radio
-                  value="exact"
-                  label={
-                    <Box>
-                      <Text fw={500} size="sm">Exact</Text>
-                      <Text size="xs" c="dark.2">Swap the product into the template scene</Text>
-                    </Box>
-                  }
-                  styles={{
-                    root: {
-                      padding: 'var(--mantine-spacing-sm)',
-                      border: '1px solid var(--mantine-color-dark-5)',
-                      borderRadius: 'var(--mantine-radius-md)',
-                    },
-                    body: { alignItems: 'flex-start' },
-                    labelWrapper: { width: '100%' },
-                  }}
+          {/* Mode — only relevant for template path */}
+          {hasTemplates && (
+            <Box mb="md">
+              <Text size="sm" fw={500} c="white" mb="xs">Mode</Text>
+              <Radio.Group value={mode} onChange={(val) => setMode(val as Mode)}>
+                <Stack gap="xs">
+                  <Radio
+                    value="exact"
+                    label={
+                      <Box>
+                        <Text fw={500} size="sm">Exact</Text>
+                        <Text size="xs" c="dark.2">Swap the product into the template scene</Text>
+                      </Box>
+                    }
+                    styles={{
+                      root: {
+                        padding: 'var(--mantine-spacing-sm)',
+                        border: '1px solid var(--mantine-color-dark-5)',
+                        borderRadius: 'var(--mantine-radius-md)',
+                      },
+                      body: { alignItems: 'flex-start' },
+                      labelWrapper: { width: '100%' },
+                    }}
+                  />
+                  <Radio
+                    value="remix"
+                    label={
+                      <Box>
+                        <Text fw={500} size="sm">Remix</Text>
+                        <Text size="xs" c="dark.2">Generate a new scene inspired by the template</Text>
+                      </Box>
+                    }
+                    styles={{
+                      root: {
+                        padding: 'var(--mantine-spacing-sm)',
+                        border: '1px solid var(--mantine-color-dark-5)',
+                        borderRadius: 'var(--mantine-radius-md)',
+                      },
+                      body: { alignItems: 'flex-start' },
+                      labelWrapper: { width: '100%' },
+                    }}
+                  />
+                </Stack>
+              </Radio.Group>
+              {mode === 'exact' && (
+                <Checkbox
+                  mt="sm"
+                  label="Adapt colors to product"
+                  checked={colorAdapt}
+                  onChange={(e) => setColorAdapt(e.currentTarget.checked)}
                 />
-                <Radio
-                  value="remix"
-                  label={
-                    <Box>
-                      <Text fw={500} size="sm">Remix</Text>
-                      <Text size="xs" c="dark.2">Generate a new scene inspired by the template</Text>
-                    </Box>
-                  }
-                  styles={{
-                    root: {
-                      padding: 'var(--mantine-spacing-sm)',
-                      border: '1px solid var(--mantine-color-dark-5)',
-                      borderRadius: 'var(--mantine-radius-md)',
-                    },
-                    body: { alignItems: 'flex-start' },
-                    labelWrapper: { width: '100%' },
-                  }}
-                />
-              </Stack>
-            </Radio.Group>
-            {mode === 'exact' && (
-              <Checkbox
-                mt="sm"
-                label="Adapt colors to product"
-                checked={colorAdapt}
-                onChange={(e) => setColorAdapt(e.currentTarget.checked)}
-              />
-            )}
-          </Box>
+              )}
+            </Box>
+          )}
 
           {/* Variations */}
           <Box mb="md">
             <Text size="sm" fw={500} c="white" mb="xs">
-              Variations per template
+              Variations{hasTemplates ? ' per template' : ''}
             </Text>
             <SegmentedControl
               value={variationsPerTemplate}
@@ -2935,9 +3190,9 @@ function GenerateWizard({
 
           {/* Summary & Submit */}
           <Box pt="lg" mt="lg" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
-            {pickedIds.length === 0 ? (
+            {!canGenerate ? (
               <Text size="sm" c="dark.2" ta="center" mb="md">
-                Select templates to continue
+                Pick an angle or template
               </Text>
             ) : (
               <Paper p="sm" mb="md" radius="md" bg="dark.7">
@@ -2946,9 +3201,16 @@ function GenerateWizard({
                   <Text size="lg" fw={700} c="white">{totalCount}</Text>
                 </Group>
                 <Text size="xs" c="dark.2" mt={4}>
-                  {pickedIds.length} template{pickedIds.length > 1 ? 's' : ''} × {variationsPerTemplate} variation{parseInt(variationsPerTemplate, 10) > 1 ? 's' : ''}
+                  {hasTemplates
+                    ? `${pickedIds.length} template${pickedIds.length > 1 ? 's' : ''} × ${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''}`
+                    : `${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''} from angle`}
                 </Text>
               </Paper>
+            )}
+            {bothSelected && (
+              <Text size="xs" c="yellow.5" ta="center" mb="xs">
+                Generating with template; angle selection ignored
+              </Text>
             )}
             <Button
               fullWidth
@@ -2956,15 +3218,15 @@ function GenerateWizard({
               size="lg"
               fz="sm"
               onClick={handleGenerate}
-              disabled={pickedIds.length === 0 || creditsExhausted}
+              disabled={!canGenerate || creditsExhausted}
               loading={isSubmitting}
               styles={{
                 root: {
-                  boxShadow: pickedIds.length > 0 && !creditsExhausted ? '0 4px 14px rgba(84, 116, 180, 0.3)' : 'none',
+                  boxShadow: canGenerate && !creditsExhausted ? '0 4px 14px rgba(84, 116, 180, 0.3)' : 'none',
                 },
               }}
             >
-              {isSubmitting ? 'Starting...' : `Generate ${totalCount > 0 ? totalCount : ''} Image${totalCount !== 1 ? 's' : ''}`}
+              {getGenerateLabel()}
             </Button>
           </Box>
         </Paper>
