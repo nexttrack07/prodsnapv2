@@ -6,6 +6,7 @@ import { CheckoutForm } from '~/components/billing/CheckoutForm'
 type CheckoutSearch = {
   planId: string
   period: 'month' | 'annual'
+  from?: 'onboarding'
 }
 
 export const Route = createFileRoute('/checkout')({
@@ -14,13 +15,14 @@ export const Route = createFileRoute('/checkout')({
     const periodRaw = typeof search.period === 'string' ? search.period : 'month'
     const period: 'month' | 'annual' =
       periodRaw === 'annual' ? 'annual' : 'month'
-    return { planId, period }
+    const from = search.from === 'onboarding' ? 'onboarding' : undefined
+    return { planId, period, from }
   },
   component: CheckoutRoute,
 })
 
 function CheckoutRoute() {
-  const { planId, period } = Route.useSearch()
+  const { planId, period, from } = Route.useSearch()
   const { isLoaded, isSignedIn } = useAuth()
 
   if (!planId) {
@@ -71,5 +73,5 @@ function CheckoutRoute() {
     )
   }
 
-  return <CheckoutForm planId={planId} period={period} />
+  return <CheckoutForm planId={planId} period={period} from={from} />
 }

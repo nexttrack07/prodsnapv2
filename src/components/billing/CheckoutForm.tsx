@@ -15,6 +15,8 @@
  */
 import { useEffect, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
+import { useMutation } from 'convex/react'
+import { api } from '../../../convex/_generated/api'
 import {
   Alert,
   Button,
@@ -41,17 +43,19 @@ import { PostCheckoutInterstitial } from './PostCheckoutInterstitial'
 export type CheckoutFormProps = {
   planId: string
   period: 'month' | 'annual'
+  /** When set, treats this as the final step of onboarding. */
+  from?: 'onboarding'
 }
 
-export function CheckoutForm({ planId, period }: CheckoutFormProps) {
+export function CheckoutForm({ planId, period, from }: CheckoutFormProps) {
   return (
     <CheckoutProvider for="user" planId={planId} planPeriod={period}>
-      <CheckoutBody />
+      <CheckoutBody from={from} />
     </CheckoutProvider>
   )
 }
 
-function CheckoutBody() {
+function CheckoutBody({ from }: { from?: 'onboarding' }) {
   const { checkout, errors, fetchStatus } = useCheckout()
 
   // Auto-initialize the checkout session on mount. Avoids a "click to start"
@@ -92,9 +96,9 @@ function CheckoutBody() {
         ) : null}
         <PaymentElementProvider
           checkout={checkout}
-          stripeAppearance={stripeAppearance() as never}
+          stripeAppearance={stripeAppearance()}
         >
-          <PaymentSection />
+          <PaymentSection from={from} />
         </PaymentElementProvider>
       </Stack>
     </CheckoutShell>
@@ -134,7 +138,7 @@ function OrderSummary() {
   )
 }
 
-function PaymentSection() {
+function PaymentSection({ from }: { from?: 'onboarding' }) {
   const { checkout, fetchStatus } = useCheckout()
   const { isFormReady, submit } = usePaymentElement()
   const [submitting, setSubmitting] = useState(false)
@@ -182,19 +186,34 @@ function PaymentSection() {
     }
   }
 
+  const completeOnboarding = useMutation(
+    api.onboardingProfiles.completeOnboarding,
+  )
+
   const onPlanActive = () => {
-    // Server now reflects the new plan. Tell Clerk to close out the
-    // checkout state and route us to the studio.
-    void checkout.finalize({
-      navigate: ({ decorateUrl }) => {
-        const url = decorateUrl('/studio')
-        if (url.startsWith('http')) {
-          window.location.href = url
-        } else {
-          router.navigate({ to: '/studio' })
-        }
-      },
-    })
+    // For onboarding, mark profile complete first (best-effort) so the
+    // redirect guard doesn't bounce the user back to /onboarding.
+    const finalizeAfter = () => {
+      void checkout.finalize({
+        navigate: ({ decorateUrl }) => {
+          const url = decorateUrl('/home')
+          if (url.startsWith('http')) {
+            window.location.href = url
+          } else {
+            router.navigate({ to: '/home' })
+          }
+        },
+      })
+    }
+    if (from === 'onboarding') {
+      void completeOnboarding({})
+        .catch(() => {
+          // best-effort; redirect guard tolerates legacy users
+        })
+        .finally(finalizeAfter)
+    } else {
+      finalizeAfter()
+    }
   }
 
   return (

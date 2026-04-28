@@ -7,6 +7,7 @@
 import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import { internal } from './_generated/api'
+import type { Id } from './_generated/dataModel'
 import { uploadFromUrl } from './r2'
 import { nanoid } from 'nanoid'
 
@@ -128,57 +129,67 @@ export const runUrlImport = internalAction({
       const fallbackTitle = scrapePayload.data.metadata?.title
       const fallbackImage = scrapePayload.data.metadata?.ogImage
 
-      // 2. Pick the product image URLs
-      await ctx.runMutation(internal.urlImports.patchImportStatus, {
-        importId,
-        status: 'extracting',
-        currentStep: 'Reading product details',
-      })
+      const isBrandOnly = importRow.mode === 'brand-only'
 
-      const candidateImages = uniqueValidImages([
-        ...(extracted.productImageUrls ?? []),
-        ...(fallbackImage ? [fallbackImage] : []),
-      ]).slice(0, 3)
+      // 2-4. Product image extraction + upload + creation.
+      // Skipped entirely for brand-only imports (used by onboarding).
+      let productId: Id<'products'> | undefined
+      if (!isBrandOnly) {
+        await ctx.runMutation(internal.urlImports.patchImportStatus, {
+          importId,
+          status: 'extracting',
+          currentStep: 'Reading product details',
+        })
 
-      if (candidateImages.length === 0) {
-        throw new Error('No product images could be extracted from this page')
-      }
+        const candidateImages = uniqueValidImages([
+          ...(extracted.productImageUrls ?? []),
+          ...(fallbackImage ? [fallbackImage] : []),
+        ]).slice(0, 3)
 
-      // 3. Re-host images on R2
-      await ctx.runMutation(internal.urlImports.patchImportStatus, {
-        importId,
-        status: 'uploading',
-        currentStep: `Uploading ${candidateImages.length} image${candidateImages.length === 1 ? '' : 's'}`,
-      })
-
-      const uploadedUrls: string[] = []
-      for (let i = 0; i < candidateImages.length; i++) {
-        const sourceUrl = candidateImages[i]
-        const ext = guessExtension(sourceUrl)
-        const key = `imports/${importId}/${i}-${nanoid(8)}${ext}`
-        try {
-          const url = await uploadFromUrl(sourceUrl, key)
-          uploadedUrls.push(url)
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.warn(`Failed to upload ${sourceUrl}:`, err)
+        if (candidateImages.length === 0) {
+          throw new Error('No product images could be extracted from this page')
         }
-      }
-      if (uploadedUrls.length === 0) {
-        throw new Error('All extracted images failed to upload')
-      }
 
-      // 4. Create the product (this also schedules analysis)
-      const productName = (
-        extracted.productName ||
-        fallbackTitle ||
-        'Imported product'
-      ).slice(0, 80)
-      const productId = await ctx.runMutation(internal.products.createProductFromImport, {
-        userId: importRow.userId,
-        name: productName,
-        imageUrls: uploadedUrls,
-      })
+        await ctx.runMutation(internal.urlImports.patchImportStatus, {
+          importId,
+          status: 'uploading',
+          currentStep: `Uploading ${candidateImages.length} image${candidateImages.length === 1 ? '' : 's'}`,
+        })
+
+        const uploadedUrls: string[] = []
+        for (let i = 0; i < candidateImages.length; i++) {
+          const sourceUrl = candidateImages[i]
+          const ext = guessExtension(sourceUrl)
+          const key = `imports/${importId}/${i}-${nanoid(8)}${ext}`
+          try {
+            const url = await uploadFromUrl(sourceUrl, key)
+            uploadedUrls.push(url)
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn(`Failed to upload ${sourceUrl}:`, err)
+          }
+        }
+        if (uploadedUrls.length === 0) {
+          throw new Error('All extracted images failed to upload')
+        }
+
+        const productName = (
+          extracted.productName ||
+          fallbackTitle ||
+          'Imported product'
+        ).slice(0, 80)
+        productId = await ctx.runMutation(internal.products.createProductFromImport, {
+          userId: importRow.userId,
+          name: productName,
+          imageUrls: uploadedUrls,
+        })
+      } else {
+        await ctx.runMutation(internal.urlImports.patchImportStatus, {
+          importId,
+          status: 'extracting',
+          currentStep: 'Reading brand details',
+        })
+      }
 
       // 5. Upsert the brand kit (best-effort)
       let brandKitUpdated = false

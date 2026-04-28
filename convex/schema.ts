@@ -394,6 +394,12 @@ const schema = defineSchema({
     sourceUrl: v.string(),
     status: urlImportStatus,
     currentStep: v.optional(v.string()),     // human-readable progress label
+    // 'product-and-brand' (default) creates a product + upserts brand kit.
+    // 'brand-only' (used by onboarding) skips product creation.
+    mode: v.optional(v.union(
+      v.literal('product-and-brand'),
+      v.literal('brand-only'),
+    )),
     productId: v.optional(v.id('products')), // populated when product is created
     brandKitUpdated: v.optional(v.boolean()),
     error: v.optional(v.string()),
@@ -427,6 +433,24 @@ const schema = defineSchema({
   })
     .index('by_admin_at', ['adminUserId', 'at'])
     .index('by_at', ['at']),
+
+  // ─── Onboarding profiles (one per user, captures role + wizard progress) ──
+  onboardingProfiles: defineTable({
+    userId: v.string(),
+    role: v.optional(v.union(
+      v.literal('ecom-store-owner'),
+      v.literal('saas-founder'),
+      v.literal('agency-freelancer'),
+      v.literal('content-creator'),
+      v.literal('local-service'),
+      v.literal('nonprofit'),
+      v.literal('something-else'),
+    )),
+    // 1=role, 2=business, 3=plan, 4=complete
+    currentStep: v.number(),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index('by_userId', ['userId']),
 
   adminDebugRuns: defineTable({
     adminUserId: v.string(),

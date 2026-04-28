@@ -219,7 +219,7 @@ function Home() {
                 <Group gap="md">
                   <Button
                     component={Link}
-                    to="/studio"
+                    to="/home"
                     color="brand"
                     size="xl"
                     fz="sm"
@@ -619,7 +619,7 @@ function Home() {
               <Group gap="md">
                 <Button
                   component={Link}
-                  to="/studio"
+                  to="/home"
                   color="brand"
                   size="xl"
                   fz="sm"

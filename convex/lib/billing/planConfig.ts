@@ -32,6 +32,15 @@ const ALL_CAPABILITIES: readonly Capability[] = [
 ]
 
 export const PLAN_CONFIG: Record<string, PlanConfig> = {
+  // Default Clerk slug for users who haven't subscribed to a paid plan.
+  // Zero limits + zero capabilities — the trial gate forces paid signup
+  // before any feature is usable.
+  free_user: {
+    slug: 'free_user',
+    productLimit: 0,
+    monthlyCredits: 0,
+    capabilities: [],
+  },
   basic: {
     slug: 'basic',
     productLimit: 5,

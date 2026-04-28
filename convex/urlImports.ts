@@ -49,10 +49,17 @@ export const listMyUrlImports = query({
 
 // ─── Public mutation: kick off an import ──────────────────────────────────
 export const createUrlImport = mutation({
-  args: { url: v.string() },
-  handler: async (ctx, { url }) => {
+  args: {
+    url: v.string(),
+    mode: v.optional(v.union(
+      v.literal('product-and-brand'),
+      v.literal('brand-only'),
+    )),
+  },
+  handler: async (ctx, { url, mode }) => {
     const userId = await requireAuth(ctx)
     const sourceUrl = normalizeUrl(url)
+    const resolvedMode = mode ?? 'product-and-brand'
 
     const inflight = await ctx.db
       .query('urlImports')
@@ -73,6 +80,7 @@ export const createUrlImport = mutation({
       sourceUrl,
       status: 'pending',
       currentStep: 'Queued',
+      mode: resolvedMode,
       createdAt: Date.now(),
     })
     await ctx.scheduler.runAfter(0, internal.urlImportsActions.runUrlImport, {

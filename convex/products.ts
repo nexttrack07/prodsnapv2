@@ -354,6 +354,106 @@ export const listProducts = query({
 })
 
 /**
+ * Returns everything the new home/dashboard needs in a single query:
+ *   - focusProduct: most-recently-created non-archived product (or null)
+ *   - recentAds: last 6 completed generations for the focus product
+ *   - suggestedCategory: most common product category among user's products
+ *   - totalProducts / totalGenerations: counts for stat lines
+ *
+ * Returns null fields gracefully so the empty state can render.
+ */
+export const getFocusProduct = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) {
+      return {
+        focusProduct: null,
+        recentAds: [],
+        suggestedCategory: null,
+        totalProducts: 0,
+        totalGenerations: 0,
+      }
+    }
+
+    const products = await ctx.db
+      .query('products')
+      .withIndex('by_userId_archived', (q) =>
+        q.eq('userId', userId).eq('archivedAt', undefined),
+      )
+      .order('desc')
+      .take(50)
+
+    const focusProduct = products[0] ?? null
+
+    let recentAds: Array<{
+      _id: string
+      outputUrl: string
+      adCopy: { headlines: Array<string> } | null
+      createdAt: number
+    }> = []
+    if (focusProduct) {
+      const ads = await ctx.db
+        .query('templateGenerations')
+        .withIndex('by_product', (q) => q.eq('productId', focusProduct._id))
+        .order('desc')
+        .take(20)
+      recentAds = ads
+        .filter((a) => a.status === 'complete' && !!a.outputUrl)
+        .slice(0, 6)
+        .map((a) => ({
+          _id: a._id as string,
+          outputUrl: a.outputUrl as string,
+          adCopy: a.adCopy
+            ? { headlines: a.adCopy.headlines ?? [] }
+            : null,
+          createdAt: a._creationTime,
+        }))
+    }
+
+    // Pre-select the user's most common product category for the templates
+    // shelf chip filter. Falls back to undefined when no products exist.
+    const categoryCounts = new Map<string, number>()
+    for (const p of products) {
+      if (p.category) {
+        categoryCounts.set(p.category, (categoryCounts.get(p.category) ?? 0) + 1)
+      }
+    }
+    let suggestedCategory: string | null = null
+    let topCount = 0
+    for (const [cat, count] of categoryCounts) {
+      if (count > topCount) {
+        topCount = count
+        suggestedCategory = cat
+      }
+    }
+
+    const allGens = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .take(1000)
+
+    return {
+      focusProduct: focusProduct
+        ? {
+            _id: focusProduct._id,
+            name: focusProduct.name,
+            imageUrl: focusProduct.imageUrl ?? null,
+            category: focusProduct.category ?? null,
+            status: focusProduct.status,
+            description: focusProduct.productDescription ?? null,
+            updatedAt: focusProduct._creationTime,
+          }
+        : null,
+      recentAds,
+      suggestedCategory,
+      totalProducts: products.length,
+      totalGenerations: allGens.length,
+    }
+  },
+})
+
+/**
  * Gets a product with its generation count.
  * Only returns the product if the authenticated user owns it.
  */

@@ -2,14 +2,16 @@ import { v } from 'convex/values'
 import { internalAction, internalMutation, internalQuery } from '../_generated/server'
 import { internal } from '../_generated/api'
 
-const SUPPORTED_EVENTS = new Set([
-  'subscription.created',
-  'subscription.updated',
-  'subscription.active',
-  'subscriptionItem.past_due',
-  'subscriptionItem.canceled',
-  'user.updated',
-])
+// Any `subscription.*` or `subscriptionItem.*` event implies the user's
+// billing state changed — we always respond by re-syncing their plan from
+// Clerk's Backend API. Enumerating each subtype was brittle (Clerk adds new
+// ones — e.g. subscriptionItem.upcoming, ended, active, etc.).
+function isSupportedEvent(eventType: string): boolean {
+  if (eventType.startsWith('subscription.')) return true
+  if (eventType.startsWith('subscriptionItem.')) return true
+  if (eventType === 'user.updated') return true
+  return false
+}
 
 /**
  * Internal query — check if a webhook event has already been processed.
@@ -90,7 +92,7 @@ export const handleBillingEvent = internalAction({
   },
   returns: v.null(),
   handler: async (ctx, { eventId, eventType, payload }) => {
-    if (!SUPPORTED_EVENTS.has(eventType)) {
+    if (!isSupportedEvent(eventType)) {
       console.log(`[webhookHandler] Ignoring unsupported event type: ${eventType}`)
       await ctx.runMutation(internal.billing.webhookHandler.markWebhookHandled, {
         eventId,
