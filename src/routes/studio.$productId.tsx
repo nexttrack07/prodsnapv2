@@ -2395,7 +2395,7 @@ function GenerationCard({
   )
 }
 
-type WizardSegment = 'scratch' | 'template' | 'angle'
+type WizardSegment = 'custom' | 'template'
 
 function GenerateWizard({
   productId,
@@ -2432,7 +2432,7 @@ function GenerateWizard({
   prefillFromAdId?: Id<'templateGenerations'> | null
 }) {
   // ── Segment state ──────────────────────────────────────────────────────────
-  const [activeSegment, setActiveSegment] = useState<WizardSegment>('scratch')
+  const [activeSegment, setActiveSegment] = useState<WizardSegment>('custom')
 
   // ── Shared state (persists across segment switches) ────────────────────────
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
@@ -2469,17 +2469,15 @@ function GenerateWizard({
       }
     }
     if (prefillAd.mode === 'angle') {
-      // Try to find the matching angle by title in current product angles
+      // Try to find the matching angle by title; landing in Custom either way
+      // since the Angle tab no longer exists — angle is picked via the chips.
       const matchIdx = product.marketingAngles?.findIndex(
         (a) => a.title === prefillAd.angleSeed?.title,
       )
       if (matchIdx != null && matchIdx >= 0) {
         setSelectedAngleIndex(matchIdx)
-        setActiveSegment('angle')
-      } else {
-        // Angle no longer exists — fall back to template segment
-        setActiveSegment('template')
       }
+      setActiveSegment('custom')
     }
     if (typeof prefillAd.colorAdapt === 'boolean') {
       setColorAdapt(prefillAd.colorAdapt)
@@ -2654,7 +2652,7 @@ function GenerateWizard({
     return `Generate ${totalCount} Image${totalCount !== 1 ? 's' : ''}`
   }
 
-  // ── Marketing angles for Scratch chips + Angle segment ─────────────────────
+  // ── Marketing angles surfaced as chips inside the Custom segment ──────────
   const angles = product.marketingAngles ?? []
 
   return (
@@ -2708,9 +2706,8 @@ function GenerateWizard({
           value={activeSegment}
           onChange={(val) => setActiveSegment(val as WizardSegment)}
           data={[
-            { value: 'scratch', label: 'Scratch' },
+            { value: 'custom', label: 'Custom' },
             { value: 'template', label: 'Template' },
-            { value: 'angle', label: 'Angle' },
           ]}
           color="brand"
           fullWidth={!!isMobile}
@@ -2731,8 +2728,8 @@ function GenerateWizard({
             order: 1,
           }}
         >
-          {/* ─── Scratch segment ─── */}
-          {activeSegment === 'scratch' && (
+          {/* ─── Custom segment ─── */}
+          {activeSegment === 'custom' && (
             <Stack gap="md" px="md">
               <Box>
                 <Text size="sm" fw={600} c="white" mb="xs">Describe your ad</Text>
@@ -2878,7 +2875,18 @@ function GenerateWizard({
                       setFilterAspectRatio(null)
                     }}
                   >
-                    Clear
+                    Clear filters
+                  </Button>
+                )}
+                {pickedIds.length > 0 && (
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    color="red"
+                    leftSection={<IconX size={14} />}
+                    onClick={() => setPickedIds([])}
+                  >
+                    Clear selection ({pickedIds.length})
                   </Button>
                 )}
               </Group>
@@ -2991,90 +2999,6 @@ function GenerateWizard({
             </Box>
           )}
 
-          {/* ─── Angle segment ─── */}
-          {activeSegment === 'angle' && (
-            <Box px="md">
-              {angles.length === 0 ? (
-                <Box py={60} ta="center">
-                  <Text size="sm" c="dark.2">
-                    No marketing angles available. Run analysis on this product first.
-                  </Text>
-                </Box>
-              ) : (
-                <Stack gap="md">
-                  <Text size="xs" tt="uppercase" fw={700} c="dark.2">
-                    Marketing angles ({angles.length})
-                  </Text>
-                  {angles.map((angle, index) => {
-                    const isSelected = selectedAngleIndex === index
-                    return (
-                      <UnstyledButton
-                        key={`${angle.title}-${index}`}
-                        onClick={() => setSelectedAngleIndex(isSelected ? null : index)}
-                        style={{ display: 'block', width: '100%' }}
-                      >
-                        <Paper
-                          withBorder
-                          radius="md"
-                          p="lg"
-                          style={{
-                            background: isSelected
-                              ? 'rgba(84, 116, 180, 0.08)'
-                              : 'rgba(255,255,255,0.02)',
-                            borderColor: isSelected
-                              ? 'var(--mantine-color-brand-5)'
-                              : 'var(--mantine-color-dark-5)',
-                            transition: 'all 200ms ease',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
-                            <Box style={{ flex: 1, minWidth: 200 }}>
-                              <Group gap="sm" align="center">
-                                <Text size="sm" fw={700} c="white">
-                                  {angle.title}
-                                </Text>
-                                <Badge size="xs" color="teal" variant="light" radius="sm">
-                                  {angle.suggestedAdStyle}
-                                </Badge>
-                                {angle.angleType && (
-                                  <Badge size="xs" color={angleTypeColor(angle.angleType)} variant="light" radius="sm">
-                                    {angleTypeLabel(angle.angleType)}
-                                  </Badge>
-                                )}
-                              </Group>
-                              <Text mt={6} size="sm" c="dark.1">
-                                {angle.description}
-                              </Text>
-                              <Text mt="xs" size="sm" c="dark.0" fs="italic">
-                                &ldquo;{angle.hook}&rdquo;
-                              </Text>
-                            </Box>
-                            {isSelected && (
-                              <Box
-                                w={28}
-                                h={28}
-                                bg="brand"
-                                style={{
-                                  borderRadius: '50%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <IconCheck size={16} color="white" strokeWidth={3} />
-                              </Box>
-                            )}
-                          </Group>
-                        </Paper>
-                      </UnstyledButton>
-                    )
-                  })}
-                </Stack>
-              )}
-            </Box>
-          )}
         </Box>
 
         {/* ═══ Sidebar — shared settings + Generate CTA ═══ */}
@@ -3101,6 +3025,112 @@ function GenerateWizard({
             </Group>
           </Paper>
 
+          {/* Segment-aware selection summary */}
+          <Box mb="md">
+            <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb="xs">
+              {activeSegment === 'template' ? 'Templates' : 'Starting from'}
+            </Text>
+            {activeSegment === 'template' ? (
+              pickedIds.length === 0 ? (
+                <Paper
+                  p="sm"
+                  radius="md"
+                  bg="dark.7"
+                  style={{ border: '1px dashed var(--mantine-color-dark-4)' }}
+                >
+                  <Text size="xs" c="dark.2" ta="center">
+                    No templates picked — choose from the gallery
+                  </Text>
+                </Paper>
+              ) : (
+                <Stack gap={6}>
+                  <Group gap={6} wrap="wrap">
+                    {pickedIds.map((id) => {
+                      const tpl = templates.find((t) => t._id === id)
+                      if (!tpl) return null
+                      return (
+                        <Box
+                          key={id}
+                          pos="relative"
+                          w={48}
+                          h={48}
+                          style={{
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                            border: '1px solid var(--mantine-color-brand-5)',
+                          }}
+                        >
+                          <Image src={tpl.thumbnailUrl ?? tpl.imageUrl} alt="" fit="cover" w="100%" h="100%" />
+                          <UnstyledButton
+                            onClick={() => setPickedIds((p) => p.filter((x) => x !== id))}
+                            aria-label="Remove template"
+                            style={{
+                              position: 'absolute',
+                              top: 2,
+                              right: 2,
+                              width: 16,
+                              height: 16,
+                              borderRadius: '50%',
+                              backgroundColor: 'rgba(0,0,0,0.7)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'white',
+                            }}
+                          >
+                            <IconX size={10} />
+                          </UnstyledButton>
+                        </Box>
+                      )
+                    })}
+                  </Group>
+                  <Text size="xs" c="dark.2">
+                    {pickedIds.length}/3 selected
+                  </Text>
+                </Stack>
+              )
+            ) : selectedAngleIndex !== null && product.marketingAngles?.[selectedAngleIndex] ? (
+              <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-brand-5)' }}>
+                <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
+                  <Box style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="xs" c="dark.2">Angle</Text>
+                    <Text size="sm" fw={600} c="white" lineClamp={2}>
+                      {product.marketingAngles[selectedAngleIndex].title}
+                    </Text>
+                  </Box>
+                  <UnstyledButton
+                    onClick={() => setSelectedAngleIndex(null)}
+                    aria-label="Clear angle"
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--mantine-color-dark-5)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--mantine-color-dark-1)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <IconX size={11} />
+                  </UnstyledButton>
+                </Group>
+              </Paper>
+            ) : (
+              <Paper
+                p="sm"
+                radius="md"
+                bg="dark.7"
+                style={{ border: '1px dashed var(--mantine-color-dark-4)' }}
+              >
+                <Text size="xs" c="dark.2" ta="center">
+                  Type a prompt or pick an angle chip below
+                </Text>
+              </Paper>
+            )}
+          </Box>
+
           {/* Output Aspect Ratio */}
           <Box mb="md">
             <Text size="sm" fw={600} c="white" mb="xs">Output size</Text>
@@ -3114,7 +3144,7 @@ function GenerateWizard({
           </Box>
 
           {/* Mode — only relevant for template path */}
-          {hasTemplates && (
+          {activeSegment === 'template' && hasTemplates && (
             <Box mb="md">
               <Text size="sm" fw={500} c="white" mb="xs">Mode</Text>
               <Radio.Group value={mode} onChange={(val) => setMode(val as Mode)}>
@@ -3171,7 +3201,8 @@ function GenerateWizard({
           {/* Variations */}
           <Box mb="md">
             <Text size="sm" fw={500} c="white" mb="xs">
-              Variations{hasTemplates ? ' per template' : ''}
+              Variations
+              {activeSegment === 'template' && hasTemplates ? ' per template' : ''}
             </Text>
             <SegmentedControl
               value={variationsPerTemplate}

@@ -22,13 +22,13 @@ import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as StudioProductIdRouteImport } from './routes/studio.$productId'
 import { Route as BoardsBoardIdRouteImport } from './routes/boards.$boardId'
+import { Route as AdsAdIdRouteImport } from './routes/ads.$adId'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminPromptsRouteImport } from './routes/admin.prompts'
 import { Route as AdminPlaygroundRouteImport } from './routes/admin.playground'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AccountBrandRouteImport } from './routes/account.brand'
 import { Route as AccountBillingRouteImport } from './routes/account.billing'
-import { Route as AdsAdIdRouteImport } from './routes/ads.$adId'
 import { Route as StudioProductIdStrategyRouteImport } from './routes/studio.$productId.strategy'
 
 const TermsRoute = TermsRouteImport.update({
@@ -96,6 +96,11 @@ const BoardsBoardIdRoute = BoardsBoardIdRouteImport.update({
   path: '/boards/$boardId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdsAdIdRoute = AdsAdIdRouteImport.update({
+  id: '/ads/$adId',
+  path: '/ads/$adId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminTemplatesRoute = AdminTemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
@@ -124,11 +129,6 @@ const AccountBrandRoute = AccountBrandRouteImport.update({
 const AccountBillingRoute = AccountBillingRouteImport.update({
   id: '/account/billing',
   path: '/account/billing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdsAdIdRoute = AdsAdIdRouteImport.update({
-  id: '/ads/$adId',
-  path: '/ads/$adId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudioProductIdStrategyRoute = StudioProductIdStrategyRouteImport.update({
@@ -384,6 +384,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BoardsBoardIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ads/$adId': {
+      id: '/ads/$adId'
+      path: '/ads/$adId'
+      fullPath: '/ads/$adId'
+      preLoaderRoute: typeof AdsAdIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/templates': {
       id: '/admin/templates'
       path: '/templates'
@@ -424,13 +431,6 @@ declare module '@tanstack/react-router' {
       path: '/account/billing'
       fullPath: '/account/billing'
       preLoaderRoute: typeof AccountBillingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/ads/$adId': {
-      id: '/ads/$adId'
-      path: '/ads/$adId'
-      fullPath: '/ads/$adId'
-      preLoaderRoute: typeof AdsAdIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/studio/$productId/strategy': {
