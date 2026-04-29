@@ -108,6 +108,7 @@ interface GenerationData {
   aspectRatio?: string
   mode?: 'exact' | 'remix' | 'variation'
   templateSnapshot?: { name?: string; aspectRatio?: string }
+  isWinner?: boolean
   adCopy?: {
     headlines: string[]
     primaryTexts: string[]
@@ -1760,6 +1761,11 @@ function GalleryView({
   const [variationTarget, setVariationTarget] = useState<{ _id: Id<'templateGenerations'>; outputUrl: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Id<'templateGenerations'> | null>(null)
   const [retryingId, setRetryingId] = useState<Id<'templateGenerations'> | null>(null)
+  const [winnersOnly, setWinnersOnly] = useState(false)
+  const winnerCount = completedGenerations.filter((g) => g.isWinner).length
+  const visibleCompleted = winnersOnly
+    ? completedGenerations.filter((g) => g.isWinner)
+    : completedGenerations
   const hasAny = completedGenerations.length > 0 || pendingGenerations.length > 0
 
   // Build sibling list from completed generations for prev/next nav
@@ -1819,10 +1825,36 @@ function GalleryView({
     <Box>
       {/* Section header — source images live in the product card above; this
           section is now the ads gallery only. */}
-      <Box mb="lg">
-        <Title order={2} fz="xl" fw={600} c="white" mb={4}>Generations</Title>
-        <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
-      </Box>
+      <Group justify="space-between" align="flex-end" mb="lg" wrap="wrap" gap="md">
+        <Box>
+          <Title order={2} fz="xl" fw={600} c="white" mb={4}>Generations</Title>
+          <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
+        </Box>
+        {winnerCount > 0 && (
+          <Group gap="xs">
+            <Button
+              size="xs"
+              variant={winnersOnly ? 'filled' : 'default'}
+              color="yellow"
+              radius="xl"
+              leftSection={<IconStarFilled size={12} />}
+              onClick={() => setWinnersOnly((v) => !v)}
+            >
+              Winners ({winnerCount})
+            </Button>
+            {winnersOnly && (
+              <Button
+                size="xs"
+                variant="subtle"
+                color="gray"
+                onClick={() => setWinnersOnly(false)}
+              >
+                Show all
+              </Button>
+            )}
+          </Group>
+        )}
+      </Group>
 
       {/* Pending generations */}
       {pendingGenerations.length > 0 && (
@@ -1898,14 +1930,14 @@ function GalleryView({
             </>
           )}
         </Paper>
-      ) : completedGenerations.length > 0 ? (
+      ) : visibleCompleted.length > 0 ? (
         <Box style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
           gap: '1rem',
           alignItems: 'start',
         }}>
-          {completedGenerations.map((gen, index) => (
+          {visibleCompleted.map((gen, index) => (
             <GenerationCard
               key={gen._id}
               generation={gen}
@@ -1918,6 +1950,29 @@ function GalleryView({
             />
           ))}
         </Box>
+      ) : winnersOnly ? (
+        <Paper
+          radius="lg"
+          p="xl"
+          ta="center"
+          withBorder
+          style={{
+            borderStyle: 'dashed',
+            borderColor: 'var(--mantine-color-dark-5)',
+          }}
+        >
+          <Text c="dark.2" size="sm" mb="md">
+            No winners marked yet. Star an ad you like and it'll show up here.
+          </Text>
+          <Button
+            variant="subtle"
+            color="gray"
+            size="xs"
+            onClick={() => setWinnersOnly(false)}
+          >
+            Show all ads
+          </Button>
+        </Paper>
       ) : null}
 
       {/* Ad Detail Panel (replaces old lightbox) */}
@@ -2892,12 +2947,25 @@ function GenerateWizard({
                   </Group>
                 </Box>
               )}
+              <Box>
+                <Text size="xs" c="dark.2" mb="xs">
+                  Or use a template:
+                </Text>
+                <Button
+                  size="xs"
+                  variant="default"
+                  radius="xl"
+                  leftSection={<IconPhoto size={12} />}
+                  onClick={() => setActiveSegment('template')}
+                >
+                  Browse templates{hasTemplates ? ` (${pickedIds.length} picked)` : ''}
+                </Button>
+              </Box>
               {!canGenerate && (
                 <Alert color="gray" variant="light" radius="md">
                   <Text size="sm" c="dark.1">
-                    Pick an angle above, or switch to the Template tab to
-                    generate from a template. Free-form prompt generation is
-                    coming soon.
+                    Pick an angle above, or pick a template from the Template
+                    tab. Free-form prompt generation is coming soon.
                   </Text>
                 </Alert>
               )}
