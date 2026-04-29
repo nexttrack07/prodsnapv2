@@ -126,11 +126,11 @@ function StrategyPage() {
         <MarketingAnalysisPanel
           product={product}
           productId={product._id}
-          onExploreAngle={() => {
+          onExploreAngle={(_filters, angleIndex) => {
             navigate({
               to: '/studio/$productId',
               params: { productId: product._id },
-              search: { compose: 'true' },
+              search: { compose: 'true', angle: String(angleIndex) },
             })
           }}
         />
