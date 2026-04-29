@@ -178,10 +178,14 @@ export const runUrlImport = internalAction({
           fallbackTitle ||
           'Imported product'
         ).slice(0, 80)
+        const productReviewSnippets = Array.isArray(extracted.reviewSnippets) && extracted.reviewSnippets.length > 0
+          ? extracted.reviewSnippets
+          : undefined
         productId = await ctx.runMutation(internal.products.createProductFromImport, {
           userId: importRow.userId,
           name: productName,
           imageUrls: uploadedUrls,
+          customerLanguage: productReviewSnippets,
         })
       } else {
         await ctx.runMutation(internal.urlImports.patchImportStatus, {

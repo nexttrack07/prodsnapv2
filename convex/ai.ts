@@ -236,13 +236,20 @@ const productAnalysisSchema = z.object({
 })
 
 export const analyzeProduct = internalAction({
-  args: { imageUrl: v.string() },
-  handler: async (_ctx, { imageUrl }) => {
+  args: {
+    imageUrl: v.string(),
+    customerLanguage: v.optional(v.array(v.string())),
+  },
+  handler: async (_ctx, { imageUrl, customerLanguage }) => {
     // Test mode: return mock response without calling AI
     if (isTestMode()) {
       await mockDelay()
       return mockVisionResponse
     }
+
+    const customerVoiceSection = customerLanguage && customerLanguage.length > 0
+      ? `\n\nCustomer phrases to ground angles in (use their exact words and tone when writing hooks and descriptions):\n${customerLanguage.map((s) => `- "${s}"`).join('\n')}`
+      : ''
 
     const analysisText = await callVision({
       imageUrls: [imageUrl],
@@ -269,7 +276,7 @@ export const analyzeProduct = internalAction({
   ]
 }
 
-Generate 3-5 distinct marketing angles. Each angle should target a different buyer motivation (status, savings, anxiety relief, identity, convenience, etc.). Avoid repeating the same hook idea twice.
+Generate 3-5 distinct marketing angles. Each angle should target a different buyer motivation (status, savings, anxiety relief, identity, convenience, etc.). Avoid repeating the same hook idea twice.${customerVoiceSection}
 Generate a DIVERSE mix of angle types across your 3-5 angles. Don't return 5 'comparison' angles — vary across the four types (comparison, curiosity-narrative, social-proof, problem-callout) so the user can test different psychological levers.
 For each angle, also predict the structured filter tags from the enums above. These tags help the user find templates that fit the angle. If you're not confident, omit the field rather than guess.
 
@@ -712,6 +719,11 @@ export const composeFromAnglePrompt = internalAction({
     if (prodCtx.productDescription) prodLines.push(`Product description: ${prodCtx.productDescription}`)
     if (prodCtx.targetAudience) prodLines.push(`Target audience: ${prodCtx.targetAudience}`)
 
+    // Per-product customerLanguage trumps brand-level
+    const productCL = (prodCtx as { customerLanguage?: string[] }).customerLanguage
+    const brandCL = (brandKit as { customerLanguage?: string[] } | null)?.customerLanguage
+    const effectiveCL = productCL && productCL.length > 0 ? productCL : brandCL
+
     const brandLines: string[] = []
     if (brandKit?.colors?.length) brandLines.push(`Brand colors: ${brandKit.colors.join(', ')}`)
     if (brandKit?.primaryFont) brandLines.push(`Brand font feel: ${brandKit.primaryFont}`)
@@ -731,6 +743,7 @@ export const composeFromAnglePrompt = internalAction({
       '',
       brandLines.length ? brandLines.join('\n') : '(no brand kit set — use a clean, modern look)',
       ...(brandKit?.currentOffer ? [`Current offer to display at the bottom: "${brandKit.currentOffer}"`] : []),
+      ...(effectiveCL && effectiveCL.length > 0 ? [`Customer phrases to ground copy in:\n${effectiveCL.map((s) => `- "${s}"`).join('\n')}`] : []),
       '',
       'Visual hierarchy rules (apply to the rendered ad):',
       '1. The largest text element is the main headline — communicates the value proposition or visceral benefit. Readable at thumbnail size in <1 second.',
@@ -1042,6 +1055,12 @@ export const composeAdCopyForGeneration = internalAction({
       ? await ctx.runQuery(internal.brandKits.getBrandKitInternal, { userId: generation.userId })
       : null) as { voice?: string; tagline?: string; currentOffer?: string; customerLanguage?: string[] } | null
 
+    // Per-product customerLanguage trumps brand-level
+    const productCustomerLanguage = (prodCtx as { customerLanguage?: string[] }).customerLanguage
+    const effectiveCustomerLanguage = productCustomerLanguage && productCustomerLanguage.length > 0
+      ? productCustomerLanguage
+      : brandKit?.customerLanguage
+
     return await ctx.runAction(internal.ai.generateAdCopyText, {
       productName: prodCtx.name ?? 'Product',
       productDescription: prodCtx.productDescription,
@@ -1051,7 +1070,7 @@ export const composeAdCopyForGeneration = internalAction({
       brandVoice: brandKit?.voice,
       brandTagline: brandKit?.tagline,
       currentOffer: brandKit?.currentOffer,
-      customerLanguage: brandKit?.customerLanguage,
+      customerLanguage: effectiveCustomerLanguage,
     })
   },
 })
