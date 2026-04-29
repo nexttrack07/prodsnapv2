@@ -197,7 +197,11 @@ function LibraryPage() {
           </Paper>
         ) : (
           <>
+            {/* Masonic caches cell positions and crashes when the items
+                array shrinks. Re-key on filter changes so it remounts
+                with a fresh cache. See masonic README "Items" caveat. */}
             <Masonry
+              key={`${productFilter ?? 'all'}:${winnersOnly ? 'win' : 'all'}:${filteredAds.length}`}
               items={filteredAds}
               columnCount={isMobile ? 2 : 4}
               columnGutter={1}

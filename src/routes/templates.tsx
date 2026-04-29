@@ -416,7 +416,17 @@ function TemplatesBrowsePage() {
         </Paper>
       ) : (
         <>
+          {/* Masonic caches cell positions and crashes when items shrink.
+              Re-key on filter changes so it remounts with a fresh cache. */}
           <Masonry
+            key={[
+              filterArgs.search ?? '',
+              filterArgs.productCategory ?? '',
+              filterArgs.imageStyle ?? '',
+              filterArgs.setting ?? '',
+              filterArgs.angleType ?? '',
+              filterArgs.aspectRatio ?? '',
+            ].join('|')}
             items={templates}
             columnCount={isMobile ? 2 : 4}
             columnGutter={1}

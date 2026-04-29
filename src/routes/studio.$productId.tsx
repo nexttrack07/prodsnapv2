@@ -2156,7 +2156,11 @@ function GalleryView({
           )}
         </Paper>
       ) : visibleCompleted.length > 0 ? (
+        // Masonic caches cell positions and crashes when items shrink
+        // (delete / winners-toggle). Re-key on filter + length so it
+        // remounts with a fresh cache.
         <Masonry
+          key={`${winnersOnly ? 'win' : 'all'}:${visibleCompleted.length}`}
           items={visibleCompleted}
           columnCount={isMobile ? 2 : 4}
           columnGutter={1}
@@ -3666,7 +3670,17 @@ function GenerateWizard({
                 <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
               ) : (
                 <>
+                  {/* Masonic caches cell positions and crashes when items
+                      shrink. Re-key on filter changes so it remounts. */}
                   <Masonry
+                    key={[
+                      filterArgs.search ?? '',
+                      filterArgs.productCategory ?? '',
+                      filterArgs.imageStyle ?? '',
+                      filterArgs.setting ?? '',
+                      filterArgs.angleType ?? '',
+                      filterArgs.aspectRatio ?? '',
+                    ].join('|')}
                     items={templates}
                     columnCount={isMobile ? 2 : 4}
                     columnGutter={1}
