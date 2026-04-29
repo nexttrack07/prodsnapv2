@@ -3536,7 +3536,7 @@ function GenerateWizard({
               {templatesLoading && templates.length === 0 ? (
                 <Box style={{
                   columnCount: isMobile ? 2 : 4,
-                  columnGap: '0.5rem',
+                  columnGap: 2,
                 }}>
                   {Array.from({ length: 8 }).map((_, i) => (
                     <Box
@@ -3546,7 +3546,7 @@ function GenerateWizard({
                         borderRadius: 'var(--mantine-radius-lg)',
                         aspectRatio: i % 3 === 0 ? '4/5' : i % 3 === 1 ? '9/16' : '1/1',
                         breakInside: 'avoid',
-                        marginBottom: '0.5rem',
+                        marginBottom: 2,
                       }}
                     />
                   ))}
@@ -3573,7 +3573,6 @@ function GenerateWizard({
                           key={tpl._id}
                           onClick={() => toggleTemplate(tpl._id)}
                           w="100%"
-                          mb="xs"
                           className="template-card-selectable"
                           data-testid={`template-card-${tpl._id}`}
                           aria-pressed={picked}
@@ -3588,6 +3587,7 @@ function GenerateWizard({
                             display: 'block',
                             transition: 'all 200ms ease',
                             transform: picked ? 'scale(1.02)' : 'scale(1)',
+                            marginBottom: 2,
                           }}
                         >
                           <Box style={getAspectStyle()}>
