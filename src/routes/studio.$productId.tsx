@@ -43,6 +43,7 @@ import {
   Collapse,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
+import { Masonry } from 'masonic'
 import {
   IconChevronLeft,
   IconArrowRight,
@@ -3556,22 +3557,21 @@ function GenerateWizard({
                 <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
               ) : (
                 <>
-                  <Box style={{
-                    columnCount: isMobile ? 2 : 4,
-                    columnGap: '0.5rem',
-                  }}>
-                    {templates.map((tpl) => {
+                  <Masonry
+                    items={templates}
+                    columnCount={isMobile ? 2 : 4}
+                    columnGutter={1}
+                    rowGutter={1}
+                    render={({ data: tpl }) => {
                       const picked = pickedIds.includes(tpl._id)
-                      const getAspectStyle = (): React.CSSProperties => {
-                        switch (tpl.aspectRatio) {
-                          case '4:5': return { aspectRatio: '4/5' }
-                          case '9:16': return { aspectRatio: '9/16' }
-                          default: return { aspectRatio: '1/1' }
-                        }
-                      }
+                      const aspectRatio =
+                        tpl.aspectRatio === '4:5'
+                          ? '4/5'
+                          : tpl.aspectRatio === '9:16'
+                            ? '9/16'
+                            : '1/1'
                       return (
                         <UnstyledButton
-                          key={tpl._id}
                           onClick={() => toggleTemplate(tpl._id)}
                           w="100%"
                           className="template-card-selectable"
@@ -3590,7 +3590,7 @@ function GenerateWizard({
                             transform: picked ? 'scale(1.02)' : 'scale(1)',
                           }}
                         >
-                          <Box style={getAspectStyle()}>
+                          <Box style={{ aspectRatio }}>
                             <Image src={tpl.thumbnailUrl} alt={`Template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`} fit="cover" h="100%" w="100%" />
                           </Box>
                           <Badge
@@ -3625,8 +3625,8 @@ function GenerateWizard({
                           )}
                         </UnstyledButton>
                       )
-                    })}
-                  </Box>
+                    }}
+                  />
                   {hasNextPage && (
                     <Box ref={loadMoreRef} py="md" ta="center">
                       {isFetchingNextPage ? (
