@@ -90,7 +90,7 @@ import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
 import { BrandPicker } from '../components/brand/BrandPicker'
 
-type ProductSearch = { compose?: string; ad?: string; template?: string }
+type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string }
 
 export const Route = createFileRoute('/studio/$productId')({
   validateSearch: (search: Record<string, unknown>): ProductSearch => {
@@ -103,6 +103,9 @@ export const Route = createFileRoute('/studio/$productId')({
     }
     if (typeof search.template === 'string' && search.template.length > 0) {
       out.template = search.template
+    }
+    if (typeof search.angle === 'string' && /^\d+$/.test(search.angle)) {
+      out.angle = search.angle
     }
     return out
   },
@@ -190,7 +193,7 @@ function ProductWorkspacePage() {
   // Nested routes (e.g. /studio/$productId/strategy) take over the page —
   // render only the child Outlet and skip the workspace content.
   const isChildActive = pathname !== `/studio/${productId}`
-  const [view, setView] = useState<View>(search.compose || search.template ? 'generate' : 'gallery')
+  const [view, setView] = useState<View>(search.compose || search.template || search.angle ? 'generate' : 'gallery')
   const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
 
   // When the URL gets ?compose=:adId (e.g. from "Edit in compose"), open the
@@ -209,9 +212,17 @@ function ProductWorkspacePage() {
     }
   }, [search.template, view])
 
+  // When the URL gets ?angle=:index (from Strategy "Explore templates"),
+  // open the generate wizard with that angle pre-selected.
+  useEffect(() => {
+    if (search.angle && view !== 'generate') {
+      setView('generate')
+    }
+  }, [search.angle, view])
+
   const closeCompose = () => {
     setView('gallery')
-    if (search.compose || search.template) {
+    if (search.compose || search.template || search.angle) {
       navigate({
         to: '/studio/$productId',
         params: { productId },
@@ -382,6 +393,9 @@ function ProductWorkspacePage() {
           }
           prefillTemplateId={
             (search.template ?? null) as Id<'adTemplates'> | null
+          }
+          prefillAngleIndex={
+            search.angle != null ? Number(search.angle) : null
           }
         />
       )}
@@ -2686,6 +2700,7 @@ function GenerateWizard({
   initialFilters,
   prefillFromAdId,
   prefillTemplateId,
+  prefillAngleIndex,
 }: {
   productId: Id<'products'>
   product: {
@@ -2712,6 +2727,7 @@ function GenerateWizard({
   initialFilters?: TemplateFilters
   prefillFromAdId?: Id<'templateGenerations'> | null
   prefillTemplateId?: Id<'adTemplates'> | null
+  prefillAngleIndex?: number | null
 }) {
   // ── Segment state ──────────────────────────────────────────────────────────
   const [activeSegment, setActiveSegment] = useState<WizardSegment>(
@@ -2816,6 +2832,28 @@ function GenerateWizard({
     setVariationsPerTemplate('1')
     setPrefillApplied(true)
   }, [prefillAd, prefillApplied, product.marketingAngles])
+
+  // ── Prefill from angle (Strategy → Compose) ──────────────────────────────
+  const [anglePrefillApplied, setAnglePrefillApplied] = useState(false)
+  useEffect(() => {
+    if (anglePrefillApplied) return
+    // Precedence: template > ad > angle — skip if a higher-priority prefill is set
+    if (prefillTemplateId || prefillFromAdId) return
+    if (
+      prefillAngleIndex != null &&
+      product.marketingAngles &&
+      prefillAngleIndex < product.marketingAngles.length
+    ) {
+      setSelectedAngleIndex(prefillAngleIndex)
+      setActiveSegment('custom')
+      // Seed the prompt with the angle's hook (matches chip-click behavior)
+      if (prompt.trim().length === 0) {
+        setPrompt(product.marketingAngles[prefillAngleIndex].hook)
+      }
+      setAnglePrefillApplied(true)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillAngleIndex, product.marketingAngles, anglePrefillApplied, prefillTemplateId, prefillFromAdId])
 
   // ── Template browse filters ────────────────────────────────────────────────
   const [search, setSearch] = useState('')

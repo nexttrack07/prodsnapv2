@@ -191,7 +191,7 @@ export function MarketingAnalysisPanel({
     }>
   }
   productId: Id<'products'>
-  onExploreAngle: (filters: TemplateFilters) => void
+  onExploreAngle: (filters: TemplateFilters, angleIndex: number) => void
 }) {
   const submitAngle = useConvexMutation(api.angleGenerations.submitAngleGeneration)
   const [angleGenState, setAngleGenState] = useState<{
@@ -295,7 +295,7 @@ export function MarketingAnalysisPanel({
                             : {}),
                           ...(angle.angleType ? { angleType: angle.angleType } : {}),
                         }
-                        onExploreAngle(filters)
+                        onExploreAngle(filters, index)
                       }}
                     >
                       Explore templates
