@@ -3,6 +3,7 @@
  * Used by the ad detail panel / ad detail page.
  */
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import { mutation, query, type QueryCtx, type MutationCtx } from './_generated/server'
 
 // ─── Auth helpers (mirrors products.ts) ──────────────────────────────────────
@@ -56,6 +57,73 @@ export const getAdById = query({
     // Legacy ad without productId — check userId directly
     if (ad.userId && ad.userId !== userId) return null
     return { ...ad, productName: null, productImageUrl: null }
+  },
+})
+
+/**
+ * Paginated query returning all completed ads for the authenticated user,
+ * newest first. Each row is enriched with the parent product's name and
+ * primary image URL (same pattern as getAdById).
+ */
+export const listAllAdsForUser = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) {
+      return { page: [], isDone: true, continueCursor: '' }
+    }
+
+    const result = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .order('desc')
+      .paginate(paginationOpts)
+
+    // Filter to complete ads only, then enrich with product data
+    const completePage = result.page.filter(
+      (ad) => ad.status === 'complete' && !!ad.outputUrl,
+    )
+
+    // Batch-lookup unique products referenced by this page
+    const productIds = [
+      ...new Set(
+        completePage
+          .map((ad) => ad.productId)
+          .filter((id): id is NonNullable<typeof id> => !!id),
+      ),
+    ]
+    const productMap = new Map<
+      string,
+      { name: string; imageUrl: string | undefined }
+    >()
+    for (const pid of productIds) {
+      const product = await ctx.db.get(pid)
+      if (product) {
+        let imageUrl: string | undefined
+        if (product.primaryImageId) {
+          const img = await ctx.db.get(product.primaryImageId)
+          imageUrl = img?.imageUrl
+        }
+        imageUrl = imageUrl ?? product.imageUrl
+        productMap.set(pid as string, { name: product.name, imageUrl })
+      }
+    }
+
+    const enriched = completePage.map((ad) => {
+      const prod = ad.productId
+        ? productMap.get(ad.productId as string)
+        : null
+      return {
+        ...ad,
+        productName: prod?.name ?? null,
+        productImageUrl: prod?.imageUrl ?? null,
+      }
+    })
+
+    return {
+      ...result,
+      page: enriched,
+    }
   },
 })
 
