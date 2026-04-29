@@ -2506,7 +2506,21 @@ function GenerationCard({
           style={{ display: 'block' }}
         />
 
-        {/* Blurred bottom overlay with icon-only actions */}
+        {/* Gradient bottom overlay — fades from transparent to dark so the
+            image and the icons read together rather than as two stacked
+            zones. Matches the home collage hero treatment. */}
+        <Box
+          pos="absolute"
+          left={0}
+          right={0}
+          bottom={0}
+          style={{
+            height: '45%',
+            background:
+              'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.85) 100%)',
+            pointerEvents: 'none',
+          }}
+        />
         <Box
           pos="absolute"
           left={0}
@@ -2515,9 +2529,6 @@ function GenerationCard({
           px={8}
           py={6}
           style={{
-            backgroundColor: 'rgba(0, 0, 0, 0.55)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
