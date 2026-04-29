@@ -37,6 +37,9 @@ import {
   Alert,
   Select,
   Textarea,
+  Tabs,
+  ScrollArea,
+  Menu,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -62,6 +65,10 @@ import {
   IconBolt,
   IconLayoutGrid,
   IconTarget,
+  IconBookmark,
+  IconBookmarkFilled,
+  IconExternalLink,
+  IconLink,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -718,6 +725,12 @@ function ProductHeader({
                 />
               </Group>
             </Stack>
+
+            {/* Inspiration row */}
+            <InspirationRow
+              productId={productId}
+              onNewAd={onNewAd}
+            />
 
             {/* Actions row */}
             <Group justify="flex-end" gap="sm">
@@ -2398,6 +2411,18 @@ function GenerateWizard({
   const [filterSetting, setFilterSetting] = useState<string | null>(initialFilters?.setting ?? null)
   const [filterAngleType, setFilterAngleType] = useState<string | null>(initialFilters?.angleType ?? null)
   const [filterAspectRatio, setFilterAspectRatio] = useState<string | null>(null)
+  const [mySavesOnly, setMySavesOnly] = useState(false)
+
+  // ── Product inspirations for "My saves" filter ────────────────────────────
+  const { data: productInspirations } = useQuery(
+    convexQuery(api.productInspirations.listInspirationsForProduct, { productId }),
+  )
+  const savedTemplateIdsForProduct = new Set(
+    (productInspirations ?? [])
+      .filter((i: { kind: string; templateId?: unknown }) => i.kind === 'template' && i.templateId)
+      .map((i: { templateId?: unknown }) => i.templateId as string),
+  )
+  const hasSavedTemplates = savedTemplateIdsForProduct.size > 0
   const { data: filterOptions } = useQuery(
     convexQuery(api.products.listTemplateFilterOptions, {}),
   )
@@ -2457,7 +2482,11 @@ function GenerateWizard({
     initialPageParam: undefined as string | undefined,
   })
 
-  const templates = templatesData?.pages.flatMap((page) => page.items) || []
+  const allTemplates = templatesData?.pages.flatMap((page) => page.items) || []
+  // When "My saves" chip is on, filter to only saved templates
+  const templates = mySavesOnly
+    ? allTemplates.filter((t) => savedTemplateIdsForProduct.has(t._id as string))
+    : allTemplates
 
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useCallback(
@@ -2952,6 +2981,24 @@ function GenerateWizard({
                   size="sm"
                   style={{ flex: 1, minWidth: 200 }}
                 />
+                <Tooltip
+                  label={hasSavedTemplates ? undefined : 'Save templates to this product first'}
+                  disabled={hasSavedTemplates}
+                  events={{ hover: true, focus: true, touch: true }}
+                >
+                  <Button
+                    size="sm"
+                    variant={mySavesOnly ? 'filled' : 'default'}
+                    color={mySavesOnly ? 'brand' : 'gray'}
+                    radius="xl"
+                    leftSection={<IconBookmarkFilled size={13} />}
+                    disabled={!hasSavedTemplates}
+                    onClick={() => setMySavesOnly((v) => !v)}
+                    styles={{ root: { height: 36 } }}
+                  >
+                    My saves{hasSavedTemplates ? ` (${savedTemplateIdsForProduct.size})` : ''}
+                  </Button>
+                </Tooltip>
                 <Select
                   placeholder="Category"
                   clearable
@@ -3497,5 +3544,801 @@ function StatusBadge({ status }: { status: 'analyzing' | 'ready' | 'failed' }) {
     >
       {label}
     </Badge>
+  )
+}
+
+// ── Inspiration Row ──────────────────────────────────────────────────────────
+
+type InspirationItem = {
+  _id: Id<'productInspirations'>
+  kind: 'template' | 'external'
+  templateId?: Id<'adTemplates'>
+  imageUrl?: string
+  sourceUrl?: string
+  note?: string
+  template: {
+    thumbnailUrl: string
+    imageUrl: string
+    aspectRatio: string
+    productCategory?: string
+    imageStyle?: string
+    setting?: string
+    angleType?: string
+  } | null
+}
+
+function InspirationRow({
+  productId,
+  onNewAd,
+}: {
+  productId: Id<'products'>
+  onNewAd: () => void
+}) {
+  const navigate = useNavigate()
+  const { data: inspirations } = useQuery(
+    convexQuery(api.productInspirations.listInspirationsForProduct, { productId }),
+  )
+  const removeInspiration = useConvexMutation(api.productInspirations.removeInspiration)
+  const removeMutation = useMutation({ mutationFn: removeInspiration })
+
+  const [addModalOpen, setAddModalOpen] = useState(false)
+  const [previewItem, setPreviewItem] = useState<InspirationItem | null>(null)
+
+  const items = (inspirations ?? []) as InspirationItem[]
+  const count = items.length
+
+  async function handleRemove(id: Id<'productInspirations'>) {
+    try {
+      await removeMutation.mutateAsync({ inspirationId: id })
+      if (previewItem?._id === id) setPreviewItem(null)
+      notifications.show({ message: 'Removed from inspiration', color: 'gray', autoClose: 3000 })
+    } catch {
+      notifications.show({ title: 'Error', message: 'Failed to remove', color: 'red' })
+    }
+  }
+
+  return (
+    <>
+      <Stack gap={6}>
+        <Group justify="space-between" align="center">
+          <Group gap={6}>
+            <Text size="xs" tt="uppercase" fw={700} c="dark.2">
+              Inspiration
+            </Text>
+            {count > 0 && (
+              <Badge size="xs" variant="light" color="brand" radius="sm">
+                {count}
+              </Badge>
+            )}
+          </Group>
+          <Button
+            size="xs"
+            variant="subtle"
+            color="brand"
+            leftSection={<IconPlus size={12} />}
+            onClick={() => setAddModalOpen(true)}
+          >
+            Add inspiration
+          </Button>
+        </Group>
+
+        {count === 0 ? (
+          <Paper
+            radius="md"
+            p="md"
+            style={{
+              border: '1px dashed var(--mantine-color-dark-4)',
+              background: 'rgba(84, 116, 180, 0.03)',
+            }}
+          >
+            <Text size="sm" c="dark.2" mb="xs">
+              Save reference ads from /templates or paste URLs here.
+              We'll riff on these when you generate new ads.
+            </Text>
+            <Group gap="xs">
+              <Button
+                size="xs"
+                variant="light"
+                color="brand"
+                component={Link}
+                to="/templates"
+              >
+                Browse templates
+              </Button>
+              <Button
+                size="xs"
+                variant="light"
+                color="gray"
+                leftSection={<IconLink size={12} />}
+                onClick={() => setAddModalOpen(true)}
+              >
+                Paste URL
+              </Button>
+            </Group>
+          </Paper>
+        ) : (
+          <ScrollArea scrollbarSize={4} type="hover">
+            <Group gap={8} wrap="nowrap" pb={4}>
+              {items.map((item) => {
+                const thumbUrl =
+                  item.kind === 'template'
+                    ? item.template?.thumbnailUrl
+                    : item.imageUrl
+                return (
+                  <Box
+                    key={item._id}
+                    w={120}
+                    h={150}
+                    pos="relative"
+                    style={{
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      border: '1px solid var(--mantine-color-dark-5)',
+                      backgroundColor: 'var(--mantine-color-dark-7)',
+                      cursor: 'pointer',
+                      transition: 'border-color 120ms ease',
+                    }}
+                    onClick={() => setPreviewItem(item)}
+                  >
+                    {thumbUrl ? (
+                      <Image
+                        src={thumbUrl}
+                        alt="Inspiration"
+                        fit="cover"
+                        w="100%"
+                        h="100%"
+                      />
+                    ) : (
+                      <Center h="100%">
+                        <IconPhoto size={24} color="var(--mantine-color-dark-3)" />
+                      </Center>
+                    )}
+                    {/* Remove button on hover */}
+                    <UnstyledButton
+                      pos="absolute"
+                      top={4}
+                      right={4}
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation()
+                        handleRemove(item._id)
+                      }}
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        backgroundColor: 'rgba(0, 0, 0, 0.65)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: 0,
+                        transition: 'opacity 120ms ease',
+                      }}
+                      styles={{
+                        root: {
+                          '&:hover': { opacity: 1 },
+                        },
+                      }}
+                      className="inspiration-remove-btn"
+                      aria-label="Remove inspiration"
+                    >
+                      <IconX size={12} color="white" />
+                    </UnstyledButton>
+                    {/* Kind indicator */}
+                    {item.kind === 'external' && item.sourceUrl && (
+                      <Box
+                        pos="absolute"
+                        bottom={4}
+                        left={4}
+                        px={5}
+                        py={1}
+                        style={{
+                          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                          borderRadius: 4,
+                          fontSize: 9,
+                          fontWeight: 600,
+                          color: 'white',
+                          letterSpacing: 0.4,
+                        }}
+                      >
+                        URL
+                      </Box>
+                    )}
+                  </Box>
+                )
+              })}
+            </Group>
+          </ScrollArea>
+        )}
+      </Stack>
+
+      {/* Inspiration preview modal */}
+      <InspirationPreviewModal
+        item={previewItem}
+        onClose={() => setPreviewItem(null)}
+        onRemove={handleRemove}
+        onGenerate={(item) => {
+          setPreviewItem(null)
+          if (item.kind === 'template' && item.templateId) {
+            navigate({
+              to: '/studio/$productId',
+              params: { productId: productId as string },
+              search: { compose: 'true', template: item.templateId as string },
+            })
+          } else {
+            navigate({
+              to: '/studio/$productId',
+              params: { productId: productId as string },
+              search: { compose: 'true' },
+            })
+          }
+        }}
+        productId={productId}
+      />
+
+      {/* Add Inspiration modal */}
+      <AddInspirationModal
+        opened={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        productId={productId}
+      />
+
+      {/* CSS for hover-reveal remove button */}
+      <style>{`
+        [class*="inspiration"] .inspiration-remove-btn { opacity: 0; }
+        *:hover > .inspiration-remove-btn { opacity: 1 !important; }
+      `}</style>
+    </>
+  )
+}
+
+// ── Inspiration Preview Modal ────────────────────────────────────────────────
+
+function InspirationPreviewModal({
+  item,
+  onClose,
+  onRemove,
+  onGenerate,
+  productId,
+}: {
+  item: InspirationItem | null
+  onClose: () => void
+  onRemove: (id: Id<'productInspirations'>) => void
+  onGenerate: (item: InspirationItem) => void
+  productId: Id<'products'>
+}) {
+  const updateNote = useConvexMutation(api.productInspirations.updateInspirationNote)
+  const updateNoteMutation = useMutation({ mutationFn: updateNote })
+  const [editingNote, setEditingNote] = useState(false)
+  const [noteText, setNoteText] = useState('')
+
+  useEffect(() => {
+    if (item) {
+      setNoteText(item.note ?? '')
+      setEditingNote(false)
+    }
+  }, [item])
+
+  if (!item) return null
+
+  const imageUrl =
+    item.kind === 'template'
+      ? item.template?.imageUrl
+      : item.imageUrl
+
+  async function handleSaveNote() {
+    if (!item) return
+    try {
+      await updateNoteMutation.mutateAsync({
+        inspirationId: item._id,
+        note: noteText,
+      })
+      setEditingNote(false)
+      notifications.show({ message: 'Note saved', color: 'green', autoClose: 2000 })
+    } catch {
+      notifications.show({ title: 'Error', message: 'Failed to save note', color: 'red' })
+    }
+  }
+
+  return (
+    <Modal
+      opened={!!item}
+      onClose={onClose}
+      size="lg"
+      radius="md"
+      centered
+      title="Inspiration"
+    >
+      <Stack gap="md">
+        {imageUrl && (
+          <Box
+            style={{
+              borderRadius: 'var(--mantine-radius-md)',
+              overflow: 'hidden',
+              border: '1px solid var(--mantine-color-dark-5)',
+            }}
+          >
+            <Image src={imageUrl} alt="Inspiration" fit="contain" mah={400} />
+          </Box>
+        )}
+
+        {/* Source URL */}
+        {item.kind === 'external' && item.sourceUrl && (
+          <Anchor href={item.sourceUrl} target="_blank" size="sm" c="brand.4">
+            <Group gap={4}>
+              <IconExternalLink size={14} />
+              {item.sourceUrl.length > 60
+                ? item.sourceUrl.slice(0, 60) + '...'
+                : item.sourceUrl}
+            </Group>
+          </Anchor>
+        )}
+
+        {/* Template metadata */}
+        {item.kind === 'template' && item.template && (
+          <Group gap="xs" wrap="wrap">
+            {item.template.productCategory && (
+              <Badge variant="light" color="gray" size="sm">
+                {capitalizeWords(item.template.productCategory)}
+              </Badge>
+            )}
+            {item.template.imageStyle && (
+              <Badge variant="light" color="teal" size="sm">
+                {capitalizeWords(item.template.imageStyle)}
+              </Badge>
+            )}
+            {item.template.setting && (
+              <Badge variant="light" color="indigo" size="sm">
+                {capitalizeWords(item.template.setting)}
+              </Badge>
+            )}
+            <Badge variant="light" color="brand" size="sm">
+              {item.template.aspectRatio}
+            </Badge>
+          </Group>
+        )}
+
+        {/* Note */}
+        <Box>
+          <Text size="xs" fw={600} c="dark.2" mb={4}>Note</Text>
+          {editingNote ? (
+            <Stack gap="xs">
+              <Textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.currentTarget.value)}
+                placeholder="Why did you save this?"
+                autosize
+                minRows={2}
+                maxRows={5}
+              />
+              <Group gap="xs">
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="brand"
+                  onClick={handleSaveNote}
+                  loading={updateNoteMutation.isPending}
+                >
+                  Save
+                </Button>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setEditingNote(false)}
+                >
+                  Cancel
+                </Button>
+              </Group>
+            </Stack>
+          ) : (
+            <UnstyledButton
+              onClick={() => setEditingNote(true)}
+              style={{
+                padding: '6px 8px',
+                borderRadius: 'var(--mantine-radius-sm)',
+                border: '1px solid var(--mantine-color-dark-5)',
+                width: '100%',
+                minHeight: 32,
+              }}
+            >
+              <Text size="sm" c={item.note ? 'dark.1' : 'dark.3'} fs={item.note ? undefined : 'italic'}>
+                {item.note || 'Add a note...'}
+              </Text>
+            </UnstyledButton>
+          )}
+        </Box>
+
+        {/* Actions */}
+        <Group gap="sm">
+          <Button
+            flex={1}
+            color="brand"
+            leftSection={<IconSparkles size={16} />}
+            onClick={() => onGenerate(item)}
+          >
+            Generate ad inspired by this
+          </Button>
+          <Button
+            variant="light"
+            color="red"
+            onClick={() => {
+              onRemove(item._id)
+              onClose()
+            }}
+          >
+            Remove
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  )
+}
+
+// ── Add Inspiration Modal ────────────────────────────────────────────────────
+
+function AddInspirationModal({
+  opened,
+  onClose,
+  productId,
+}: {
+  opened: boolean
+  onClose: () => void
+  productId: Id<'products'>
+}) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const convex = useConvex()
+
+  // ── Paste URL tab state ──────────────────────────────────────────────────
+  const [urlInput, setUrlInput] = useState('')
+  const [urlNote, setUrlNote] = useState('')
+  const [isFetching, setIsFetching] = useState(false)
+  const [fetchedPreview, setFetchedPreview] = useState<{ imageUrl: string; sourceUrl: string } | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
+  const fetchAction = useAction(api.productInspirationsActions.fetchAndSaveExternalInspiration)
+  const uploadAction = useAction(api.r2.uploadProductImage)
+  const saveExternal = useConvexMutation(api.productInspirations.saveExternalInspiration)
+  const saveExternalMutation = useMutation({ mutationFn: saveExternal })
+
+  // ── Template browse tab state ────────────────────────────────────────────
+  const [tplSearch, setTplSearch] = useState('')
+  const [tplFilterCategory, setTplFilterCategory] = useState<string | null>(null)
+  const saveTemplate = useConvexMutation(api.productInspirations.saveTemplateAsInspiration)
+  const saveTemplateMutation = useMutation({ mutationFn: saveTemplate })
+
+  const { data: filterOptions } = useQuery(
+    convexQuery(api.products.listTemplateFilterOptions, {}),
+  )
+
+  const tplFilterArgs = {
+    search: tplSearch.trim() || undefined,
+    productCategory: tplFilterCategory ?? undefined,
+  }
+
+  const {
+    data: tplData,
+    isLoading: tplLoading,
+    fetchNextPage: tplFetchNext,
+    hasNextPage: tplHasNext,
+    isFetchingNextPage: tplFetchingNext,
+  } = useInfiniteQuery({
+    queryKey: ['inspoTemplates', tplFilterArgs.search, tplFilterArgs.productCategory],
+    queryFn: async ({ pageParam }) => {
+      return convex.query(api.products.listTemplates, {
+        cursor: pageParam,
+        limit: 16,
+        ...tplFilterArgs,
+      })
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: undefined as string | undefined,
+    enabled: opened,
+  })
+
+  const tplItems = tplData?.pages.flatMap((p) => p.items) ?? []
+
+  // Track which templates are already saved to this product
+  const { data: currentInspirations } = useQuery({
+    ...convexQuery(api.productInspirations.listInspirationsForProduct, { productId }),
+    enabled: opened,
+  })
+  const savedTemplateIds = new Set(
+    (currentInspirations ?? [])
+      .filter((i: { kind: string; templateId?: string }) => i.kind === 'template' && i.templateId)
+      .map((i: { templateId?: string }) => i.templateId),
+  )
+
+  const tplObserverRef = useRef<IntersectionObserver | null>(null)
+  const tplLoadMoreRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (tplFetchingNext) return
+      if (tplObserverRef.current) tplObserverRef.current.disconnect()
+      tplObserverRef.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && tplHasNext) tplFetchNext()
+      })
+      if (node) tplObserverRef.current.observe(node)
+    },
+    [tplFetchingNext, tplHasNext, tplFetchNext],
+  )
+
+  async function handleFetchUrl() {
+    if (!urlInput.trim()) return
+    setIsFetching(true)
+    setFetchedPreview(null)
+    try {
+      const result = await fetchAction({
+        productId,
+        sourceUrl: urlInput.trim(),
+        note: urlNote.trim() || undefined,
+      })
+      notifications.show({ message: 'Saved from URL', color: 'green', autoClose: 3000 })
+      setUrlInput('')
+      setUrlNote('')
+      setFetchedPreview(null)
+    } catch (err) {
+      notifications.show({
+        title: 'Could not fetch',
+        message: err instanceof Error ? err.message : 'Try uploading an image instead.',
+        color: 'red',
+        autoClose: 6000,
+      })
+    } finally {
+      setIsFetching(false)
+    }
+  }
+
+  async function handleDropUpload(files: File[]) {
+    const file = files[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      notifications.show({ title: 'Too large', message: 'Image must be under 10 MB', color: 'red' })
+      return
+    }
+    setIsUploading(true)
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce(
+          (data, byte) => data + String.fromCharCode(byte),
+          '',
+        ),
+      )
+      const { url, key } = await uploadAction({
+        name: file.name,
+        base64,
+        contentType: file.type,
+      })
+      await saveExternalMutation.mutateAsync({
+        productId,
+        imageUrl: url,
+        imageStorageKey: key,
+        note: urlNote.trim() || undefined,
+      })
+      setUrlNote('')
+      notifications.show({ message: 'Image saved as inspiration', color: 'green', autoClose: 3000 })
+    } catch (err) {
+      notifications.show({
+        title: 'Upload failed',
+        message: err instanceof Error ? err.message : 'Try again',
+        color: 'red',
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  async function handleSaveTemplate(templateId: Id<'adTemplates'>) {
+    try {
+      await saveTemplateMutation.mutateAsync({ productId, templateId })
+      notifications.show({ message: 'Template saved', color: 'green', autoClose: 2000 })
+    } catch {
+      notifications.show({ title: 'Error', message: 'Failed to save', color: 'red' })
+    }
+  }
+
+  function handleClose() {
+    setUrlInput('')
+    setUrlNote('')
+    setFetchedPreview(null)
+    setTplSearch('')
+    setTplFilterCategory(null)
+    onClose()
+  }
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={handleClose}
+      size="xl"
+      radius="md"
+      title="Add inspiration"
+      styles={{
+        body: { padding: 'var(--mantine-spacing-md)', minHeight: 400 },
+      }}
+    >
+      <Tabs defaultValue="browse">
+        <Tabs.List mb="md">
+          <Tabs.Tab value="browse">Browse templates</Tabs.Tab>
+          <Tabs.Tab value="url">Paste URL or upload</Tabs.Tab>
+        </Tabs.List>
+
+        {/* ── Browse templates tab ── */}
+        <Tabs.Panel value="browse">
+          <Group gap="sm" mb="md" wrap="wrap">
+            <TextInput
+              placeholder="Search templates..."
+              value={tplSearch}
+              onChange={(e) => setTplSearch(e.currentTarget.value)}
+              leftSection={<IconPhoto size={14} />}
+              size="sm"
+              style={{ flex: 1, minWidth: 180 }}
+            />
+            <Select
+              placeholder="Category"
+              clearable
+              data={filterOptions?.productCategories ?? []}
+              value={tplFilterCategory}
+              onChange={setTplFilterCategory}
+              size="sm"
+              w={150}
+            />
+          </Group>
+
+          {tplLoading && tplItems.length === 0 ? (
+            <Center py="xl"><Loader size="sm" color="brand" /></Center>
+          ) : tplItems.length === 0 ? (
+            <Text c="dark.2" ta="center" py="xl">No templates found.</Text>
+          ) : (
+            <ScrollArea h={isMobile ? 300 : 400} scrollbarSize={4}>
+              <Box style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+                gap: '0.5rem',
+              }}>
+                {tplItems.map((tpl) => {
+                  const alreadySaved = savedTemplateIds.has(tpl._id)
+                  return (
+                    <UnstyledButton
+                      key={tpl._id}
+                      onClick={() => !alreadySaved && handleSaveTemplate(tpl._id)}
+                      style={{
+                        borderRadius: 'var(--mantine-radius-md)',
+                        overflow: 'hidden',
+                        border: `2px solid ${alreadySaved ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
+                        position: 'relative',
+                        opacity: alreadySaved ? 0.7 : 1,
+                      }}
+                    >
+                      <AspectRatio ratio={4 / 5}>
+                        <Image src={tpl.thumbnailUrl} alt="Template" fit="cover" />
+                      </AspectRatio>
+                      {alreadySaved && (
+                        <Box
+                          pos="absolute"
+                          top={6}
+                          right={6}
+                          w={22}
+                          h={22}
+                          bg="brand"
+                          style={{
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <IconCheck size={13} color="white" strokeWidth={3} />
+                        </Box>
+                      )}
+                      {tpl.productCategory && (
+                        <Badge
+                          size="xs"
+                          variant="filled"
+                          color="dark"
+                          pos="absolute"
+                          bottom={6}
+                          left={6}
+                          style={{ opacity: 0.85 }}
+                        >
+                          {capitalizeWords(tpl.productCategory)}
+                        </Badge>
+                      )}
+                    </UnstyledButton>
+                  )
+                })}
+              </Box>
+              {tplHasNext && (
+                <Center ref={tplLoadMoreRef} py="md">
+                  {tplFetchingNext ? (
+                    <Loader size="sm" color="brand" />
+                  ) : (
+                    <Text size="sm" c="dark.3">Scroll for more</Text>
+                  )}
+                </Center>
+              )}
+            </ScrollArea>
+          )}
+        </Tabs.Panel>
+
+        {/* ── Paste URL / upload tab ── */}
+        <Tabs.Panel value="url">
+          <Stack gap="md">
+            <Box>
+              <Text size="sm" fw={500} c="white" mb="xs">
+                Paste a URL (FB Ad Library, Pinterest, any page with an image)
+              </Text>
+              <Group gap="sm" align="flex-end">
+                <TextInput
+                  placeholder="https://www.facebook.com/ads/library/..."
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.currentTarget.value)}
+                  leftSection={<IconLink size={14} />}
+                  size="sm"
+                  style={{ flex: 1 }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleFetchUrl()}
+                />
+                <Button
+                  size="sm"
+                  color="brand"
+                  onClick={handleFetchUrl}
+                  loading={isFetching}
+                  disabled={!urlInput.trim()}
+                >
+                  Fetch image
+                </Button>
+              </Group>
+            </Box>
+
+            <Box>
+              <Text size="sm" fw={500} c="white" mb="xs">
+                Or upload an image directly
+              </Text>
+              <Dropzone
+                onDrop={handleDropUpload}
+                accept={IMAGE_MIME_TYPE}
+                maxSize={10 * 1024 * 1024}
+                multiple={false}
+                disabled={isUploading}
+                radius="md"
+                style={{
+                  borderStyle: 'dashed',
+                  borderWidth: 2,
+                  borderColor: 'var(--mantine-color-dark-4)',
+                  backgroundColor: 'var(--mantine-color-dark-7)',
+                  minHeight: 100,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Stack align="center" gap="xs">
+                  {isUploading ? (
+                    <Loader size="sm" color="brand" />
+                  ) : (
+                    <>
+                      <ThemeIcon size={36} radius="md" color="brand" variant="light">
+                        <IconUpload size={18} />
+                      </ThemeIcon>
+                      <Text size="sm" c="dark.2">Drop a screenshot or click to upload (PNG/JPG)</Text>
+                    </>
+                  )}
+                </Stack>
+              </Dropzone>
+            </Box>
+
+            <Textarea
+              label="Note (optional)"
+              placeholder="Why is this reference interesting?"
+              value={urlNote}
+              onChange={(e) => setUrlNote(e.currentTarget.value)}
+              autosize
+              minRows={2}
+              maxRows={4}
+            />
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
+    </Modal>
   )
 }

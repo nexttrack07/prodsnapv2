@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState, useRef, useCallback } from 'react'
-import { useQuery as useConvexQuery } from 'convex/react'
+import { useQuery as useConvexQuery, useMutation as useConvexMutationHook } from 'convex/react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { convexQuery } from '@convex-dev/react-query'
 import { useConvex } from 'convex/react'
 import { useMediaQuery } from '@mantine/hooks'
+import { notifications } from '@mantine/notifications'
 import {
   AspectRatio,
   Badge,
@@ -15,6 +16,7 @@ import {
   Group,
   Image,
   Loader,
+  Menu,
   Modal,
   Paper,
   Select,
@@ -31,6 +33,9 @@ import {
   IconX,
   IconSparkles,
   IconArrowRight,
+  IconBookmark,
+  IconBookmarkFilled,
+  IconCheck,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -154,6 +159,98 @@ function TemplatesBrowsePage() {
     },
     [isFetchingNextPage, hasNextPage, fetchNextPage],
   )
+
+  // ── Bookmark / saves state ────────────────────────────────────────────────
+  const products = useConvexQuery(api.products.listProducts, {})
+  const savesData = useConvexQuery(api.productInspirations.listMyTemplateSaves, {})
+  const saveTemplateMutation = useConvexMutationHook(api.productInspirations.saveTemplateAsInspiration)
+  const removeInspirationMutation = useConvexMutationHook(api.productInspirations.removeInspiration)
+
+  // Build a map: templateId -> array of { productId, inspirationId }
+  const savedTemplateMap = new Map<
+    string,
+    Array<{ productId: Id<'products'>; inspirationId: Id<'productInspirations'> }>
+  >()
+  for (const save of savesData?.saves ?? []) {
+    const arr = savedTemplateMap.get(save.templateId as string) ?? []
+    arr.push({ productId: save.productId, inspirationId: save.inspirationId })
+    savedTemplateMap.set(save.templateId as string, arr)
+  }
+
+  // Optimistic state: track pending saves/removes to show instant feedback
+  const [optimisticSaves, setOptimisticSaves] = useState<
+    Set<string> // "templateId:productId"
+  >(new Set())
+  const [optimisticRemoves, setOptimisticRemoves] = useState<
+    Set<string>
+  >(new Set())
+
+  function isTemplateSavedToProduct(
+    templateId: Id<'adTemplates'>,
+    productId: Id<'products'>,
+  ): boolean {
+    const key = `${templateId}:${productId}`
+    if (optimisticRemoves.has(key)) return false
+    if (optimisticSaves.has(key)) return true
+    const saves = savedTemplateMap.get(templateId as string) ?? []
+    return saves.some((s) => s.productId === productId)
+  }
+
+  function isTemplateSavedAnywhere(templateId: Id<'adTemplates'>): boolean {
+    // Check optimistic state
+    for (const key of optimisticSaves) {
+      if (key.startsWith(`${templateId}:`)) return true
+    }
+    const saves = savedTemplateMap.get(templateId as string) ?? []
+    const nonRemoved = saves.filter(
+      (s) => !optimisticRemoves.has(`${templateId}:${s.productId}`),
+    )
+    return nonRemoved.length > 0
+  }
+
+  async function handleToggleSave(
+    templateId: Id<'adTemplates'>,
+    productId: Id<'products'>,
+    productName: string,
+  ) {
+    const key = `${templateId}:${productId}`
+    const isSaved = isTemplateSavedToProduct(templateId, productId)
+
+    if (isSaved) {
+      // Remove — find the inspirationId
+      const saves = savedTemplateMap.get(templateId as string) ?? []
+      const existing = saves.find((s) => s.productId === productId)
+      if (!existing) return
+      setOptimisticRemoves((prev) => new Set(prev).add(key))
+      try {
+        await removeInspirationMutation({ inspirationId: existing.inspirationId })
+        notifications.show({ message: `Removed from ${productName}`, color: 'gray', autoClose: 3000 })
+      } catch {
+        notifications.show({ title: 'Error', message: 'Failed to remove', color: 'red' })
+      } finally {
+        setOptimisticRemoves((prev) => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
+      }
+    } else {
+      // Save
+      setOptimisticSaves((prev) => new Set(prev).add(key))
+      try {
+        await saveTemplateMutation({ productId, templateId })
+        notifications.show({ message: `Saved to ${productName}`, color: 'green', autoClose: 3000 })
+      } catch {
+        notifications.show({ title: 'Error', message: 'Failed to save', color: 'red' })
+      } finally {
+        setOptimisticSaves((prev) => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
+      }
+    }
+  }
 
   // ── Preview modal ──────────────────────────────────────────────────────────
   const [previewTemplate, setPreviewTemplate] = useState<
@@ -315,6 +412,10 @@ function TemplatesBrowsePage() {
                 key={t._id}
                 template={t}
                 onClick={() => setPreviewTemplate(t)}
+                isSaved={isTemplateSavedAnywhere(t._id)}
+                products={products ?? []}
+                isTemplateSavedToProduct={isTemplateSavedToProduct}
+                onToggleSave={handleToggleSave}
               />
             ))}
           </SimpleGrid>
@@ -368,6 +469,10 @@ function TemplatesBrowsePage() {
 function TemplateTile({
   template,
   onClick,
+  isSaved,
+  products,
+  isTemplateSavedToProduct,
+  onToggleSave,
 }: {
   template: {
     _id: Id<'adTemplates'>
@@ -377,55 +482,136 @@ function TemplateTile({
     angleType?: string
   }
   onClick: () => void
+  isSaved: boolean
+  products: Array<{ _id: Id<'products'>; name: string; imageUrl?: string; category?: string }>
+  isTemplateSavedToProduct: (
+    templateId: Id<'adTemplates'>,
+    productId: Id<'products'>,
+  ) => boolean
+  onToggleSave: (
+    templateId: Id<'adTemplates'>,
+    productId: Id<'products'>,
+    productName: string,
+  ) => void
 }) {
+  const navigate = useNavigate()
+
   return (
-    <UnstyledButton
-      onClick={onClick}
-      style={{
-        borderRadius: 'var(--mantine-radius-md)',
-        overflow: 'hidden',
-        border: '1px solid var(--mantine-color-dark-5)',
-        backgroundColor: 'var(--mantine-color-dark-7)',
-        transition: 'transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease',
-      }}
-      styles={{
-        root: {
-          '&:hover': {
-            transform: 'translateY(-2px)',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-            borderColor: 'var(--mantine-color-dark-4)',
+    <Box pos="relative">
+      <UnstyledButton
+        onClick={onClick}
+        w="100%"
+        style={{
+          borderRadius: 'var(--mantine-radius-md)',
+          overflow: 'hidden',
+          border: '1px solid var(--mantine-color-dark-5)',
+          backgroundColor: 'var(--mantine-color-dark-7)',
+          transition: 'transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease',
+        }}
+        styles={{
+          root: {
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+              borderColor: 'var(--mantine-color-dark-4)',
+            },
           },
-        },
-      }}
-    >
-      <AspectRatio ratio={getAspectRatioValue(template.aspectRatio)}>
-        <Image
-          src={template.thumbnailUrl}
-          alt="Template"
-          fit="cover"
-          style={{ display: 'block' }}
-        />
-      </AspectRatio>
-      {(template.productCategory || template.angleType) && (
-        <Group gap={4} px="xs" py={6} wrap="wrap">
-          {template.productCategory && (
-            <Badge size="xs" variant="light" color="gray" radius="sm">
-              {capitalizeWords(template.productCategory)}
-            </Badge>
-          )}
-          {template.angleType && (
-            <Badge
-              size="xs"
-              variant="light"
-              color={angleTypeColor(template.angleType)}
-              radius="sm"
+        }}
+      >
+        <AspectRatio ratio={getAspectRatioValue(template.aspectRatio)}>
+          <Image
+            src={template.thumbnailUrl}
+            alt="Template"
+            fit="cover"
+            style={{ display: 'block' }}
+          />
+        </AspectRatio>
+        {(template.productCategory || template.angleType) && (
+          <Group gap={4} px="xs" py={6} wrap="wrap">
+            {template.productCategory && (
+              <Badge size="xs" variant="light" color="gray" radius="sm">
+                {capitalizeWords(template.productCategory)}
+              </Badge>
+            )}
+            {template.angleType && (
+              <Badge
+                size="xs"
+                variant="light"
+                color={angleTypeColor(template.angleType)}
+                radius="sm"
+              >
+                {angleTypeLabel(template.angleType)}
+              </Badge>
+            )}
+          </Group>
+        )}
+      </UnstyledButton>
+
+      {/* Bookmark icon — top-right corner */}
+      <Menu shadow="md" width={220} position="bottom-end" withinPortal>
+        <Menu.Target>
+          <UnstyledButton
+            pos="absolute"
+            top={8}
+            right={8}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            style={{
+              zIndex: 2,
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              backgroundColor: 'rgba(0, 0, 0, 0.55)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'transform 120ms ease, background-color 120ms ease',
+              cursor: 'pointer',
+            }}
+            aria-label="Save to product"
+          >
+            {isSaved ? (
+              <IconBookmarkFilled size={16} color="var(--mantine-color-brand-4)" />
+            ) : (
+              <IconBookmark size={16} color="white" />
+            )}
+          </UnstyledButton>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Label>Save to product</Menu.Label>
+          {products.length === 0 ? (
+            <Menu.Item
+              leftSection={<IconArrowRight size={14} />}
+              onClick={() => navigate({ to: '/home' })}
             >
-              {angleTypeLabel(template.angleType)}
-            </Badge>
+              Add a product first
+            </Menu.Item>
+          ) : (
+            products.map((p) => {
+              const saved = isTemplateSavedToProduct(template._id, p._id)
+              return (
+                <Menu.Item
+                  key={p._id}
+                  leftSection={
+                    saved ? (
+                      <IconCheck size={14} color="var(--mantine-color-green-5)" />
+                    ) : undefined
+                  }
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation()
+                    onToggleSave(template._id, p._id, p.name)
+                  }}
+                >
+                  <Text size="sm" fw={saved ? 600 : 400} lineClamp={1}>
+                    {saved ? `Saved to ${p.name}` : `Save to ${p.name}`}
+                  </Text>
+                </Menu.Item>
+              )
+            })
           )}
-        </Group>
-      )}
-    </UnstyledButton>
+        </Menu.Dropdown>
+      </Menu>
+    </Box>
   )
 }
 

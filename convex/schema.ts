@@ -458,6 +458,22 @@ const schema = defineSchema({
     updatedAt: v.number(),
   }).index('by_userId', ['userId']),
 
+  // ─── Product Inspirations (saved reference ads / swipe file) ────────────
+  productInspirations: defineTable({
+    productId: v.id('products'),
+    userId: v.string(),
+    kind: v.union(v.literal('template'), v.literal('external')),
+    templateId: v.optional(v.id('adTemplates')),      // present when kind = 'template'
+    imageUrl: v.optional(v.string()),                  // present when kind = 'external'
+    imageStorageKey: v.optional(v.string()),           // R2 key for external uploads
+    sourceUrl: v.optional(v.string()),                 // original URL when kind = 'external'
+    note: v.optional(v.string()),                      // user note on why this is saved
+    createdAt: v.number(),
+  })
+    .index('by_product', ['productId'])
+    .index('by_userId', ['userId'])
+    .index('by_userId_template', ['userId', 'templateId']),
+
   adminDebugRuns: defineTable({
     adminUserId: v.string(),
     sourceGenerationId: v.id('templateGenerations'),
