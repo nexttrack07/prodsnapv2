@@ -441,6 +441,30 @@ function ProductHeader({
   const reanalyzeProduct = useConvexMutation(api.products.reanalyzeProduct)
   const reanalyzeMutation = useMutation({ mutationFn: reanalyzeProduct })
 
+  const archiveProduct = useConvexMutation(api.products.archiveProduct)
+  const archiveMutation = useMutation({ mutationFn: archiveProduct })
+  const [deleteConfirmOpen, { open: openDeleteConfirm, close: closeDeleteConfirm }] = useDisclosure(false)
+  const navigate = useNavigate()
+
+  async function handleArchive() {
+    try {
+      await archiveMutation.mutateAsync({ productId: product._id })
+      notifications.show({
+        title: 'Product deleted',
+        message: `${product.name} was removed.`,
+        color: 'green',
+      })
+      closeDeleteConfirm()
+      navigate({ to: '/home' })
+    } catch (err) {
+      notifications.show({
+        title: 'Could not delete',
+        message: err instanceof Error ? err.message : 'Try again',
+        color: 'red',
+      })
+    }
+  }
+
   const { data: productImages } = useQuery(
     convexQuery(api.productImages.getProductImagesList, { productId }),
   )
@@ -677,27 +701,39 @@ function ProductHeader({
                 </Group>
               </Box>
 
-              <Link
-                to="/studio/$productId/strategy"
-                params={{ productId: product._id }}
-                style={{
-                  textDecoration: 'none',
-                  color: 'var(--mantine-color-brand-4)',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  flexShrink: 0,
-                }}
-              >
-                <Group gap={4}>
-                  Strategy
-                  {anglesCount > 0 && (
-                    <Badge size="xs" variant="light" color="brand" radius="sm">
-                      {anglesCount}
-                    </Badge>
-                  )}
-                  <IconArrowRight size={14} />
-                </Group>
-              </Link>
+              <Group gap="sm" align="center" style={{ flexShrink: 0 }}>
+                <Link
+                  to="/studio/$productId/strategy"
+                  params={{ productId: product._id }}
+                  style={{
+                    textDecoration: 'none',
+                    color: 'var(--mantine-color-brand-4)',
+                    fontSize: 14,
+                    fontWeight: 500,
+                  }}
+                >
+                  <Group gap={4}>
+                    Strategy
+                    {anglesCount > 0 && (
+                      <Badge size="xs" variant="light" color="brand" radius="sm">
+                        {anglesCount}
+                      </Badge>
+                    )}
+                    <IconArrowRight size={14} />
+                  </Group>
+                </Link>
+                <Tooltip label="Delete product" position="bottom" withArrow>
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="md"
+                    onClick={openDeleteConfirm}
+                    aria-label="Delete product"
+                  >
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
             </Group>
 
             {/* Description */}
@@ -809,6 +845,40 @@ function ProductHeader({
         }
         originalCount={originalCount}
       />
+
+      <Modal
+        opened={deleteConfirmOpen}
+        onClose={closeDeleteConfirm}
+        title="Delete product?"
+        centered
+        size="sm"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dark.1">
+            <Text component="span" fw={600} c="white">
+              {capitalizeWords(product.name)}
+            </Text>{' '}
+            and all its generated ads will be removed. This can't be undone.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button
+              variant="default"
+              onClick={closeDeleteConfirm}
+              disabled={archiveMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconTrash size={14} />}
+              onClick={handleArchive}
+              loading={archiveMutation.isPending}
+            >
+              Delete product
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </>
   )
 }
