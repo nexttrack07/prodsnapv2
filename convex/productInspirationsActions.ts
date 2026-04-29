@@ -3,6 +3,7 @@
 import { v } from 'convex/values'
 import { action } from './_generated/server'
 import { api } from './_generated/api'
+import type { Id } from './_generated/dataModel'
 import { uploadFromUrl } from './r2'
 import { nanoid } from 'nanoid'
 
@@ -16,7 +17,10 @@ export const fetchAndSaveExternalInspiration = action({
     sourceUrl: v.string(),
     note: v.optional(v.string()),
   },
-  handler: async (ctx, { productId, sourceUrl, note }) => {
+  handler: async (
+    ctx,
+    { productId, sourceUrl, note },
+  ): Promise<{ inspirationId: Id<'productInspirations'>; imageUrl: string }> => {
     // Fetch the page HTML and extract og:image
     let ogImageUrl: string | null = null
     try {
@@ -70,7 +74,7 @@ export const fetchAndSaveExternalInspiration = action({
     }
 
     // Save as external inspiration via mutation
-    const inspirationId = await ctx.runMutation(
+    const inspirationId: Id<'productInspirations'> = await ctx.runMutation(
       api.productInspirations.saveExternalInspiration,
       {
         productId,

@@ -30,6 +30,8 @@ import type * as lib_billing_provider from "../lib/billing/provider.js";
 import type * as migrations from "../migrations.js";
 import type * as onboardingProfiles from "../onboardingProfiles.js";
 import type * as productImages from "../productImages.js";
+import type * as productInspirations from "../productInspirations.js";
+import type * as productInspirationsActions from "../productInspirationsActions.js";
 import type * as products from "../products.js";
 import type * as promptGenerations from "../promptGenerations.js";
 import type * as promptSuggestions from "../promptSuggestions.js";
@@ -74,6 +76,8 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   onboardingProfiles: typeof onboardingProfiles;
   productImages: typeof productImages;
+  productInspirations: typeof productInspirations;
+  productInspirationsActions: typeof productInspirationsActions;
   products: typeof products;
   promptGenerations: typeof promptGenerations;
   promptSuggestions: typeof promptSuggestions;
