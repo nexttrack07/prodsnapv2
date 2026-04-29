@@ -199,7 +199,11 @@ function FocusHero({
               leftSection={<IconPlus size={16} />}
               onClick={(e) => {
                 e.stopPropagation()
-                goToProduct()
+                navigate({
+                  to: '/studio/$productId',
+                  params: { productId: product._id },
+                  search: { compose: 'true' },
+                })
               }}
             >
               New ad
