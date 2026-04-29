@@ -2082,15 +2082,13 @@ function GalleryView({
           )}
         </Paper>
       ) : visibleCompleted.length > 0 ? (
-        <Box style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-          gap: '1rem',
-          alignItems: 'start',
-        }}>
-          {visibleCompleted.map((gen, index) => (
+        <Masonry
+          items={visibleCompleted}
+          columnCount={isMobile ? 2 : 4}
+          columnGutter={1}
+          rowGutter={1}
+          render={({ data: gen, index }) => (
             <GenerationCard
-              key={gen._id}
               generation={gen}
               title={`${product.name} #${index + 1}`}
               onExpand={(g) => onOpenAd(g._id)}
@@ -2099,8 +2097,8 @@ function GalleryView({
               onRetry={handleRetry}
               retrying={retryingId === gen._id}
             />
-          ))}
-        </Box>
+          )}
+        />
       ) : winnersOnly ? (
         <Paper
           radius="lg"
@@ -2482,43 +2480,110 @@ function GenerationCard({
     }
   }
 
+  // Complete state: image fills the card, blurred bottom overlay carries
+  // four icon-only actions. Pending / timed-out / failed states keep the
+  // existing aspect-ratio info panel since there's no image to overlay.
+  if (isComplete && generation.outputUrl) {
+    return (
+      <Box
+        pos="relative"
+        style={{
+          borderRadius: 'var(--mantine-radius-sm)',
+          overflow: 'hidden',
+          cursor: 'pointer',
+          backgroundColor: 'var(--mantine-color-dark-7)',
+          boxShadow: generation.isWinner
+            ? 'inset 0 0 0 2px var(--mantine-color-yellow-5)'
+            : 'none',
+        }}
+        onClick={() => onExpand(generation)}
+      >
+        <Image
+          src={generation.outputUrl}
+          alt={title}
+          fit="cover"
+          w="100%"
+          style={{ display: 'block' }}
+        />
+
+        {/* Blurred bottom overlay with icon-only actions */}
+        <Box
+          pos="absolute"
+          left={0}
+          right={0}
+          bottom={0}
+          px={8}
+          py={6}
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 4,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ActionIcon
+            variant="subtle"
+            color="gray.0"
+            size="md"
+            radius="sm"
+            onClick={(e) => {
+              e.stopPropagation()
+              onCreateVariations({
+                _id: generation._id,
+                outputUrl: generation.outputUrl!,
+              })
+            }}
+            aria-label="Make variations"
+          >
+            <IconSparkles size={16} />
+          </ActionIcon>
+          <WinnerToggle generation={generation} />
+          <ActionIcon
+            variant="subtle"
+            color="gray.0"
+            size="md"
+            radius="sm"
+            onClick={handleDownload}
+            loading={isDownloading}
+            aria-label="Download"
+          >
+            <IconDownload size={16} />
+          </ActionIcon>
+          <ActionIcon
+            variant="subtle"
+            color="red.4"
+            size="md"
+            radius="sm"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(generation._id)
+            }}
+            aria-label="Delete generation"
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Box>
+      </Box>
+    )
+  }
+
+  // Pending / timed-out / failed — keep the aspect-ratio info panel.
   return (
     <Card
-      radius="md"
+      radius="sm"
       withBorder
       padding={0}
       style={{
-        breakInside: 'avoid',
         overflow: 'hidden',
         borderColor: 'var(--mantine-color-dark-5)',
         backgroundColor: 'var(--mantine-color-dark-7)',
-        transition: 'transform 150ms ease, box-shadow 150ms ease',
-      }}
-      styles={{
-        root: {
-          '&:hover': {
-            transform: 'translateY(-2px)',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-            borderColor: 'var(--mantine-color-dark-4)',
-          },
-        },
       }}
     >
-      {/* Image Section - Clickable for lightbox */}
       <Card.Section>
-        {isComplete && generation.outputUrl && (
-          <Box
-            style={{ cursor: 'pointer' }}
-            onClick={() => onExpand(generation)}
-          >
-            <Image
-              src={generation.outputUrl}
-              alt="Generated ad"
-              style={{ display: 'block' }}
-            />
-          </Box>
-        )}
-
         {isPending && !isTimedOut && (
           <AspectRatio ratio={getAspectRatioValue()}>
             <Box
@@ -2604,81 +2669,40 @@ function GenerationCard({
           </AspectRatio>
         )}
       </Card.Section>
-
-      {/* Title Row */}
-      <Group justify="space-between" mt="md" mx="md" align="center">
-        <Text fw={500} fz="xs" c="white" lineClamp={1}>
-          {title}
-        </Text>
-        <Group gap={6}>
-          <Badge size="xs" variant="light" color="brand" radius="sm">
-            {generation.aspectRatio || '1:1'}
-          </Badge>
-          <Badge
-            size="xs"
-            variant="dot"
-            color={generation.mode === 'variation' ? 'violet' : generation.mode === 'remix' ? 'orange' : 'teal'}
-          >
-            {getModeLabel(generation.mode || 'exact')}
-          </Badge>
-        </Group>
-      </Group>
-
-      {/* Date */}
-      <Text fz="xs" c="dimmed" mt={4} mx="md">
-        {formatDate(generation._creationTime || Date.now())}
-      </Text>
-
-      {/* Action Buttons Row */}
-      {isComplete && generation.outputUrl && (
-        <Group justify="flex-end" mt="md" mb="md" mx="md" gap="xs">
-          <Button
-            variant="light"
-            color="violet"
-            size="xs"
-            radius="md"
-            leftSection={<IconSparkles size={14} />}
-            onClick={(e) => {
-              e.stopPropagation()
-              onCreateVariations({ _id: generation._id, outputUrl: generation.outputUrl! })
-            }}
-          >
-            Vary
-          </Button>
-          <Button
-            variant="light"
-            color="gray"
-            size="xs"
-            radius="md"
-            leftSection={<IconDownload size={14} />}
-            onClick={handleDownload}
-            loading={isDownloading}
-          >
-            Save
-          </Button>
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            size="sm"
-            radius="md"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete(generation._id)
-            }}
-            title="Delete"
-            aria-label="Delete generation"
-          >
-            <IconTrash size={13} />
-          </ActionIcon>
-        </Group>
-      )}
-
-      {/* Ad copy preview deferred — see ux-flow-redesign plan, "Ad copy
-          surfacing" follow-up. Server-side copy generation still runs and
-          the Ad Detail panel can still surface it; we just don't auto-show
-          the first variant on the gallery card until we refine the UX. */}
-
     </Card>
+  )
+}
+
+function WinnerToggle({ generation }: { generation: GenerationData }) {
+  const [pending, setPending] = useState(false)
+  const toggleWinner = useConvexMutation(api.templateGenerations.toggleWinner)
+  const isWinner = !!generation.isWinner
+  return (
+    <ActionIcon
+      variant="subtle"
+      color={isWinner ? 'yellow' : 'gray.0'}
+      size="md"
+      radius="sm"
+      loading={pending}
+      onClick={async (e) => {
+        e.stopPropagation()
+        setPending(true)
+        try {
+          await toggleWinner({ generationId: generation._id })
+        } catch (err) {
+          notifications.show({
+            title: "Couldn't update",
+            message: err instanceof Error ? err.message : 'Try again',
+            color: 'red',
+          })
+        } finally {
+          setPending(false)
+        }
+      }}
+      aria-label={isWinner ? 'Unmark winner' : 'Mark as winner'}
+    >
+      {isWinner ? <IconStarFilled size={16} /> : <IconStar size={16} />}
+    </ActionIcon>
   )
 }
 
