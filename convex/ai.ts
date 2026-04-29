@@ -292,9 +292,12 @@ Return ONLY the JSON object, no other text.`,
 
 // ─── Ad copy generation (text only) ───────────────────────────────────────
 const adCopyResultSchema = z.object({
-  headlines: z.array(z.string().min(3).max(60)).min(2).max(4),
-  primaryTexts: z.array(z.string().min(10).max(220)).min(2).max(3),
-  ctas: z.array(z.string().min(2).max(20)).min(2).max(4),
+  // Three distinct variants per field, each using a different approach.
+  // Lengths follow Meta's truncation guidance — see the prompt for the
+  // PAS / BAB / Hook-VP-Proof structure that drives the 3 variants.
+  headlines: z.array(z.string().min(3).max(60)).min(3).max(3),
+  primaryTexts: z.array(z.string().min(10).max(320)).min(3).max(3),
+  ctas: z.array(z.string().min(2).max(24)).min(3).max(3),
 })
 
 export const generateAdCopyText = internalAction({
@@ -348,30 +351,59 @@ export const generateAdCopyText = internalAction({
 
     const prompt = `${lines.join('\n')}
 
-Write Facebook ad copy in this angle's voice. Return a JSON object with these exact fields:
+The ad IMAGE has already been generated and will be shown to the viewer alongside this copy. Your copy MUST complement the image — never describe what is already visible in it, never duplicate what it communicates.
+
+Return JSON with EXACTLY 3 variants of each field. Each of the 3 variants in a field must use a DIFFERENT approach so the user has real options, not three rephrases of the same idea.
+
 {
-  "headlines": [<2-3 attention-grabbing headlines, each under 40 characters>],
-  "primaryTexts": [<2-3 body copy variants, each 1-2 sentences, under 200 characters>],
-  "ctas": [<2-3 short button labels, each under 16 characters, action verbs>]
+  "headlines": [string, string, string],
+  "primaryTexts": [string, string, string],
+  "ctas": [string, string, string]
 }
 
-Rules:
-- Match the angle and brand voice. Use the brand tagline as a tonal reference, never copy it verbatim.
-- Specific over generic. No filler superlatives ("amazing", "revolutionary").
-- No emojis unless the brand voice clearly invites them.
-- Headlines should pay off the angle's hook in the user's frame, not the product's.
-- Write at a 5th-grade reading level. Use simple, direct words a 10-year-old would understand.
-- Benefits, not features. Every line must describe what the buyer GETS, not what the product is.
-- Lead with the visceral benefit + timeline if known (e.g., 'overnight', 'in 14 days', 'in one wash').
-- At least one headline should be a pattern disrupt — unusual phrasing or unexpected angle that makes someone pause.
-- If customer language snippets are provided above, draw from that authentic phrasing when natural.
+## headlines — 3 distinct approaches (use this order)
+- [0] curiosity-driven: open a loop the viewer wants to resolve
+- [1] benefit-driven: lead with the most specific outcome the product delivers
+- [2] social proof: reference adoption, results, or credibility (be specific; avoid vague "everyone loves it")
+- Each headline 20-35 chars (hard ceiling 40). Stand-alone — assume description is invisible on mobile.
+- Use numbers and specificity ("30% softer" beats "much softer"). Never start with the brand name.
 
-Return ONLY the JSON object, no other text.`
+## primaryTexts — 3 distinct frameworks (use this order)
+- [0] PAS: Problem (line 1) → Agitation (line 2) → Solution (line 3)
+- [1] BAB: Before state (current pain) → After state (life with the product) → Bridge (the product is the path). Don't describe the "after" visually — that's the image's job.
+- [2] Hook + Value Prop + Proof + soft CTA in 3-4 short sentences
+- CRITICAL: First 80 characters of every variant must contain the complete hook — most users only see that before "See more".
+- 125-260 characters per variant; never exceed 300.
+- Mirror the customer language phrases above when natural; avoid marketing jargon.
+- If a current offer is provided, weave it into ONE of the three variants (not all).
+
+## ctas — 3 distinct energies (use this order)
+- [0] direct action: "Shop Now", "Try It Today", "Get Yours"
+- [1] low-friction / curiosity: "See How It Works", "Learn More", "Explore the Range"
+- [2] offer-aligned (only if a current offer exists) OR benefit-focused: "Claim 20% Off" / "Start Your Trial"
+- Max 20 chars each.
+
+## Voice enforcement (read carefully)
+- "Calm/minimal/premium/luxury" voice → no exclamation points, no ALL CAPS, no emoji, understated phrasing.
+- "Bold/energetic/punchy" voice → punchy short sentences, can use 1-2 emoji in primaryText, strong verbs.
+- Default if voice is unclear → confident but neutral, no emoji.
+- Never override the voice for any reason.
+
+## Emoji rule
+Only ever in primaryText (never in headlines or ctas). Max 2 per variant. ZERO if voice is calm / minimal / premium / luxury.
+
+## Avoid (Meta will flag or trust will tank)
+- Banned terms: "guaranteed", "miracle", "revolutionary", "instant results", false urgency.
+- Clickbait: "You won't believe…", vague hyperbole.
+- Personal-attribute accusations: "Are you struggling with X?" (Meta prohibits this).
+- Ad-speak: "amazing!", "best ever!", "limited time only" (unless current offer is genuinely time-bound).
+
+Return ONLY the JSON object — no markdown, no explanation, no surrounding text.`
 
     const response = await callText({
       prompt,
       systemPrompt:
-        'You are a senior performance copywriter for DTC Facebook ads. Concrete, specific, results-focused. Return valid JSON only.',
+        'You are an expert DTC Facebook/Instagram ad copywriter. You write copy that complements pre-generated ad images, uses proven frameworks (PAS, BAB, Hook-VP-Proof), respects Meta\'s 80-char first-line truncation, and never duplicates what an image already shows. Return strict JSON only.',
     })
 
     return parseJsonFromResponse(response, adCopyResultSchema)

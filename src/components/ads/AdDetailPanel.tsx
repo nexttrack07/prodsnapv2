@@ -8,6 +8,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
+import { useAction } from 'convex/react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
@@ -24,6 +25,7 @@ import {
   Image,
   Loader,
   Modal,
+  Paper,
   Stack,
   Text,
   Title,
@@ -210,6 +212,24 @@ export function AdDetailContent({
   const deleteGeneration = useConvexMutation(api.products.deleteGeneration)
   const deleteMutation = useMutation({ mutationFn: deleteGeneration })
 
+  const writeAdCopy = useAction(api.adCopy.generateAdCopyForGeneration)
+  const [writingCopy, setWritingCopy] = useState(false)
+  const handleWriteCopy = useCallback(async () => {
+    if (!adId) return
+    setWritingCopy(true)
+    try {
+      await writeAdCopy({ generationId: adId })
+    } catch (err) {
+      notifications.show({
+        title: 'Could not write copy',
+        message: err instanceof Error ? err.message : 'Try again',
+        color: 'red',
+      })
+    } finally {
+      setWritingCopy(false)
+    }
+  }, [adId, writeAdCopy])
+
   // Sibling navigation
   const currentIdx = siblings?.indexOf(adId) ?? -1
   const prevId = siblings && currentIdx > 0 ? siblings[currentIdx - 1] : null
@@ -365,9 +385,26 @@ export function AdDetailContent({
         </Group>
       )}
 
-      {/* Ad copy section */}
-      {ad.adCopy && (
-        <Box>
+      {/* Ad copy — opt-in. User clicks to generate, then can edit/regenerate. */}
+      <Box>
+        <Group justify="space-between" align="center" mb="xs">
+          <Text size="sm" fw={600} c="white">
+            Ad copy
+          </Text>
+          {ad.adCopy && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              leftSection={<IconSparkles size={12} />}
+              loading={writingCopy}
+              onClick={handleWriteCopy}
+            >
+              Regenerate
+            </Button>
+          )}
+        </Group>
+        {ad.adCopy ? (
           <Stack gap="md">
             {ad.adCopy.headlines.length > 0 && (
               <CopySection label="Headlines" items={ad.adCopy.headlines} />
@@ -379,8 +416,35 @@ export function AdDetailContent({
               <CopySection label="CTAs" items={ad.adCopy.ctas} inline />
             )}
           </Stack>
-        </Box>
-      )}
+        ) : (
+          <Paper
+            p="md"
+            radius="md"
+            withBorder
+            style={{
+              borderStyle: 'dashed',
+              borderColor: 'var(--mantine-color-dark-5)',
+              backgroundColor: 'var(--mantine-color-dark-7)',
+            }}
+          >
+            <Stack gap="xs" align="center" ta="center">
+              <Text size="sm" c="dark.2">
+                No copy yet. Generate Facebook headlines, primary text, and CTAs
+                tailored to this ad.
+              </Text>
+              <Button
+                color="brand"
+                size="sm"
+                leftSection={<IconSparkles size={14} />}
+                loading={writingCopy}
+                onClick={handleWriteCopy}
+              >
+                Write ad copy
+              </Button>
+            </Stack>
+          </Paper>
+        )}
+      </Box>
 
       <Divider color="dark.5" />
 

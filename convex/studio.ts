@@ -375,20 +375,8 @@ export const generateFromTemplateWorkflow = workflow.define({
         runId: gen.runId,
       })
     }
-    // Generate ad copy alongside the image (best-effort — failures don't block the visual).
-    try {
-      const copy = await step.runAction(internal.ai.composeAdCopyForGeneration, { generationId })
-      if (copy) {
-        await step.runMutation(internal.studio.saveAdCopyOnGeneration, {
-          generationId,
-          headlines: copy.headlines,
-          primaryTexts: copy.primaryTexts,
-          ctas: copy.ctas,
-        })
-      }
-    } catch (err) {
-      console.warn('Ad copy generation failed for', generationId, err)
-    }
+    // Ad copy is now opt-in — user requests it from the ad detail panel via
+    // api.adCopy.generateAdCopy after the image lands.
   },
 })
 
@@ -431,20 +419,8 @@ export const generateFromAngleWorkflow = workflow.define({
         error: err instanceof Error ? err.message : String(err),
       })
     }
-    // Generate ad copy alongside the image (best-effort — failures don't block the visual).
-    try {
-      const copy = await step.runAction(internal.ai.composeAdCopyForGeneration, { generationId })
-      if (copy) {
-        await step.runMutation(internal.studio.saveAdCopyOnGeneration, {
-          generationId,
-          headlines: copy.headlines,
-          primaryTexts: copy.primaryTexts,
-          ctas: copy.ctas,
-        })
-      }
-    } catch (err) {
-      console.warn('Ad copy generation failed for', generationId, err)
-    }
+    // Ad copy is now opt-in — user requests it from the ad detail panel via
+    // api.adCopy.generateAdCopy after the image lands.
   },
 })
 
@@ -537,20 +513,8 @@ export const generateVariationWorkflow = workflow.define({
         error: err instanceof Error ? err.message : String(err),
       })
     }
-    // Generate ad copy alongside the image (best-effort — failures don't block the visual).
-    try {
-      const copy = await step.runAction(internal.ai.composeAdCopyForGeneration, { generationId })
-      if (copy) {
-        await step.runMutation(internal.studio.saveAdCopyOnGeneration, {
-          generationId,
-          headlines: copy.headlines,
-          primaryTexts: copy.primaryTexts,
-          ctas: copy.ctas,
-        })
-      }
-    } catch (err) {
-      console.warn('Ad copy generation failed for', generationId, err)
-    }
+    // Ad copy is now opt-in — user requests it from the ad detail panel via
+    // api.adCopy.generateAdCopy after the image lands.
   },
 })
 

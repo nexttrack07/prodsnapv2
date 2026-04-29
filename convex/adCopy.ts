@@ -126,3 +126,63 @@ export const generateAdCopy = action({
     return result
   },
 })
+
+/**
+ * Per-generation, opt-in ad copy. The user clicks "Write ad copy" on a
+ * specific ad in the AdDetailPanel; we build copy from that generation's
+ * context (angleSeed if present, plus product + brand kit) and save it on
+ * the row. Replaces the now-removed auto-fire path that ran inside the
+ * image-generation workflow.
+ */
+export const generateAdCopyForGeneration = action({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (
+    ctx: ActionCtx,
+    { generationId },
+  ): Promise<{
+    headlines: string[]
+    primaryTexts: string[]
+    ctas: string[]
+  }> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    const userId = identity.tokenIdentifier
+
+    const recentCount = await ctx.runQuery(internal.adCopy.checkAdCopyRateLimit, { userId })
+    if (recentCount >= RATE_LIMIT_MAX_CALLS) {
+      await ctx.runMutation(internal.adCopy.recordAdCopyRateLimited, { userId })
+      throw new Error('Too many requests — please wait a moment before generating again.')
+    }
+
+    // Ownership check via the parent generation row.
+    const gen = await ctx.runQuery(internal.adCopy.getGenerationOwner, { generationId })
+    if (!gen) throw new Error('Ad not found')
+    if (gen.userId && gen.userId !== userId) throw new Error('Not authorized')
+
+    const result = await ctx.runAction(internal.ai.composeAdCopyForGeneration, { generationId })
+    if (!result) {
+      throw new Error('Could not compose copy — product analysis may be missing or incomplete.')
+    }
+
+    await ctx.runMutation(internal.studio.saveAdCopyOnGeneration, {
+      generationId,
+      headlines: result.headlines,
+      primaryTexts: result.primaryTexts,
+      ctas: result.ctas,
+    })
+
+    await ctx.runMutation(internal.adCopy.recordAdCopyUsage, { userId })
+
+    return result
+  },
+})
+
+/** Internal — minimal ownership lookup for the public action above. */
+export const getGenerationOwner = internalQuery({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }) => {
+    const row = await ctx.db.get(generationId)
+    if (!row) return null
+    return { userId: row.userId ?? null }
+  },
+})
