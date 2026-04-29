@@ -3536,7 +3536,7 @@ function GenerateWizard({
               {templatesLoading && templates.length === 0 ? (
                 <Box style={{
                   columnCount: isMobile ? 2 : 4,
-                  columnGap: 2,
+                  columnGap: 1,
                 }}>
                   {Array.from({ length: 8 }).map((_, i) => (
                     <Box
