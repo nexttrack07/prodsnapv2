@@ -650,10 +650,14 @@ export const retryGeneration = mutation({
     assertOwnsIfTracked(gen, userId, 'generation')
     const now = Date.now()
     const pendingStartedAt = gen.startedAt ?? gen._creationTime
+    // gpt-image-2 at quality='high' commonly takes 2-3+ minutes; don't
+    // let users retry into a still-running Fal.ai request and double-bill
+    // themselves. Match the per-model UI threshold in studio.$productId.tsx.
+    const staleThresholdMs = gen.model === 'gpt-image-2' ? 360_000 : 90_000
     const isStalePending =
       gen.status !== 'complete' &&
       gen.status !== 'failed' &&
-      now - pendingStartedAt >= 90_000
+      now - pendingStartedAt >= staleThresholdMs
     if (gen.status !== 'failed' && !isStalePending) {
       throw new Error('Only failed or timed-out generations can be retried')
     }

@@ -131,6 +131,7 @@ interface GenerationData {
   mode?: 'exact' | 'remix' | 'variation' | 'angle' | 'prompt'
   templateSnapshot?: { name?: string; aspectRatio?: string }
   isWinner?: boolean
+  model?: 'nano-banana-2' | 'gpt-image-2'
   adCopy?: {
     headlines: string[]
     primaryTexts: string[]
@@ -139,7 +140,14 @@ interface GenerationData {
   }
 }
 
-const GENERATION_TIMEOUT_MS = 90_000
+// "Taking too long" UI threshold. The server work isn't cancelled at this
+// point — Fal.ai keeps running and the card flips to complete when the
+// response lands. GPT-Image-2 at quality='high' commonly takes 2-3+ min,
+// so use a much wider window for it; otherwise users see a misleading
+// "stuck" state during normal slow processing.
+function generationTimeoutMs(model?: 'nano-banana-2' | 'gpt-image-2'): number {
+  return model === 'gpt-image-2' ? 360_000 : 90_000
+}
 
 function slugifyFilePart(value: string): string {
   return value
@@ -2482,7 +2490,8 @@ function GenerationCard({
   }, [isPending])
 
   const pendingStartedAt = generation.startedAt ?? generation._creationTime ?? now
-  const isTimedOut = isPending && now - pendingStartedAt >= GENERATION_TIMEOUT_MS
+  const isTimedOut =
+    isPending && now - pendingStartedAt >= generationTimeoutMs(generation.model)
   const failureInfo = generation.error ? mapGenerationError(generation.error) : null
 
   const getAspectRatioValue = (): number => {
