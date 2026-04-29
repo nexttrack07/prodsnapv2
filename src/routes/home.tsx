@@ -33,6 +33,10 @@ import {
   IconArrowRight,
   IconPlus,
   IconSparkles,
+  IconTemplate,
+  IconWand,
+  IconTarget,
+  IconLibrary,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -83,6 +87,10 @@ function HomePage() {
           isMobile={!!isMobile}
         />
 
+        {dashboard?.focusProduct && (
+          <ThreePathsSection focusProductId={dashboard.focusProduct._id as Id<'products'>} />
+        )}
+
         {!!products && products.length > 0 && (
           <ProductsRow products={products} isLoading={false} />
         )}
@@ -92,6 +100,10 @@ function HomePage() {
             templates={templates}
             suggestedCategory={dashboard?.suggestedCategory ?? null}
           />
+        )}
+
+        {!!dashboard?.totalGenerations && dashboard.totalGenerations > 0 && (
+          <LibraryTeaser totalGenerations={dashboard.totalGenerations} />
         )}
       </Stack>
 
@@ -587,6 +599,16 @@ function TemplatesShelf({
             Start from a proven format
           </Title>
         </Group>
+        <Anchor
+          component={Link}
+          to="/templates"
+          size="xs"
+          c="brand.4"
+          fw={500}
+          underline="never"
+        >
+          Browse all →
+        </Anchor>
       </Group>
 
       <Group gap="xs" wrap="wrap">
@@ -641,6 +663,132 @@ function CategoryChip({
     >
       {label}
     </Button>
+  )
+}
+
+// ─── Three on-ramps ────────────────────────────────────────────────────────
+
+function ThreePathsSection({ focusProductId }: { focusProductId: Id<'products'> }) {
+  const navigate = useNavigate()
+  const paths: Array<{
+    icon: typeof IconTemplate
+    label: string
+    title: string
+    description: string
+    color: string
+    onClick: () => void
+  }> = [
+    {
+      icon: IconTemplate,
+      label: 'Templates',
+      title: 'Start from a winning ad',
+      description: 'Browse a curated library of proven Facebook ads.',
+      color: 'teal',
+      onClick: () => navigate({ to: '/templates' }),
+    },
+    {
+      icon: IconWand,
+      label: 'Custom prompt',
+      title: 'Describe what you want',
+      description: 'Build a prompt with chips or use AI suggestions.',
+      color: 'lime',
+      onClick: () =>
+        navigate({
+          to: '/studio/$productId',
+          params: { productId: focusProductId },
+          search: { compose: 'true' },
+        }),
+    },
+    {
+      icon: IconTarget,
+      label: 'Marketing angle',
+      title: 'Generate against an angle',
+      description: 'Comparison, Curiosity, Social proof, Problem callout.',
+      color: 'brand',
+      onClick: () =>
+        navigate({
+          to: '/studio/$productId/strategy',
+          params: { productId: focusProductId },
+        }),
+    },
+  ]
+
+  return (
+    <Stack gap="sm">
+      <Title order={3} fz={18} c="white" fw={600}>
+        Three ways to make an ad
+      </Title>
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+        {paths.map((p) => (
+          <Paper
+            key={p.label}
+            radius="lg"
+            withBorder
+            p="md"
+            onClick={p.onClick}
+            style={{
+              cursor: 'pointer',
+              backgroundColor: 'var(--mantine-color-dark-7)',
+              borderColor: 'var(--mantine-color-dark-5)',
+              transition: 'transform 150ms ease, border-color 150ms ease',
+            }}
+            className="product-card-hover"
+          >
+            <Group gap="sm" align="center" wrap="nowrap">
+              <ThemeIcon size={36} radius="md" color={p.color} variant="light">
+                <p.icon size={18} />
+              </ThemeIcon>
+              <Text size="xs" tt="uppercase" fw={700} c="dark.2">
+                {p.label}
+              </Text>
+            </Group>
+            <Text mt="md" size="md" fw={600} c="white">
+              {p.title}
+            </Text>
+            <Text mt={4} size="xs" c="dark.2">
+              {p.description}
+            </Text>
+          </Paper>
+        ))}
+      </SimpleGrid>
+    </Stack>
+  )
+}
+
+// ─── Library teaser ────────────────────────────────────────────────────────
+
+function LibraryTeaser({ totalGenerations }: { totalGenerations: number }) {
+  return (
+    <Paper
+      component={Link}
+      to="/library"
+      radius="lg"
+      withBorder
+      p="md"
+      style={{
+        textDecoration: 'none',
+        backgroundColor: 'var(--mantine-color-dark-7)',
+        borderColor: 'var(--mantine-color-dark-5)',
+        cursor: 'pointer',
+      }}
+    >
+      <Group justify="space-between" align="center" wrap="nowrap">
+        <Group gap="md" align="center" wrap="nowrap">
+          <ThemeIcon size={40} radius="md" color="brand" variant="light">
+            <IconLibrary size={20} />
+          </ThemeIcon>
+          <Box>
+            <Text size="sm" fw={600} c="white">
+              Generation library
+            </Text>
+            <Text size="xs" c="dark.2">
+              {totalGenerations} {totalGenerations === 1 ? 'ad' : 'ads'} across all your products. Star winners, filter, iterate.
+            </Text>
+          </Box>
+        </Group>
+        <IconArrowRight size={18} color="var(--mantine-color-dark-2)" />
+      </Group>
+    </Paper>
   )
 }
 

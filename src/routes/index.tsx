@@ -17,16 +17,22 @@ import {
 } from '@mantine/core'
 import {
   IconArrowRight,
+  IconBlockquote,
+  IconBolt,
+  IconBookmark,
+  IconBrain,
   IconDownload,
   IconEqual,
   IconEraser,
   IconLayersIntersect,
+  IconLibrary,
   IconPalette,
   IconPhotoSpark,
   IconPhotoUp,
   IconShape3,
   IconSparkles,
   IconStack2,
+  IconStarFilled,
   IconTemplate,
   IconTextSize,
   IconWand,
@@ -40,9 +46,9 @@ export const Route = createFileRoute('/')({
   head: () => ({
     meta: [
       ...seo({
-        title: 'ProdSnap — Turn one product photo into 12 winning ad variants',
+        title: 'ProdSnap — Three paths to Meta-ready Facebook ads',
         description:
-          'Browse proven Facebook ads, pick templates, generate Meta-ready ad variations in 1:1, 4:5, and 9:16. Two generation modes, surgical iteration, background removal included.',
+          'Browse proven templates, write a custom prompt, or generate against a marketing angle. ProdSnap turns one product photo into Meta-ready ad creative in 1:1, 4:5, and 9:16.',
         image: '/prodsnap_logo.png',
       }),
     ],
@@ -53,8 +59,6 @@ export const Route = createFileRoute('/')({
 const templateLibraryShot = '/landing/shots/template-library.png'
 const generatedResultsShot = '/landing/shots/generated-results.png'
 const variationDrawerShot = '/landing/shots/variation-drawer-controls.png'
-const modeExactOutput = '/landing/shots/mode-exact-output.png'
-const modeRemixOutput = '/landing/shots/mode-remix-output.png'
 const heroProductShot = '/landing/shots/hero-product-toiletry-bag-no-bg.png'
 const heroTemplateShot = '/landing/shots/hero-template-selection.png'
 const heroVariationShots = [
@@ -67,6 +71,27 @@ const aspectRatios = [
   { label: '1:1', meaning: 'Feed' },
   { label: '4:5', meaning: 'Feed vertical' },
   { label: '9:16', meaning: 'Stories & Reels' },
+]
+
+const generationPaths = [
+  {
+    title: 'Templates',
+    description:
+      'Browse a curated, searchable library of proven Facebook ads. Pick up to 3 templates and drop your product in.',
+    icon: IconTemplate,
+  },
+  {
+    title: 'Custom prompt',
+    description:
+      'Build a prompt with smart chips — or get AI prompt suggestions tailored to your product.',
+    icon: IconWand,
+  },
+  {
+    title: 'Marketing angle',
+    description:
+      'We extract Comparison, Curiosity, Social Proof, and Problem-Callout angles from your product. Pick one, generate.',
+    icon: IconBrain,
+  },
 ]
 
 const iterationAxes = [
@@ -101,33 +126,49 @@ const includedFeatures = [
     icon: IconPhotoUp,
   },
   {
+    title: 'Per-product brand kits',
+    description:
+      "Colors, fonts, voice — per product. Useful when you're running multiple brands or running ads for clients.",
+    icon: IconPalette,
+  },
+  {
     title: 'Native ad formats',
     description:
       'Download every output as PNG, WebP, or JPG — ready for Meta Ads Manager out of the box.',
     icon: IconDownload,
   },
+  {
+    title: 'Two AI models',
+    description:
+      'Pick nano-banana-2 (fast, default) or gpt-image-2 (higher quality, slower) per generation.',
+    icon: IconBolt,
+  },
 ]
 
 const workflowSteps = [
   {
-    title: 'Upload your product',
-    description: 'One photo is all we need. Background gets removed automatically.',
+    title: 'Add your product',
+    description:
+      'Paste a URL or upload a photo. Background gets removed automatically. We analyze the product.',
     icon: IconPhotoSpark,
   },
   {
-    title: 'Pick up to 3 templates',
-    description: 'Browse the curated library and select the ad directions you want to test.',
-    icon: IconTemplate,
-  },
-  {
-    title: 'Generate up to 12 variants',
-    description: 'Choose Exact or Remix, pick an aspect ratio, hit generate. One click.',
+    title: 'Pick your path',
+    description:
+      'Browse templates, write a custom prompt, or pick a marketing angle. Mix and match across batches.',
     icon: IconStack2,
   },
   {
-    title: 'Iterate on the winners',
-    description: 'Vary just the text, icons, or colors on whichever output works best.',
-    icon: IconLayersIntersect,
+    title: 'Generate',
+    description:
+      'Choose your aspect ratio (1:1, 4:5, 9:16). Up to 12 distinct ads from a single batch.',
+    icon: IconSparkles,
+  },
+  {
+    title: 'Star winners and iterate',
+    description:
+      'Mark the ads that work. Vary just the text, icons, or colors on the winners. Ship.',
+    icon: IconStarFilled,
   },
 ]
 
@@ -140,7 +181,7 @@ const faqs = [
   {
     question: 'What about my brand colors?',
     answer:
-      'Exact mode has an "adapt product colors" toggle that lets the product blend tonally with the template. Turn it off to preserve your product palette exactly. Either way, the iteration step lets you adjust colors after the fact.',
+      'Each product has its own brand kit — colors, fonts, and voice. Exact mode also has an "adapt product colors" toggle that lets the product blend tonally with the template. Either way, the iteration step lets you adjust colors after the fact.',
   },
   {
     question: 'What aspect ratios do you support?',
@@ -150,7 +191,7 @@ const faqs = [
   {
     question: 'How many ads can I generate at once?',
     answer:
-      'Up to 3 templates per batch with 1–4 variations per template — so up to 12 distinct ad concepts in a single click.',
+      'Up to 12 distinct ad concepts in a single batch — whether you use templates (up to 3 templates × 1–4 variations), a custom prompt, or a marketing angle. Each path produces Meta-ready output in your chosen aspect ratio.',
   },
   {
     question: 'What does "iterate" actually do?',
@@ -161,6 +202,36 @@ const faqs = [
     question: 'Do you handle multiple products?',
     answer:
       'Yes. Manage as many products as your plan allows, each with multiple photos. Set a primary image per product and switch between them anytime.',
+  },
+  {
+    question: 'How do marketing angles work?',
+    answer:
+      'We analyze your product and surface 3–5 distinct angles a media buyer would test (Comparison, Curiosity, Social Proof, Problem Callout). Pick one and generate ads tuned for that angle.',
+  },
+  {
+    question: 'Can I write my own prompts?',
+    answer:
+      'Yes. Pick Custom in the wizard. Build a prompt with smart chips, or use our AI suggestions — both tailored to your product.',
+  },
+  {
+    question: "What's the inspiration / swipe file?",
+    answer:
+      "Save reference ads per product (from our template library or any URL). When you generate, we use them as visual references so output rhymes with what's already winning.",
+  },
+  {
+    question: 'Can ProdSnap learn how my customers talk?',
+    answer:
+      'Yes. Paste customer phrases per product (reviews, testimonials). The generator uses that voice when writing copy.',
+  },
+  {
+    question: 'Do you support multiple brands?',
+    answer:
+      'Yes. Each product can have its own brand kit (colors, fonts, voice). Useful for agencies or anyone running two or more brands.',
+  },
+  {
+    question: 'Which AI image model do you use?',
+    answer:
+      'We support both nano-banana-2 (fast, default) and gpt-image-2 (higher quality, slower). Pick per-generation.',
   },
   {
     question: 'Is there a free trial?',
@@ -177,6 +248,37 @@ const fallbackTemplateCarouselItems = [
   { title: 'Benefit Stack', meta: 'Handpicked creative', image: templateLibraryShot },
   { title: 'Visual Comparison', meta: 'Proven concept', image: templateLibraryShot },
 ]
+
+interface PlaceholderShotProps {
+  label: string
+  ratio?: string
+}
+
+function PlaceholderShot({ label, ratio = '4 / 3' }: PlaceholderShotProps) {
+  return (
+    <Box
+      style={{
+        aspectRatio: ratio,
+        border: '2px dashed var(--mantine-color-dark-4)',
+        borderRadius: 'var(--mantine-radius-md)',
+        background: 'linear-gradient(135deg, var(--mantine-color-dark-7) 0%, var(--mantine-color-dark-8) 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        padding: 24,
+      }}
+    >
+      <Text size="xs" tt="uppercase" fw={700} c="dark.3" ta="center">
+        Screenshot placeholder
+      </Text>
+      <Text size="sm" c="dark.2" ta="center">
+        {label}
+      </Text>
+    </Box>
+  )
+}
 
 function Home() {
   const { data: templatePage } = useQuery(convexQuery(api.products.listTemplates, { limit: 8 }))
@@ -197,6 +299,7 @@ function Home() {
 
   return (
     <Box className="landing-page">
+      {/* Hero */}
       <Box component="section" className="landing-shell landing-hero-shell">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48} className="landing-hero-grid">
@@ -207,11 +310,11 @@ function Home() {
 
               <Stack gap="md">
                 <Title order={1} className="landing-title">
-                  One product photo. Twelve ad variants. One click.
+                  Three paths to a winning ad. One product photo. One click.
                 </Title>
                 <Text className="landing-subtitle">
-                  Skip the designer queue. Pick from proven Facebook ad templates, drop your product in,
-                  and ship Meta-ready creative in 1:1, 4:5, and 9:16 — without leaving the tab.
+                  Templates. Custom prompts. Marketing angles. Pick your path, drop your product in, and ship
+                  Meta-ready creative in 1:1, 4:5, 9:16 — without leaving the tab.
                 </Text>
               </Stack>
 
@@ -246,99 +349,163 @@ function Home() {
         </Container>
       </Box>
 
+      {/* Three paths section */}
       <Box component="section" className="landing-shell landing-band-alt">
+        <Container size="xl">
+          <Stack gap="md" mb="xl" maw={760}>
+            <Badge variant="light" color="teal" radius="xl" w="fit-content">
+              Three ways to generate
+            </Badge>
+            <Title order={2} className="landing-section-title">
+              Pick a path. Any path. They all ship Meta-ready creative.
+            </Title>
+            <Text className="landing-section-copy">
+              Most tools give you one generation mode. ProdSnap gives you three — each built for a different
+              job. Start with the one that fits how you think today.
+            </Text>
+          </Stack>
+
+          <SimpleGrid cols={{ base: 1, md: 3 }} spacing="lg">
+            {generationPaths.map(({ title, description, icon: Icon }) => (
+              <Paper key={title} className="landing-feature-card" withBorder radius="md" p="xl">
+                <ThemeIcon size={44} radius="md" color="teal" variant="light">
+                  <Icon size={20} />
+                </ThemeIcon>
+                <Text mt="lg" size="lg" fw={600} c="white">
+                  {title}
+                </Text>
+                <Text mt="sm" size="sm" c="dark.2">
+                  {description}
+                </Text>
+              </Paper>
+            ))}
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* Strategy / angles section */}
+      <Box component="section" className="landing-shell">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
             <Stack gap="lg">
-              <Badge variant="light" color="teal" radius="xl" w="fit-content">
-                The wedge
+              <Badge variant="light" color="grape" radius="xl" w="fit-content">
+                Marketing strategy
               </Badge>
               <Title order={2} className="landing-section-title">
-                Two ways to generate. Both Meta-ready.
+                Generate against a media buyer's angle.
               </Title>
               <Text className="landing-section-copy">
-                Most AI ad tools give you one generation mode and one output size. ProdSnap gives you two modes
-                built for different jobs — and every output ships in three Meta-ready aspect ratios.
+                We analyze your product and surface 3–5 distinct angles a media buyer would test. Pick one
+                and generate ads tuned for that angle — without writing a single brief.
               </Text>
               <Stack gap="md" mt="xs">
                 <Box>
-                  <Text size="sm" fw={700} c="white">
-                    Exact
-                  </Text>
-                  <Text mt={4} size="sm" c="dark.1">
-                    Drop your real product into the template scene as-is. Same composition, your product.
-                    Optionally adapt colors to match.
-                  </Text>
+                  <Text size="sm" fw={700} c="white">Comparison</Text>
+                  <Text mt={4} size="sm" c="dark.1">Position your product against the category norm or a named alternative.</Text>
                 </Box>
                 <Box>
-                  <Text size="sm" fw={700} c="white">
-                    Remix
-                  </Text>
-                  <Text mt={4} size="sm" c="dark.1">
-                    Generate a fresh scene in the same visual language. Useful when the original composition
-                    doesn't fit your product.
-                  </Text>
+                  <Text size="sm" fw={700} c="white">Curiosity</Text>
+                  <Text mt={4} size="sm" c="dark.1">Lead with an intriguing hook that makes the scroll stop.</Text>
+                </Box>
+                <Box>
+                  <Text size="sm" fw={700} c="white">Social Proof</Text>
+                  <Text mt={4} size="sm" c="dark.1">Lead with results, numbers, and customer language.</Text>
+                </Box>
+                <Box>
+                  <Text size="sm" fw={700} c="white">Problem Callout</Text>
+                  <Text mt={4} size="sm" c="dark.1">Name the pain, then frame your product as the obvious fix.</Text>
                 </Box>
               </Stack>
             </Stack>
 
-            <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="lg">
-              <Stack align="center" gap="md">
-                <Image
-                  src={modeExactOutput}
-                  alt="Exact mode output for a sample product"
-                  h={380}
-                  w="auto"
-                  fit="contain"
-                  radius="md"
-                />
-                <Text size="xs" tt="uppercase" fw={700} c="dark.2">
-                  Exact mode
-                </Text>
-              </Stack>
-              <Stack align="center" gap="md">
-                <Image
-                  src={modeRemixOutput}
-                  alt="Remix mode output for the same sample product"
-                  h={380}
-                  w="auto"
-                  fit="contain"
-                  radius="md"
-                />
-                <Text size="xs" tt="uppercase" fw={700} c="dark.2">
-                  Remix mode
-                </Text>
-              </Stack>
-            </SimpleGrid>
+            <PlaceholderShot label="Strategy panel: extracted angles for a product" />
           </SimpleGrid>
-
-          <Paper className="landing-note-card" withBorder radius="md" p="lg" mt={48}>
-            <Group justify="space-between" align="center" wrap="wrap" gap="lg">
-              <Box>
-                <Text size="xs" tt="uppercase" fw={700} c="dark.2">
-                  Every output, three aspect ratios
-                </Text>
-                <Text mt="sm" size="sm" c="white" fw={600}>
-                  Pick before you generate. No resizing in Canva.
-                </Text>
-              </Box>
-              <Group gap="md">
-                {aspectRatios.map(({ label, meaning }) => (
-                  <Stack key={label} gap={4} align="center">
-                    <Badge variant="light" color="brand" radius="md" size="lg">
-                      {label}
-                    </Badge>
-                    <Text size="xs" c="dark.2">
-                      {meaning}
-                    </Text>
-                  </Stack>
-                ))}
-              </Group>
-            </Group>
-          </Paper>
         </Container>
       </Box>
 
+      {/* Voice of customer section */}
+      <Box component="section" className="landing-shell landing-band-alt">
+        <Container size="xl">
+          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
+            <Stack gap="lg">
+              <Badge variant="light" color="orange" radius="xl" w="fit-content">
+                Voice of customer
+              </Badge>
+              <Title order={2} className="landing-section-title">
+                Ad copy that sounds like your customer, not like an AI.
+              </Title>
+              <Text className="landing-section-copy">
+                Paste reviews. Type the phrases your customers actually use. ProdSnap captures them per
+                product and turns them into ad copy that speaks the language your buyer already trusts.
+              </Text>
+              <Stack gap="xs">
+                <Group gap="xs" align="center">
+                  <IconBlockquote size={16} color="var(--mantine-color-orange-4)" />
+                  <Text size="sm" c="dark.1">"Works better than anything I've tried"</Text>
+                </Group>
+                <Group gap="xs" align="center">
+                  <IconBlockquote size={16} color="var(--mantine-color-orange-4)" />
+                  <Text size="sm" c="dark.1">"Finally doesn't smell like chemicals"</Text>
+                </Group>
+                <Group gap="xs" align="center">
+                  <IconBlockquote size={16} color="var(--mantine-color-orange-4)" />
+                  <Text size="sm" c="dark.1">"My kids actually eat it"</Text>
+                </Group>
+                <Text size="xs" c="dark.3" mt="xs">
+                  Real phrases captured per product → fed into every generation.
+                </Text>
+              </Stack>
+            </Stack>
+
+            <PlaceholderShot label="Customer voice: real phrases captured per product" />
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* Inspiration / swipe file section */}
+      <Box component="section" className="landing-shell">
+        <Container size="xl">
+          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
+            <Stack gap="lg">
+              <Badge variant="light" color="cyan" radius="xl" w="fit-content">
+                Swipe file
+              </Badge>
+              <Title order={2} className="landing-section-title">
+                Save what's winning. Generate in that direction.
+              </Title>
+              <Text className="landing-section-copy">
+                Save the ads that work — from our template library or any URL. We use them as visual
+                references when you generate, so the output rhymes with what's already winning in
+                your category.
+              </Text>
+              <Stack gap="sm">
+                <Group gap="sm" align="center">
+                  <ThemeIcon size={32} radius="md" color="cyan" variant="light">
+                    <IconBookmark size={16} />
+                  </ThemeIcon>
+                  <Text size="sm" c="dark.1">Save templates directly from the library</Text>
+                </Group>
+                <Group gap="sm" align="center">
+                  <ThemeIcon size={32} radius="md" color="cyan" variant="light">
+                    <IconBookmark size={16} />
+                  </ThemeIcon>
+                  <Text size="sm" c="dark.1">Paste any competitor or reference URL</Text>
+                </Group>
+                <Group gap="sm" align="center">
+                  <ThemeIcon size={32} radius="md" color="cyan" variant="light">
+                    <IconBookmark size={16} />
+                  </ThemeIcon>
+                  <Text size="sm" c="dark.1">Per-product — each product has its own swipe file</Text>
+                </Group>
+              </Stack>
+            </Stack>
+
+            <PlaceholderShot label="Inspiration: saved templates and competitor URLs" />
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* Template feed marquee */}
       <Box component="section" className="landing-shell landing-rail-shell">
         <Container size="xl">
           <Stack gap="md" mb="xl" maw={760}>
@@ -380,6 +547,7 @@ function Home() {
         </Container>
       </Box>
 
+      {/* One photo. Three templates. Twelve ads. */}
       <Box component="section" className="landing-shell landing-band-alt">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
@@ -470,6 +638,7 @@ function Home() {
         </Container>
       </Box>
 
+      {/* Surgical iteration */}
       <Box component="section" className="landing-shell">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
@@ -509,6 +678,49 @@ function Home() {
         </Container>
       </Box>
 
+      {/* Library + Winners section */}
+      <Box component="section" className="landing-shell landing-band-alt">
+        <Container size="xl">
+          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
+            <Stack gap="lg">
+              <Badge variant="light" color="yellow" radius="xl" w="fit-content">
+                Library
+              </Badge>
+              <Title order={2} className="landing-section-title">
+                Star winners. Filter by them. Iterate on what works.
+              </Title>
+              <Text className="landing-section-copy">
+                Every generation lands in your cross-product library. Star the winners, filter by winners,
+                iterate on what works. The full ship→tag→iterate loop — in one place.
+              </Text>
+              <Stack gap="sm">
+                <Group gap="sm" align="center">
+                  <ThemeIcon size={32} radius="md" color="yellow" variant="light">
+                    <IconLibrary size={16} />
+                  </ThemeIcon>
+                  <Text size="sm" c="dark.1">All generations across all products in one view</Text>
+                </Group>
+                <Group gap="sm" align="center">
+                  <ThemeIcon size={32} radius="md" color="yellow" variant="light">
+                    <IconStarFilled size={16} />
+                  </ThemeIcon>
+                  <Text size="sm" c="dark.1">Star winners and filter to only see them</Text>
+                </Group>
+                <Group gap="sm" align="center">
+                  <ThemeIcon size={32} radius="md" color="yellow" variant="light">
+                    <IconLayersIntersect size={16} />
+                  </ThemeIcon>
+                  <Text size="sm" c="dark.1">Iterate on any starred ad without starting from scratch</Text>
+                </Group>
+              </Stack>
+            </Stack>
+
+            <PlaceholderShot label="Generation library with starred winners" ratio="16 / 10" />
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* Included */}
       <Box component="section" className="landing-shell">
         <Container size="xl">
           <Stack gap="md" mb="xl" maw={760}>
@@ -519,8 +731,8 @@ function Home() {
               The little things that usually cost extra.
             </Title>
             <Text className="landing-section-copy">
-              No upsells, no separate tools. Background removal, multi-image management, and Meta-ready exports
-              come with every plan.
+              No upsells, no separate tools. Background removal, brand kits, multi-image management,
+              and Meta-ready exports come with every plan.
             </Text>
           </Stack>
 
@@ -542,6 +754,7 @@ function Home() {
         </Container>
       </Box>
 
+      {/* How it works */}
       <Box component="section" className="landing-shell landing-band-alt">
         <Container size="xl">
           <Stack gap="md" mb="xl" maw={760}>
@@ -576,6 +789,7 @@ function Home() {
         </Container>
       </Box>
 
+      {/* FAQs */}
       <Box component="section" className="landing-shell">
         <Container size="md">
           <Stack gap="md" mb="xl">
@@ -602,6 +816,7 @@ function Home() {
         </Container>
       </Box>
 
+      {/* Final CTA */}
       <Box component="section" className="landing-shell landing-cta-band">
         <Container size="lg">
           <Stack align="center" ta="center" gap="lg">
@@ -612,8 +827,8 @@ function Home() {
               Stop staring at the blank page. Start with what's already winning.
             </Title>
             <Text className="landing-section-copy" maw={680}>
-              Upload your product, pick a few proven templates, generate twelve ad variants in one click.
-              Iterate on the winners. Ship.
+              Pick a path — templates, custom prompt, or marketing angle. Drop your product in, generate
+              up to twelve ad variants, star the winners, and iterate. All in one tab.
             </Text>
             <Stack align="center" gap="xs">
               <Group gap="md">
