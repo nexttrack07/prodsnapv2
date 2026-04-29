@@ -3580,8 +3580,9 @@ function GenerateWizard({
                           style={{
                             borderRadius: 'var(--mantine-radius-lg)',
                             overflow: 'hidden',
-                            border: `2px solid ${picked ? 'var(--mantine-color-brand-5)' : 'transparent'}`,
-                            boxShadow: picked ? '0 0 0 3px rgba(84, 116, 180, 0.3)' : 'none',
+                            boxShadow: picked
+                              ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(84, 116, 180, 0.35)'
+                              : 'none',
                             position: 'relative',
                             breakInside: 'avoid',
                             display: 'block',
