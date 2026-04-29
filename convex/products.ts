@@ -493,8 +493,9 @@ export const updateProduct = mutation({
     name: v.optional(v.string()),
     productDescription: v.optional(v.string()),
     targetAudience: v.optional(v.string()),
+    brandKitId: v.optional(v.id('brandKits')),
   },
-  handler: async (ctx, { productId, name, productDescription, targetAudience }) => {
+  handler: async (ctx, { productId, name, productDescription, targetAudience, brandKitId }) => {
     const userId = await requireAuth(ctx)
     const product = await ctx.db.get(productId)
     if (!product) throw new Error('Product not found')
@@ -502,13 +503,31 @@ export const updateProduct = mutation({
       throw new Error('Not authorized to update this product')
     }
 
-    const patch: Record<string, string> = {}
+    const patch: Record<string, unknown> = {}
     if (name !== undefined) patch.name = name
     if (productDescription !== undefined) patch.productDescription = productDescription
     if (targetAudience !== undefined) patch.targetAudience = targetAudience
+    if (brandKitId !== undefined) patch.brandKitId = brandKitId
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(productId, patch)
     }
+  },
+})
+
+/**
+ * Removes the brand association from a product.
+ * Requires authentication and ownership.
+ */
+export const clearProductBrand = mutation({
+  args: { productId: v.id('products') },
+  handler: async (ctx, { productId }) => {
+    const userId = await requireAuth(ctx)
+    const product = await ctx.db.get(productId)
+    if (!product) throw new Error('Product not found')
+    if (product.userId && product.userId !== userId) {
+      throw new Error('Not authorized to update this product')
+    }
+    await ctx.db.patch(productId, { brandKitId: undefined })
   },
 })
 

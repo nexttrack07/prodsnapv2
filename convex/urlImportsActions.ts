@@ -217,8 +217,17 @@ export const runUrlImport = internalAction({
 
       const hasBrandData = brandLogoR2Url || colors.length > 0 || extracted.brandTagline || reviewSnippets
       if (hasBrandData) {
+        // Derive a default brand name from the URL hostname (e.g. "lumiere.shop")
+        let brandName: string | undefined
+        try {
+          brandName = new URL(importRow.sourceUrl).hostname.replace(/^www\./, '')
+        } catch {
+          // ignore URL parsing failures
+        }
+
         await ctx.runMutation(internal.brandKits.upsertBrandKitFromImport, {
           userId: importRow.userId,
+          name: brandName,
           logoUrl: brandLogoR2Url,
           logoStorageKey: brandLogoStorageKey,
           colors: colors.length > 0 ? colors : undefined,

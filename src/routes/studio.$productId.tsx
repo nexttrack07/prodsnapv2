@@ -77,6 +77,7 @@ import { fetchDownloadAsset } from '../utils/downloads'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
+import { BrandPicker } from '../components/brand/BrandPicker'
 
 type ProductSearch = { compose?: string; ad?: string; template?: string }
 
@@ -318,6 +319,7 @@ function ProductWorkspacePage() {
           productId={productId as Id<'products'>}
           primaryImageUrl={primaryImageUrl}
           anglesCount={anglesCount}
+          brandKitId={product.brandKitId}
           onNewAd={() => setView('generate')}
           creditsExhausted={creditsExhausted}
         />
@@ -381,6 +383,7 @@ function ProductHeader({
   productId,
   primaryImageUrl,
   anglesCount,
+  brandKitId,
   onNewAd,
   creditsExhausted,
 }: {
@@ -396,6 +399,7 @@ function ProductHeader({
   productId: Id<'products'>
   primaryImageUrl?: string
   anglesCount: number
+  brandKitId?: Id<'brandKits'>
   onNewAd: () => void
   creditsExhausted: boolean
 }) {
@@ -675,6 +679,9 @@ function ProductHeader({
                 {product.productDescription}
               </Text>
             )}
+
+            {/* Brand association */}
+            <BrandPicker productId={productId} brandKitId={brandKitId} />
 
             {/* Source images strip */}
             <Stack gap={6}>

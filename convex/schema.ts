@@ -122,6 +122,8 @@ const schema = defineSchema({
     status: productStatus,
     // Owner (Clerk user ID from JWT subject)
     userId: v.optional(v.string()), // optional for migration of existing data
+    // Optional brand association
+    brandKitId: v.optional(v.id('brandKits')),
     // Primary image for generation (references productImages table)
     primaryImageId: v.optional(v.id('productImages')),
     // Analysis results (populated after 'analyzing' → 'ready')
@@ -369,9 +371,11 @@ const schema = defineSchema({
     .index('by_userId', ['userId'])
     .index('by_run', ['runId']) // legacy, keep for migration
     .index('by_template', ['templateId']),
-  // ─── Brand kits (one per user, populated manually or via URL import) ────
+  // ─── Brand kits (N per user, optionally tagged to products) ─────────────
   brandKits: defineTable({
     userId: v.string(),
+    name: v.optional(v.string()),           // display name (required in UI on create)
+    isPrimary: v.optional(v.boolean()),     // at most one primary per user
     logoUrl: v.optional(v.string()),
     logoStorageKey: v.optional(v.string()), // R2 object key for management/deletion
     // Hex color strings (#rrggbb); first entry is primary by convention.
