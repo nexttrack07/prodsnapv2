@@ -18,6 +18,7 @@ import { Route as LibraryRouteImport } from './routes/library'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
@@ -32,6 +33,11 @@ import { Route as AccountBrandRouteImport } from './routes/account.brand'
 import { Route as AccountBillingRouteImport } from './routes/account.billing'
 import { Route as StudioProductIdStrategyRouteImport } from './routes/studio.$productId.strategy'
 
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/studio': typeof StudioRouteWithChildren
+  '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
   '/account/brand': typeof AccountBrandRoute
@@ -175,6 +182,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
   '/account/brand': typeof AccountBrandRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/studio': typeof StudioRouteWithChildren
+  '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
   '/account/brand': typeof AccountBrandRoute
@@ -226,6 +235,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/studio'
+    | '/templates'
     | '/terms'
     | '/account/billing'
     | '/account/brand'
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pricing'
     | '/privacy'
+    | '/templates'
     | '/terms'
     | '/account/billing'
     | '/account/brand'
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/studio'
+    | '/templates'
     | '/terms'
     | '/account/billing'
     | '/account/brand'
@@ -297,6 +309,7 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
   StudioRoute: typeof StudioRouteWithChildren
+  TemplatesRoute: typeof TemplatesRoute
   TermsRoute: typeof TermsRoute
   AccountBillingRoute: typeof AccountBillingRoute
   AccountBrandRoute: typeof AccountBrandRoute
@@ -306,6 +319,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -516,6 +536,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
   StudioRoute: StudioRouteWithChildren,
+  TemplatesRoute: TemplatesRoute,
   TermsRoute: TermsRoute,
   AccountBillingRoute: AccountBillingRoute,
   AccountBrandRoute: AccountBrandRoute,
