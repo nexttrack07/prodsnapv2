@@ -602,238 +602,285 @@ function ProductHeader({
         </Tooltip>
       </PageHeaderActions>
 
-      <Paper
-        radius="lg"
-        p={isMobile ? 'md' : 'xl'}
-        mb="xl"
-        style={{
-          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
-          border: '1px solid var(--mantine-color-dark-6)',
-        }}
-      >
-        <Group
-          align="flex-start"
-          gap={isMobile ? 'md' : 'xl'}
-          wrap={isMobile ? 'wrap' : 'nowrap'}
-        >
-          {/* Primary image — bigger on the left */}
-          <Box
-            w={isMobile ? '100%' : 240}
-            h={isMobile ? 220 : 240}
-            style={{
-              borderRadius: 'var(--mantine-radius-lg)',
-              overflow: 'hidden',
-              flexShrink: 0,
-              border: '1px solid var(--mantine-color-dark-5)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-            }}
-            bg="dark.7"
+      {/* Tabs sit ABOVE the product card. Each tab swaps the Paper's
+          content; mih keeps the panel height stable so transitions don't
+          jolt the page. Overview holds the product hero (image + title +
+          badges + Strategy + description + brand). */}
+      <Tabs defaultValue="overview" variant="default" keepMounted={false}>
+        <Tabs.List>
+          <Tabs.Tab
+            value="overview"
+            leftSection={<IconLayoutGrid size={14} />}
           >
-            {primaryImageUrl ? (
-              <Image src={primaryImageUrl} alt={product.name} fit="cover" h="100%" w="100%" />
-            ) : (
-              <Center h="100%">
-                <IconPhoto size={36} color="var(--mantine-color-dark-3)" />
-              </Center>
-            )}
-          </Box>
+            Overview
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="images"
+            leftSection={<IconPhoto size={14} />}
+            rightSection={
+              originalCount > 0 ? (
+                <Badge size="xs" variant="light" color="gray" radius="sm">
+                  {originalCount}
+                </Badge>
+              ) : null
+            }
+          >
+            Source images
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="inspiration"
+            leftSection={<IconBookmark size={14} />}
+          >
+            Inspiration
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="voice"
+            leftSection={<IconBlockquote size={14} />}
+            rightSection={
+              (product.customerLanguage?.length ?? 0) > 0 ? (
+                <Badge size="xs" variant="light" color="gray" radius="sm">
+                  {product.customerLanguage!.length}
+                </Badge>
+              ) : null
+            }
+          >
+            Customer voice
+          </Tabs.Tab>
+        </Tabs.List>
 
-          {/* Right column */}
-          <Stack gap="md" style={{ flex: 1, minWidth: 0 }}>
-            {/* Name (editable) + Strategy link */}
-            <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                {isEditingName ? (
-                  <Group gap="xs">
-                    <TextInput
-                      value={editedName}
-                      onChange={(e) => setEditedName(e.target.value)}
-                      size="lg"
-                      variant="unstyled"
-                      styles={{
-                        input: {
-                          fontSize: '1.5rem',
-                          fontWeight: 700,
-                          borderBottom: '2px solid var(--mantine-color-brand-6)',
-                          color: 'white',
-                        },
-                      }}
-                      autoFocus
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
-                    />
-                    <Button size="xs" variant="light" color="brand" onClick={handleSaveName}>
-                      Save
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => setIsEditingName(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </Group>
+        <Paper
+          radius="lg"
+          p={isMobile ? 'md' : 'xl'}
+          mt="md"
+          mih={isMobile ? 280 : 280}
+          style={{
+            background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
+            border: '1px solid var(--mantine-color-dark-6)',
+            borderTopLeftRadius: 0,
+          }}
+        >
+          {/* ── Overview ─────────────────────────────────────────────── */}
+          <Tabs.Panel value="overview">
+            <Group
+              align="flex-start"
+              gap={isMobile ? 'md' : 'xl'}
+              wrap={isMobile ? 'wrap' : 'nowrap'}
+            >
+              {/* Primary image */}
+              <Box
+                w={isMobile ? '100%' : 240}
+                h={isMobile ? 220 : 240}
+                style={{
+                  borderRadius: 'var(--mantine-radius-lg)',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  border: '1px solid var(--mantine-color-dark-5)',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+                }}
+                bg="dark.7"
+              >
+                {primaryImageUrl ? (
+                  <Image src={primaryImageUrl} alt={product.name} fit="cover" h="100%" w="100%" />
                 ) : (
-                  <Title
-                    order={1}
-                    fz={isMobile ? 22 : 28}
-                    fw={700}
-                    c="white"
-                    mb={4}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Edit product name: ${product.name}`}
-                    style={{ cursor: 'pointer', letterSpacing: '-0.02em' }}
-                    onClick={() => {
-                      setEditedName(product.name)
-                      setIsEditingName(true)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        setEditedName(product.name)
-                        setIsEditingName(true)
-                      }
-                    }}
-                    title="Click to edit"
-                  >
-                    {capitalizeWords(product.name)}
-                  </Title>
+                  <Center h="100%">
+                    <IconPhoto size={36} color="var(--mantine-color-dark-3)" />
+                  </Center>
                 )}
-                <Group gap={6} mt={6}>
-                  {product.category && (
-                    <Badge size="sm" variant="light" color="brand" radius="sm">
-                      {product.category}
-                    </Badge>
-                  )}
-                  <Badge size="sm" variant="outline" color="gray" radius="sm">
-                    {product.generationCount}{' '}
-                    {product.generationCount === 1 ? 'ad' : 'ads'}
-                  </Badge>
-                  <StatusBadge status={product.status} />
-                </Group>
               </Box>
 
-              <Link
-                to="/studio/$productId/strategy"
-                params={{ productId: product._id }}
-                style={{
-                  textDecoration: 'none',
-                  color: 'var(--mantine-color-brand-4)',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  flexShrink: 0,
-                }}
-              >
-                <Group gap={4}>
-                  Strategy
-                  {anglesCount > 0 && (
-                    <Badge size="xs" variant="light" color="brand" radius="sm">
-                      {anglesCount}
-                    </Badge>
-                  )}
-                  <IconArrowRight size={14} />
+              {/* Right column */}
+              <Stack gap="md" style={{ flex: 1, minWidth: 0 }}>
+                <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+                  <Box style={{ flex: 1, minWidth: 0 }}>
+                    {isEditingName ? (
+                      <Group gap="xs">
+                        <TextInput
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          size="lg"
+                          variant="unstyled"
+                          styles={{
+                            input: {
+                              fontSize: '1.5rem',
+                              fontWeight: 700,
+                              borderBottom: '2px solid var(--mantine-color-brand-6)',
+                              color: 'white',
+                            },
+                          }}
+                          autoFocus
+                          onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+                        />
+                        <Button size="xs" variant="light" color="brand" onClick={handleSaveName}>
+                          Save
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          color="gray"
+                          onClick={() => setIsEditingName(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </Group>
+                    ) : (
+                      <Title
+                        order={1}
+                        fz={isMobile ? 22 : 28}
+                        fw={700}
+                        c="white"
+                        mb={4}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Edit product name: ${product.name}`}
+                        style={{ cursor: 'pointer', letterSpacing: '-0.02em' }}
+                        onClick={() => {
+                          setEditedName(product.name)
+                          setIsEditingName(true)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setEditedName(product.name)
+                            setIsEditingName(true)
+                          }
+                        }}
+                        title="Click to edit"
+                      >
+                        {capitalizeWords(product.name)}
+                      </Title>
+                    )}
+                    <Group gap={6} mt={6}>
+                      {product.category && (
+                        <Badge size="sm" variant="light" color="brand" radius="sm">
+                          {product.category}
+                        </Badge>
+                      )}
+                      <Badge size="sm" variant="outline" color="gray" radius="sm">
+                        {product.generationCount}{' '}
+                        {product.generationCount === 1 ? 'ad' : 'ads'}
+                      </Badge>
+                      <StatusBadge status={product.status} />
+                    </Group>
+                  </Box>
+
+                  <Link
+                    to="/studio/$productId/strategy"
+                    params={{ productId: product._id }}
+                    style={{
+                      textDecoration: 'none',
+                      color: 'var(--mantine-color-brand-4)',
+                      fontSize: 14,
+                      fontWeight: 500,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Group gap={4}>
+                      Strategy
+                      {anglesCount > 0 && (
+                        <Badge size="xs" variant="light" color="brand" radius="sm">
+                          {anglesCount}
+                        </Badge>
+                      )}
+                      <IconArrowRight size={14} />
+                    </Group>
+                  </Link>
                 </Group>
-              </Link>
+
+                {product.productDescription && (
+                  <Text size="sm" c="dark.1" lh={1.6} maw={680}>
+                    {product.productDescription}
+                  </Text>
+                )}
+
+                <BrandPicker productId={productId} brandKitId={brandKitId} />
+
+                {product.status === 'failed' && (
+                  <Alert
+                    color="red"
+                    variant="light"
+                    title="Product analysis failed"
+                    icon={<IconAlertTriangle size={16} />}
+                  >
+                    <Stack gap="sm">
+                      <Text size="sm">Retry analysis to unlock generation for this product.</Text>
+                      <Button
+                        w="fit-content"
+                        size="xs"
+                        color="red"
+                        variant="light"
+                        leftSection={<IconRefresh size={13} />}
+                        loading={reanalyzeMutation.isPending}
+                        onClick={handleRetryAnalysis}
+                      >
+                        Retry analysis
+                      </Button>
+                    </Stack>
+                  </Alert>
+                )}
+              </Stack>
             </Group>
+          </Tabs.Panel>
 
-            {/* Description */}
-            {product.productDescription && (
-              <Text size="sm" c="dark.1" lh={1.6} maw={680}>
-                {product.productDescription}
-              </Text>
-            )}
+          {/* ── Source images ───────────────────────────────────────── */}
+          <Tabs.Panel value="images">
+            <Group gap="xs" wrap="wrap">
+              {sourceImages.map((img) => {
+                const isPrimary = img._id === product.primaryImageId
+                return (
+                  <SourceImageTile
+                    key={img._id}
+                    imageUrl={img.imageUrl}
+                    type={img.type}
+                    status={img.status}
+                    isPrimary={isPrimary}
+                    onClick={() =>
+                      setActiveImage({
+                        _id: img._id,
+                        imageUrl: img.imageUrl,
+                        type: img.type,
+                        status: img.status,
+                        parentImageId: img.parentImageId,
+                        error: img.error,
+                        _creationTime: img._creationTime,
+                      })
+                    }
+                  />
+                )
+              })}
+              <SourceImageDropzone
+                onDrop={handleUploadSourceImage}
+                loading={isUploadingImage}
+              />
+            </Group>
+          </Tabs.Panel>
 
-            {/* Brand association */}
-            <BrandPicker productId={productId} brandKitId={brandKitId} />
+          {/* ── Inspiration ──────────────────────────────────────────── */}
+          <Tabs.Panel value="inspiration">
+            <InspirationRow productId={productId} onNewAd={onNewAd} />
+          </Tabs.Panel>
 
-            {/* Customer voice */}
+          {/* ── Customer voice ───────────────────────────────────────── */}
+          <Tabs.Panel value="voice">
             <CustomerVoiceSection
               productId={productId}
               customerLanguage={product.customerLanguage ?? []}
             />
+          </Tabs.Panel>
+        </Paper>
+      </Tabs>
 
-            {/* Source images strip */}
-            <Stack gap={6}>
-              <Text size="xs" tt="uppercase" fw={700} c="dark.2">
-                Source images
-              </Text>
-              <Group gap="xs" wrap="wrap">
-                {sourceImages.map((img) => {
-                  const isPrimary = img._id === product.primaryImageId
-                  return (
-                    <SourceImageTile
-                      key={img._id}
-                      imageUrl={img.imageUrl}
-                      type={img.type}
-                      status={img.status}
-                      isPrimary={isPrimary}
-                      onClick={() =>
-                        setActiveImage({
-                          _id: img._id,
-                          imageUrl: img.imageUrl,
-                          type: img.type,
-                          status: img.status,
-                          parentImageId: img.parentImageId,
-                          error: img.error,
-                          _creationTime: img._creationTime,
-                        })
-                      }
-                    />
-                  )
-                })}
-                <SourceImageDropzone
-                  onDrop={handleUploadSourceImage}
-                  loading={isUploadingImage}
-                />
-              </Group>
-            </Stack>
-
-            {/* Inspiration row */}
-            <InspirationRow
-              productId={productId}
-              onNewAd={onNewAd}
-            />
-
-            {/* Actions row */}
-            <Group justify="flex-end" gap="sm">
-              <Button
-                color="brand"
-                size="md"
-                leftSection={<IconPlus size={16} />}
-                disabled={creditsExhausted || product.status !== 'ready'}
-                onClick={onNewAd}
-              >
-                New ad
-              </Button>
-            </Group>
-
-            {product.status === 'failed' && (
-              <Alert
-                color="red"
-                variant="light"
-                title="Product analysis failed"
-                icon={<IconAlertTriangle size={16} />}
-              >
-                <Stack gap="sm">
-                  <Text size="sm">Retry analysis to unlock generation for this product.</Text>
-                  <Button
-                    w="fit-content"
-                    size="xs"
-                    color="red"
-                    variant="light"
-                    leftSection={<IconRefresh size={13} />}
-                    loading={reanalyzeMutation.isPending}
-                    onClick={handleRetryAnalysis}
-                  >
-                    Retry analysis
-                  </Button>
-                </Stack>
-              </Alert>
-            )}
-          </Stack>
-        </Group>
-      </Paper>
+      {/* "New ad" stays below the tabs so it's always reachable. */}
+      <Group justify="flex-end" gap="sm" mt="md" mb="xl">
+        <Button
+          color="brand"
+          size="md"
+          leftSection={<IconPlus size={16} />}
+          disabled={creditsExhausted || product.status !== 'ready'}
+          onClick={onNewAd}
+        >
+          New ad
+        </Button>
+      </Group>
 
       <ImageEnhancerModal
         opened={activeImage !== null}
@@ -1311,8 +1358,8 @@ function SourceImageTile({
           onClick()
         }
       }}
-      w={64}
-      h={64}
+      w={120}
+      h={120}
       pos="relative"
       style={{
         borderRadius: 8,
@@ -1401,8 +1448,8 @@ function SourceImageDropzone({
         border: '1px dashed var(--mantine-color-dark-4)',
         borderRadius: 8,
         backgroundColor: 'var(--mantine-color-dark-7)',
-        width: 64,
-        height: 64,
+        width: 120,
+        height: 120,
         padding: 0,
         minHeight: 'auto',
         display: 'flex',
@@ -4238,8 +4285,8 @@ function InspirationRow({
                 return (
                   <Box
                     key={item._id}
-                    w={120}
-                    h={150}
+                    w={150}
+                    h={190}
                     pos="relative"
                     style={{
                       borderRadius: 8,
