@@ -3535,8 +3535,11 @@ function GenerateWizard({
 
               {templatesLoading && templates.length === 0 ? (
                 <Box style={{
-                  columnCount: isMobile ? 2 : 4,
-                  columnGap: 1,
+                  display: 'grid',
+                  gridTemplateColumns: isMobile
+                    ? 'repeat(2, 1fr)'
+                    : 'repeat(4, 1fr)',
+                  gap: 1,
                 }}>
                   {Array.from({ length: 8 }).map((_, i) => (
                     <Box
@@ -3545,8 +3548,6 @@ function GenerateWizard({
                       style={{
                         borderRadius: 'var(--mantine-radius-lg)',
                         aspectRatio: i % 3 === 0 ? '4/5' : i % 3 === 1 ? '9/16' : '1/1',
-                        breakInside: 'avoid',
-                        marginBottom: 2,
                       }}
                     />
                   ))}
@@ -3584,11 +3585,9 @@ function GenerateWizard({
                               ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(84, 116, 180, 0.35)'
                               : 'none',
                             position: 'relative',
-                            breakInside: 'avoid',
                             display: 'block',
                             transition: 'all 200ms ease',
                             transform: picked ? 'scale(1.02)' : 'scale(1)',
-                            marginBottom: 2,
                           }}
                         >
                           <Box style={getAspectStyle()}>
