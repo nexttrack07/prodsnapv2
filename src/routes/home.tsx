@@ -64,12 +64,12 @@ function HomePage() {
   const isLoading =
     dashboard === undefined || products === undefined || templates === undefined
 
-  const openAd = (id: string) =>
-    navigate({ to: '/home', search: { ad: id } })
+  // closeAd remains for direct visits to /home?ad=:id (shared/back-button
+  // open the panel — the AdDetailPanel below renders based on the URL).
   const closeAd = () =>
     navigate({ to: '/home', search: {}, replace: true })
 
-  // Siblings for prev/next nav: the focus product's recent ads
+  // Siblings for prev/next nav when the panel IS open via URL
   const siblings = (dashboard?.recentAds ?? []).map(
     (a) => a._id as Id<'templateGenerations'>,
   )
@@ -81,7 +81,6 @@ function HomePage() {
           dashboard={dashboard ?? null}
           isLoading={isLoading}
           isMobile={!!isMobile}
-          onOpenAd={openAd}
         />
 
         {!!products && products.length > 0 && (
@@ -116,12 +115,10 @@ function HeroSection({
   dashboard,
   isLoading,
   isMobile,
-  onOpenAd,
 }: {
   dashboard: DashboardData | null
   isLoading: boolean
   isMobile: boolean
-  onOpenAd: (id: string) => void
 }) {
   if (isLoading || !dashboard) return <HeroSkeleton />
   if (!dashboard.focusProduct) return <EmptyHero isMobile={isMobile} />
@@ -130,7 +127,6 @@ function HeroSection({
       product={dashboard.focusProduct}
       recentAds={dashboard.recentAds}
       totalGenerations={dashboard.totalGenerations}
-      onOpenAd={onOpenAd}
     />
   )
 }
@@ -139,12 +135,10 @@ function FocusHero({
   product,
   recentAds,
   totalGenerations,
-  onOpenAd,
 }: {
   product: NonNullable<DashboardData['focusProduct']>
   recentAds: DashboardData['recentAds']
   totalGenerations: number
-  onOpenAd: (id: string) => void
 }) {
   const navigate = useNavigate()
   const goToProduct = () =>
@@ -164,7 +158,7 @@ function FocusHero({
     >
       <Box pos="relative">
         {recentAds.length > 0 ? (
-          <CollageBackground ads={recentAds} onOpenAd={onOpenAd} />
+          <CollageBackground ads={recentAds} />
         ) : (
           <SinglePrimaryBackground imageUrl={product.imageUrl ?? null} />
         )}
@@ -230,13 +224,13 @@ function FocusHero({
 
 function CollageBackground({
   ads,
-  onOpenAd,
 }: {
   ads: DashboardData['recentAds']
-  onOpenAd: (id: string) => void
 }) {
   // Masonry-ish 3-column layout for up to 6 ads. Heights vary slightly to
-  // give it visual interest. Below ~600px we collapse to 2 columns.
+  // give it visual interest. Clicks bubble to the parent Paper which
+  // navigates to the product — we deliberately don't open ad detail from
+  // the home collage; users go to the product first.
   return (
     <SimpleGrid
       cols={{ base: 2, sm: 3 }}
@@ -246,23 +240,9 @@ function CollageBackground({
       {ads.slice(0, 6).map((ad, i) => (
         <Box
           key={ad._id}
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpenAd(ad._id)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              e.stopPropagation()
-              onOpenAd(ad._id)
-            }
-          }}
           style={{
             aspectRatio: i % 3 === 1 ? '1 / 1.2' : '1 / 1',
             overflow: 'hidden',
-            cursor: 'pointer',
           }}
         >
           <Image
