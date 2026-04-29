@@ -43,12 +43,7 @@ const PRIMARY_NAV: ReadonlyArray<NavItem> = [
     disabled: true,
     comingSoonNote: 'Products — coming soon',
   },
-  {
-    icon: IconSparkles,
-    label: 'Templates',
-    disabled: true,
-    comingSoonNote: 'Templates — coming soon',
-  },
+  { to: '/templates', icon: IconSparkles, label: 'Templates' },
   {
     icon: IconLibrary,
     label: 'Library',

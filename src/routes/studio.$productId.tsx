@@ -76,7 +76,7 @@ import { mapGenerationError } from '../lib/billing/mapBillingError'
 import { fetchDownloadAsset } from '../utils/downloads'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 
-type ProductSearch = { compose?: string; ad?: string }
+type ProductSearch = { compose?: string; ad?: string; template?: string }
 
 export const Route = createFileRoute('/studio/$productId')({
   validateSearch: (search: Record<string, unknown>): ProductSearch => {
@@ -86,6 +86,9 @@ export const Route = createFileRoute('/studio/$productId')({
     }
     if (typeof search.ad === 'string' && search.ad.length > 0) {
       out.ad = search.ad
+    }
+    if (typeof search.template === 'string' && search.template.length > 0) {
+      out.template = search.template
     }
     return out
   },
@@ -194,7 +197,7 @@ function ProductWorkspacePage() {
   // Nested routes (e.g. /studio/$productId/strategy) take over the page —
   // render only the child Outlet and skip the workspace content.
   const isChildActive = pathname !== `/studio/${productId}`
-  const [view, setView] = useState<View>(search.compose ? 'generate' : 'gallery')
+  const [view, setView] = useState<View>(search.compose || search.template ? 'generate' : 'gallery')
   const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
 
   // When the URL gets ?compose=:adId (e.g. from "Edit in compose"), open the
@@ -205,9 +208,17 @@ function ProductWorkspacePage() {
     }
   }, [search.compose, view])
 
+  // When the URL gets ?template=:templateId (from "Use this template"),
+  // open the generate wizard with that template pre-selected.
+  useEffect(() => {
+    if (search.template && view !== 'generate') {
+      setView('generate')
+    }
+  }, [search.template, view])
+
   const closeCompose = () => {
     setView('gallery')
-    if (search.compose) {
+    if (search.compose || search.template) {
       navigate({
         to: '/studio/$productId',
         params: { productId },
@@ -373,7 +384,10 @@ function ProductWorkspacePage() {
           creditsExhausted={creditsExhausted}
           initialFilters={initialFilters}
           prefillFromAdId={
-            (search.compose ?? null) as Id<'templateGenerations'> | null
+            (search.compose && search.compose !== 'true' ? search.compose : null) as Id<'templateGenerations'> | null
+          }
+          prefillTemplateId={
+            (search.template ?? null) as Id<'adTemplates'> | null
           }
         />
       )}
@@ -2549,6 +2563,7 @@ function GenerateWizard({
   creditsExhausted,
   initialFilters,
   prefillFromAdId,
+  prefillTemplateId,
 }: {
   productId: Id<'products'>
   product: {
@@ -2574,9 +2589,12 @@ function GenerateWizard({
   creditsExhausted: boolean
   initialFilters?: TemplateFilters
   prefillFromAdId?: Id<'templateGenerations'> | null
+  prefillTemplateId?: Id<'adTemplates'> | null
 }) {
   // ── Segment state ──────────────────────────────────────────────────────────
-  const [activeSegment, setActiveSegment] = useState<WizardSegment>('custom')
+  const [activeSegment, setActiveSegment] = useState<WizardSegment>(
+    prefillTemplateId ? 'template' : 'custom',
+  )
 
   // ── Shared state (persists across segment switches) ────────────────────────
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
@@ -2588,7 +2606,9 @@ function GenerateWizard({
 
   // ── Per-segment state (all preserved regardless of active segment) ─────────
   const [prompt, setPrompt] = useState('')
-  const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
+  const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>(
+    prefillTemplateId ? [prefillTemplateId] : [],
+  )
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null)
 
   // ── Prompt builder + suggestion state ─────────────────────────────────────
