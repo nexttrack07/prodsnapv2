@@ -31,6 +31,8 @@ import type * as migrations from "../migrations.js";
 import type * as onboardingProfiles from "../onboardingProfiles.js";
 import type * as productImages from "../productImages.js";
 import type * as products from "../products.js";
+import type * as promptGenerations from "../promptGenerations.js";
+import type * as promptSuggestions from "../promptSuggestions.js";
 import type * as prompts from "../prompts.js";
 import type * as r2 from "../r2.js";
 import type * as studio from "../studio.js";
@@ -73,6 +75,8 @@ declare const fullApi: ApiFromModules<{
   onboardingProfiles: typeof onboardingProfiles;
   productImages: typeof productImages;
   products: typeof products;
+  promptGenerations: typeof promptGenerations;
+  promptSuggestions: typeof promptSuggestions;
   prompts: typeof prompts;
   r2: typeof r2;
   studio: typeof studio;

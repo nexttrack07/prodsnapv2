@@ -167,6 +167,21 @@ async function callText(opts: {
   return data.output
 }
 
+// ─── Internal action wrapper for callText (cross-file usage) ─────────────────
+export const callTextInternal = internalAction({
+  args: {
+    prompt: v.string(),
+    systemPrompt: v.optional(v.string()),
+  },
+  handler: async (_ctx, { prompt, systemPrompt }): Promise<string> => {
+    if (isTestMode()) {
+      await mockDelay()
+      return '["Studio hero shot of Product on marble countertop, soft diffused lighting, minimalist mood, centered composition","Lifestyle flat-lay of Product surrounded by fresh ingredients on a wooden cutting board, warm golden-hour light, earthy tones","Close-up macro of Product texture and details, dramatic side-lighting, moody cinematic feel, dark background","Outdoor lifestyle scene with Product on a cafe table, natural morning light, vibrant urban backdrop, three-quarter angle","Editorial-style Product floating against a gradient background, neon rim lighting, premium luxe mood, full-frame composition"]'
+    }
+    return callText({ prompt, systemPrompt })
+  },
+})
+
 // ─── Helper: Parse JSON from LLM response ──────────────────────────────────
 function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
   // Try to extract JSON from markdown code blocks or raw JSON

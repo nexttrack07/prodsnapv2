@@ -449,6 +449,54 @@ export const generateFromAngleWorkflow = workflow.define({
 })
 
 /**
+ * Workflow for generating ads from a free-form user prompt (no template, no
+ * angle composer step). The user's dynamicPrompt is already stored on the row
+ * — we skip the LLM composer and feed the prompt + product image straight to
+ * the image generator.
+ */
+export const generateFromPromptWorkflow = workflow.define({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (step, { generationId }) => {
+    const gen = await step.runQuery(internal.studio.getGenerationInternal, { generationId })
+    if (!gen) return
+    await step.runMutation(internal.studio.markGenerationRunning, { generationId })
+    try {
+      // No composer step — the user's prompt is already in dynamicPrompt.
+      await step.runMutation(internal.studio.setGenerationStep, {
+        generationId,
+        currentStep: 'Generating',
+      })
+      const { outputUrl } = await step.runAction(internal.ai.generateFromAngle, {
+        generationId,
+      })
+      await step.runMutation(internal.studio.markGenerationComplete, {
+        generationId,
+        outputUrl,
+      })
+    } catch (err) {
+      await step.runMutation(internal.studio.markGenerationFailed, {
+        generationId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+    // Generate ad copy alongside the image (best-effort).
+    try {
+      const copy = await step.runAction(internal.ai.composeAdCopyForGeneration, { generationId })
+      if (copy) {
+        await step.runMutation(internal.studio.saveAdCopyOnGeneration, {
+          generationId,
+          headlines: copy.headlines,
+          primaryTexts: copy.primaryTexts,
+          ctas: copy.ctas,
+        })
+      }
+    } catch (err) {
+      console.warn('Ad copy generation failed for', generationId, err)
+    }
+  },
+})
+
+/**
  * Workflow for generating variations from an existing generated image.
  * Changes text, icons, and/or colors based on user selection.
  */
@@ -662,6 +710,8 @@ export const retryGeneration = mutation({
     }
     if (gen.variationSource) {
       await workflow.start(ctx, internal.studio.generateVariationWorkflow, { generationId })
+    } else if (gen.mode === 'prompt') {
+      await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, { generationId })
     } else if (gen.mode === 'angle') {
       await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, { generationId })
     } else {

@@ -106,7 +106,7 @@ interface GenerationData {
   error?: string
   startedAt?: number
   aspectRatio?: string
-  mode?: 'exact' | 'remix' | 'variation'
+  mode?: 'exact' | 'remix' | 'variation' | 'angle' | 'prompt'
   templateSnapshot?: { name?: string; aspectRatio?: string }
   isWinner?: boolean
   adCopy?: {
@@ -2533,6 +2533,13 @@ function GenerationCard({
 
 type WizardSegment = 'custom' | 'template'
 
+// ── Chip taxonomy for the structured prompt builder ─────────────────────────
+const PROMPT_SETTINGS = ['Studio', 'Kitchen', 'Bathroom', 'Outdoor / nature', 'Cafe', 'Beach', 'Urban street', 'Home interior', 'Gym']
+const PROMPT_MOODS = ['Minimalist', 'Premium luxe', 'Playful', 'Vibrant', 'Moody cinematic', 'Warm inviting', 'Clean clinical', 'Earthy natural']
+const PROMPT_LIGHTING = ['Soft natural', 'Golden-hour', 'Hard side-lit', 'Studio softbox', 'Neon', 'Backlit rim', 'Diffused overcast']
+const PROMPT_COMPOSITIONS = ['Hero shot', 'Flat-lay (top-down)', 'Close-up macro', 'Lifestyle scene', 'Three-quarter angle', 'Side profile', 'Floating / suspended']
+const PROMPT_PEOPLE = ['No people', 'Model holding product', 'Hands only', 'Person using product', 'Lifestyle background']
+
 function GenerateWizard({
   productId,
   product,
@@ -2584,6 +2591,17 @@ function GenerateWizard({
   const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>([])
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null)
 
+  // ── Prompt builder + suggestion state ─────────────────────────────────────
+  const [builderOpen, setBuilderOpen] = useState(false)
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [chipSetting, setChipSetting] = useState<string | null>(null)
+  const [chipMood, setChipMood] = useState<string | null>(null)
+  const [chipLighting, setChipLighting] = useState<string | null>(null)
+  const [chipComposition, setChipComposition] = useState<string | null>(null)
+  const [chipPeople, setChipPeople] = useState<string | null>(null)
+
   // ── Source image picker ────────────────────────────────────────────────────
   // Defaults to the product's primary image; user can pick any other ready
   // source image for THIS run without changing the product's primary.
@@ -2629,6 +2647,13 @@ function GenerateWizard({
         setPickedIds([prefillAd.templateId as Id<'adTemplates'>])
       }
     }
+    if (prefillAd.mode === 'prompt') {
+      // Re-populate the textarea with the original prompt
+      if (prefillAd.dynamicPrompt) {
+        setPrompt(prefillAd.dynamicPrompt)
+      }
+      setActiveSegment('custom')
+    }
     if (prefillAd.mode === 'angle') {
       // Try to find the matching angle by title; landing in Custom either way
       // since the Angle tab no longer exists — angle is picked via the chips.
@@ -2668,6 +2693,8 @@ function GenerateWizard({
   const generateFromProduct = useConvexMutation(api.products.generateFromProduct)
   const generateMutation = useMutation({ mutationFn: generateFromProduct })
   const submitAngleMutation = useConvexMutation(api.angleGenerations.submitAngleGeneration)
+  const submitPromptMutation = useConvexMutation(api.promptGenerations.submitPromptGeneration)
+  const suggestPromptsAction = useAction(api.promptSuggestions.suggestPromptIdeas)
 
   // ── Template infinite query ────────────────────────────────────────────────
   const filterArgs = {
@@ -2742,20 +2769,77 @@ function GenerateWizard({
     })
   }
 
+  // ── Builder preview assembly ────────────────────────────────────────────────
+  const builderPreview = [
+    chipComposition,
+    chipComposition ? 'of' : null,
+    product.name,
+    chipSetting ? `in ${chipSetting}` : null,
+    chipLighting ? `${chipLighting} lighting` : null,
+    chipMood ? `${chipMood} mood` : null,
+    chipPeople ? `${chipPeople}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ')
+    .replace(/,([^,]*)$/, '.$1') + '.'
+
+  function applyBuilderToPrompt() {
+    const assembled = builderPreview
+    if (prompt.trim().length > 0) {
+      if (!window.confirm('This will replace your current prompt. Continue?')) return
+    }
+    setPrompt(assembled)
+    setBuilderOpen(false)
+  }
+
+  function resetBuilder() {
+    setChipSetting(null)
+    setChipMood(null)
+    setChipLighting(null)
+    setChipComposition(null)
+    setChipPeople(null)
+  }
+
+  // ── Suggestions handler ───────────────────────────────────────────────────
+  async function handleSuggestPrompts() {
+    if (suggestionsLoading) return
+    setSuggestionsLoading(true)
+    setSuggestionsOpen(true)
+    try {
+      const result = await suggestPromptsAction({ productId })
+      setSuggestions(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      notifications.show({ title: 'Suggestion failed', message: msg, color: 'red' })
+    } finally {
+      setSuggestionsLoading(false)
+    }
+  }
+
+  function useSuggestion(text: string) {
+    if (prompt.trim().length > 0) {
+      if (!window.confirm('This will replace your current prompt. Continue?')) return
+    }
+    setPrompt(text)
+    setSelectedAngleIndex(null)
+  }
+
   // ── Generate logic ─────────────────────────────────────────────────────────
   // The active segment dictates which generation path runs. Selections from
   // the other segment are kept in state (so switching back doesn't lose
   // them) but ignored at submit time.
   const hasAngle = selectedAngleIndex !== null
+  const hasPrompt = activeSegment === 'custom' && prompt.trim().length >= 10
   const hasTemplates = pickedIds.length > 0
   const useTemplatePath = activeSegment === 'template' && hasTemplates
-  const useAnglePath = activeSegment === 'custom' && hasAngle
-  const canGenerate = useTemplatePath || useAnglePath
+  const usePromptPath = activeSegment === 'custom' && hasPrompt
+  const useAnglePath = activeSegment === 'custom' && !hasPrompt && hasAngle
+  const canGenerate = useTemplatePath || usePromptPath || useAnglePath
 
   const variationsCount = parseInt(variationsPerTemplate, 10)
   const totalCount = useTemplatePath
     ? pickedIds.length * variationsCount
-    : useAnglePath
+    : (usePromptPath || useAnglePath)
       ? variationsCount
       : 0
 
@@ -2775,6 +2859,20 @@ function GenerateWizard({
           productImageId: sourceImageId ?? undefined,
         })
         notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
+      } else if (usePromptPath) {
+        await submitPromptMutation({
+          productId,
+          prompt: prompt.trim(),
+          aspectRatio,
+          count: variationsCount,
+          model: wizardModel,
+          productImageId: sourceImageId ?? undefined,
+        })
+        notifications.show({
+          title: 'Generating',
+          message: `${variationsCount} image${variationsCount === 1 ? '' : 's'} from your prompt. Watch the gallery.`,
+          color: 'green',
+        })
       } else if (useAnglePath) {
         await submitAngleMutation({
           productId,
@@ -2854,7 +2952,12 @@ function GenerateWizard({
               {pickedIds.length}/3 templates
             </Badge>
           )}
-          {hasAngle && (
+          {hasPrompt && (
+            <Badge size="md" variant="light" color="grape" radius="md">
+              Prompt ({prompt.trim().length} chars)
+            </Badge>
+          )}
+          {hasAngle && !hasPrompt && (
             <Badge size="md" variant="light" color="teal" radius="md">
               {angles[selectedAngleIndex!]?.title ?? 'Angle'}
             </Badge>
@@ -2893,20 +2996,164 @@ function GenerateWizard({
           {/* ─── Custom segment ─── */}
           {activeSegment === 'custom' && (
             <Stack gap="md" px="md">
+              {/* Textarea — shared destination for all prompt paths */}
               <Box>
                 <Text size="sm" fw={600} c="white" mb="xs">Describe your ad</Text>
                 <Textarea
                   placeholder="e.g. Product on a marble countertop with soft morning light, lifestyle feel..."
                   value={prompt}
-                  onChange={(e) => setPrompt(e.currentTarget.value)}
-                  minRows={3}
-                  maxRows={6}
+                  onChange={(e) => {
+                    setPrompt(e.currentTarget.value)
+                    // Clear angle selection when user types freely
+                    if (selectedAngleIndex !== null) setSelectedAngleIndex(null)
+                  }}
+                  minRows={4}
+                  maxRows={8}
                   autosize
                 />
+                <Group justify="space-between" mt={6}>
+                  <Group gap="xs">
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="grape"
+                      radius="xl"
+                      leftSection={<IconSparkles size={12} />}
+                      loading={suggestionsLoading}
+                      onClick={handleSuggestPrompts}
+                    >
+                      Suggest prompts
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="gray"
+                      radius="xl"
+                      leftSection={<IconLayoutGrid size={12} />}
+                      onClick={() => setBuilderOpen((v) => !v)}
+                    >
+                      {builderOpen ? 'Hide builder' : 'Build prompt'}
+                    </Button>
+                  </Group>
+                  <Text size="xs" c="dark.3">{prompt.length} chars</Text>
+                </Group>
               </Box>
+
+              {/* ─── AI suggestions panel ─── */}
+              {suggestionsOpen && (
+                <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="xs" fw={600} c="white">AI suggestions</Text>
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="grape"
+                        leftSection={<IconRefresh size={12} />}
+                        loading={suggestionsLoading}
+                        onClick={handleSuggestPrompts}
+                      >
+                        Regenerate
+                      </Button>
+                      <ActionIcon size="xs" variant="subtle" color="dark.2" onClick={() => setSuggestionsOpen(false)}>
+                        <IconX size={12} />
+                      </ActionIcon>
+                    </Group>
+                  </Group>
+                  {suggestionsLoading && suggestions.length === 0 ? (
+                    <Stack gap="xs">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} h={48} radius="md" />
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Stack gap="xs">
+                      {suggestions.map((s, i) => (
+                        <Paper
+                          key={i}
+                          p="xs"
+                          radius="md"
+                          bg="dark.6"
+                          style={{ border: '1px solid var(--mantine-color-dark-4)', cursor: 'pointer' }}
+                          onClick={() => useSuggestion(s)}
+                        >
+                          <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
+                            <Text size="xs" c="dark.1" style={{ flex: 1, lineHeight: 1.4 }}>
+                              {s}
+                            </Text>
+                            <Button size="xs" variant="light" color="brand" radius="xl" style={{ flexShrink: 0 }}>
+                              Use this
+                            </Button>
+                          </Group>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  )}
+                </Paper>
+              )}
+
+              {/* ─── Structured chip builder ─── */}
+              {builderOpen && (
+                <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
+                  <Text size="xs" fw={600} c="white" mb="sm">Build a prompt</Text>
+                  {([
+                    ['Setting', PROMPT_SETTINGS, chipSetting, setChipSetting],
+                    ['Mood', PROMPT_MOODS, chipMood, setChipMood],
+                    ['Lighting', PROMPT_LIGHTING, chipLighting, setChipLighting],
+                    ['Composition', PROMPT_COMPOSITIONS, chipComposition, setChipComposition],
+                    ['People', PROMPT_PEOPLE, chipPeople, setChipPeople],
+                  ] as [string, string[], string | null, (v: string | null) => void][]).map(([label, options, value, setter]) => (
+                    <Box key={label} mb="xs">
+                      <Text size="xs" c="dark.2" mb={4}>{label}</Text>
+                      <Group gap={4} wrap="wrap">
+                        {options.map((opt) => (
+                          <Button
+                            key={opt}
+                            size="xs"
+                            variant={value === opt ? 'filled' : 'light'}
+                            color={value === opt ? 'brand' : 'dark.4'}
+                            radius="xl"
+                            onClick={() => setter(value === opt ? null : opt)}
+                            styles={{ root: { height: 26, paddingInline: 10, fontSize: 11 } }}
+                          >
+                            {opt}
+                          </Button>
+                        ))}
+                      </Group>
+                    </Box>
+                  ))}
+                  <Box mt="sm" pt="sm" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
+                    <Text size="xs" c="dark.2" mb={6}>Preview:</Text>
+                    <Text size="xs" c="dark.1" fs="italic" mb="sm">{builderPreview}</Text>
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        variant="filled"
+                        color="brand"
+                        radius="xl"
+                        onClick={applyBuilderToPrompt}
+                        disabled={!chipSetting && !chipMood && !chipLighting && !chipComposition && !chipPeople}
+                      >
+                        Apply to prompt
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="gray"
+                        radius="xl"
+                        onClick={resetBuilder}
+                      >
+                        Reset
+                      </Button>
+                    </Group>
+                  </Box>
+                </Paper>
+              )}
+
+              {/* ─── Angle chips ─── */}
               {angles.length > 0 && (
                 <Box>
-                  <Text size="xs" c="dark.2" mb="xs">Or try an angle:</Text>
+                  <Text size="xs" c="dark.2" mb="xs">Or pick an angle:</Text>
                   <Group gap="xs" wrap="wrap">
                     {angles.slice(0, 5).map((angle, idx) => (
                       <Button
@@ -2919,10 +3166,12 @@ function GenerateWizard({
                         onClick={() => {
                           if (selectedAngleIndex === idx) {
                             setSelectedAngleIndex(null)
-                            setPrompt('')
                           } else {
                             setSelectedAngleIndex(idx)
-                            setPrompt(angle.hook)
+                            // Only auto-fill the prompt if textarea is empty
+                            if (prompt.trim().length === 0) {
+                              setPrompt(angle.hook)
+                            }
                           }
                         }}
                       >
@@ -2939,7 +3188,9 @@ function GenerateWizard({
                         if (angles.length === 0) return
                         const randomIdx = Math.floor(Math.random() * angles.length)
                         setSelectedAngleIndex(randomIdx)
-                        setPrompt(angles[randomIdx].hook)
+                        if (prompt.trim().length === 0) {
+                          setPrompt(angles[randomIdx].hook)
+                        }
                       }}
                     >
                       Surprise me
@@ -2947,6 +3198,8 @@ function GenerateWizard({
                   </Group>
                 </Box>
               )}
+
+              {/* ─── Template shortcut ─── */}
               <Box>
                 <Text size="xs" c="dark.2" mb="xs">
                   Or use a template:
@@ -2964,8 +3217,7 @@ function GenerateWizard({
               {!canGenerate && (
                 <Alert color="gray" variant="light" radius="md">
                   <Text size="sm" c="dark.1">
-                    Pick an angle above, or pick a template from the Template
-                    tab. Free-form prompt generation is coming soon.
+                    Type a prompt (10+ chars) or pick an angle to generate.
                   </Text>
                 </Alert>
               )}
@@ -3328,6 +3580,17 @@ function GenerateWizard({
                   </Text>
                 </Stack>
               )
+            ) : prompt.trim().length >= 10 ? (
+              <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-brand-5)' }}>
+                <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
+                  <Box style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="xs" c="dark.2">Custom prompt</Text>
+                    <Text size="xs" c="dark.1" lineClamp={2}>
+                      {prompt.trim()}
+                    </Text>
+                  </Box>
+                </Group>
+              </Paper>
             ) : selectedAngleIndex !== null && product.marketingAngles?.[selectedAngleIndex] ? (
               <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-brand-5)' }}>
                 <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
@@ -3364,7 +3627,7 @@ function GenerateWizard({
                 style={{ border: '1px dashed var(--mantine-color-dark-4)' }}
               >
                 <Text size="xs" c="dark.2" ta="center">
-                  Type a prompt or pick an angle chip below
+                  Type a prompt (10+ chars) or pick an angle
                 </Text>
               </Paper>
             )}
@@ -3462,7 +3725,7 @@ function GenerateWizard({
           <Box pt="lg" mt="lg" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
             {!canGenerate ? (
               <Text size="sm" c="dark.2" ta="center" mb="md">
-                {activeSegment === 'template' ? 'Pick a template' : 'Pick an angle'}
+                {activeSegment === 'template' ? 'Pick a template' : 'Type a prompt (10+ chars) or pick an angle'}
               </Text>
             ) : (
               <Paper p="sm" mb="md" radius="md" bg="dark.7">
@@ -3473,7 +3736,9 @@ function GenerateWizard({
                 <Text size="xs" c="dark.2" mt={4}>
                   {useTemplatePath
                     ? `${pickedIds.length} template${pickedIds.length > 1 ? 's' : ''} × ${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''}`
-                    : `${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''} from angle`}
+                    : usePromptPath
+                      ? `${variationsPerTemplate} image${variationsCount > 1 ? 's' : ''} from prompt`
+                      : `${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''} from angle`}
                 </Text>
               </Paper>
             )}

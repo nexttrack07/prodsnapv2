@@ -332,6 +332,7 @@ const schema = defineSchema({
       v.literal('remix'),
       v.literal('variation'),
       v.literal('angle'),
+      v.literal('prompt'),
     ),
     colorAdapt: v.boolean(),
     variationIndex: v.number(),
