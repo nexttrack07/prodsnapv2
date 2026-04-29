@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useQuery as useConvexQuery, useMutation as useConvexMutationHook } from 'convex/react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { convexQuery } from '@convex-dev/react-query'
@@ -41,7 +41,15 @@ import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
 
+type TemplatesSearch = { preview?: string }
+
 export const Route = createFileRoute('/templates')({
+  validateSearch: (search: Record<string, unknown>): TemplatesSearch => {
+    if (typeof search.preview === 'string' && search.preview.length > 0) {
+      return { preview: search.preview }
+    }
+    return {}
+  },
   component: TemplatesBrowsePage,
 })
 
@@ -258,6 +266,21 @@ function TemplatesBrowsePage() {
   >(null)
   const [productPickerOpen, setProductPickerOpen] = useState(false)
 
+  // Auto-open preview when arriving with ?preview=<templateId> (from the
+  // home shelf). Only fires once per id once the matching template is in
+  // the loaded page.
+  const { preview: previewIdFromUrl } = Route.useSearch()
+  const lastConsumedPreviewId = useRef<string | null>(null)
+  useEffect(() => {
+    if (!previewIdFromUrl) return
+    if (lastConsumedPreviewId.current === previewIdFromUrl) return
+    const match = templates.find((t) => (t._id as string) === previewIdFromUrl)
+    if (match) {
+      setPreviewTemplate(match)
+      lastConsumedPreviewId.current = previewIdFromUrl
+    }
+  }, [previewIdFromUrl, templates])
+
   return (
     <Container size="xl" py="md">
       {/* Header */}
@@ -463,6 +486,11 @@ function TemplatesBrowsePage() {
         onClose={() => {
           setPreviewTemplate(null)
           setProductPickerOpen(false)
+          // Strip ?preview=<id> so re-clicking the same tile from home
+          // remounts cleanly and the auto-open effect fires again.
+          if (previewIdFromUrl) {
+            navigate({ to: '/templates', search: {}, replace: true })
+          }
         }}
         onUseTemplate={() => setProductPickerOpen(true)}
       />

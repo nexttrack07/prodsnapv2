@@ -645,11 +645,17 @@ function CategoryChip({
 }
 
 function TemplateTile({ template }: { template: TemplateRow }) {
-  // For v1 the template tile just opens the studio root — picking the
-  // product to apply it to belongs in the compose flow we'll wire up in a
-  // later phase. Until then, clicking is a soft hint.
+  // Clicking opens the full templates browser with this template's preview
+  // pre-opened so the user can pick a product and start composing.
+  const navigate = useNavigate()
   return (
     <Paper
+      onClick={() =>
+        navigate({
+          to: '/templates',
+          search: { preview: template._id as string },
+        })
+      }
       radius="lg"
       withBorder
       style={{
@@ -658,6 +664,7 @@ function TemplateTile({ template }: { template: TemplateRow }) {
         backgroundColor: 'var(--mantine-color-dark-7)',
         borderColor: 'var(--mantine-color-dark-5)',
         flexShrink: 0,
+        cursor: 'pointer',
       }}
     >
       <AspectRatio ratio={4 / 5}>

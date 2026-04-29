@@ -198,29 +198,22 @@ function ProductWorkspacePage() {
   const [view, setView] = useState<View>(search.compose || search.template || search.angle ? 'generate' : 'gallery')
   const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
 
-  // When the URL gets ?compose=:adId (e.g. from "Edit in compose"), open the
-  // generate wizard with that ad as the prefill source.
+  // When the URL gets ?compose=:adId / ?template=:id / ?angle=:i, open the
+  // generate wizard. `view` is intentionally NOT in deps — including it
+  // creates a race with closeCompose: setView('gallery') flips view, the
+  // effect re-runs before navigation strips the search param, and the
+  // wizard immediately re-opens. React only to URL changes here.
   useEffect(() => {
-    if (search.compose && view !== 'generate') {
-      setView('generate')
-    }
-  }, [search.compose, view])
+    if (search.compose) setView('generate')
+  }, [search.compose])
 
-  // When the URL gets ?template=:templateId (from "Use this template"),
-  // open the generate wizard with that template pre-selected.
   useEffect(() => {
-    if (search.template && view !== 'generate') {
-      setView('generate')
-    }
-  }, [search.template, view])
+    if (search.template) setView('generate')
+  }, [search.template])
 
-  // When the URL gets ?angle=:index (from Strategy "Explore templates"),
-  // open the generate wizard with that angle pre-selected.
   useEffect(() => {
-    if (search.angle && view !== 'generate') {
-      setView('generate')
-    }
-  }, [search.angle, view])
+    if (search.angle) setView('generate')
+  }, [search.angle])
 
   const closeCompose = () => {
     setView('gallery')
