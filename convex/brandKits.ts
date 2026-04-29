@@ -51,6 +51,28 @@ export const getBrandKitInternal = internalQuery({
   },
 })
 
+/**
+ * Resolves the brand kit for a specific product. If the product has a
+ * `brandKitId` set AND that brand belongs to the same user, returns it.
+ * Otherwise falls back to the user's primary brand kit.
+ */
+export const getBrandKitForProductInternal = internalQuery({
+  args: {
+    userId: v.string(),
+    productId: v.optional(v.id('products')),
+  },
+  handler: async (ctx, { userId, productId }) => {
+    if (productId) {
+      const product = await ctx.db.get(productId)
+      if (product?.brandKitId) {
+        const kit = await ctx.db.get(product.brandKitId)
+        if (kit && kit.userId === userId) return kit
+      }
+    }
+    return await findPrimaryBrand(ctx, userId)
+  },
+})
+
 /** Returns all brand kits for the authenticated user, primary first. */
 export const listBrandKits = query({
   args: {},

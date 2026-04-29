@@ -696,7 +696,10 @@ export const composeFromAnglePrompt = internalAction({
     const angle = generation.angleSeed
     const userId = generation.userId
     const brandKit = userId
-      ? await ctx.runQuery(internal.brandKits.getBrandKitInternal, { userId })
+      ? await ctx.runQuery(internal.brandKits.getBrandKitForProductInternal, {
+          userId,
+          productId: generation.productId,
+        })
       : null
 
     let productImageUrl = generation.productImageUrl
@@ -1022,6 +1025,7 @@ export const composeAdCopyForGeneration = internalAction({
       generation: {
         angleSeed?: { title: string; description: string; hook: string; suggestedAdStyle: string }
         userId?: string
+        productId?: string
       }
       productContext: {
         category?: string
@@ -1052,7 +1056,10 @@ export const composeAdCopyForGeneration = internalAction({
     }
 
     const brandKit = (generation.userId
-      ? await ctx.runQuery(internal.brandKits.getBrandKitInternal, { userId: generation.userId })
+      ? await ctx.runQuery(internal.brandKits.getBrandKitForProductInternal, {
+          userId: generation.userId,
+          productId: generation.productId as any,
+        })
       : null) as { voice?: string; tagline?: string; currentOffer?: string; customerLanguage?: string[] } | null
 
     // Per-product customerLanguage trumps brand-level

@@ -101,7 +101,10 @@ export const generateAdCopy = action({
     }
 
     const angle = product.marketingAngles[angleIndex]
-    const brandKit = await ctx.runQuery(api.brandKits.getBrandKit, {})
+    const brandKit = await ctx.runQuery(internal.brandKits.getBrandKitForProductInternal, {
+      userId,
+      productId,
+    })
 
     const result = await ctx.runAction(internal.ai.generateAdCopyText, {
       productName: product.name,
