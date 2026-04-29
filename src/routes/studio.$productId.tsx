@@ -593,11 +593,28 @@ function ProductHeader({
         radius="lg"
         p={isMobile ? 'md' : 'xl'}
         mb="xl"
+        pos="relative"
         style={{
           background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
           border: '1px solid var(--mantine-color-dark-6)',
         }}
       >
+        <Tooltip label="Delete product" position="left" withArrow>
+          <ActionIcon
+            variant="subtle"
+            color="red"
+            size="md"
+            radius="md"
+            onClick={openDeleteConfirm}
+            aria-label="Delete product"
+            pos="absolute"
+            top={10}
+            right={10}
+            style={{ zIndex: 2 }}
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Tooltip>
         <Group
           align="flex-start"
           gap={isMobile ? 'md' : 'xl'}
@@ -701,39 +718,27 @@ function ProductHeader({
                 </Group>
               </Box>
 
-              <Group gap="sm" align="center" style={{ flexShrink: 0 }}>
-                <Link
-                  to="/studio/$productId/strategy"
-                  params={{ productId: product._id }}
-                  style={{
-                    textDecoration: 'none',
-                    color: 'var(--mantine-color-brand-4)',
-                    fontSize: 14,
-                    fontWeight: 500,
-                  }}
-                >
-                  <Group gap={4}>
-                    Strategy
-                    {anglesCount > 0 && (
-                      <Badge size="xs" variant="light" color="brand" radius="sm">
-                        {anglesCount}
-                      </Badge>
-                    )}
-                    <IconArrowRight size={14} />
-                  </Group>
-                </Link>
-                <Tooltip label="Delete product" position="bottom" withArrow>
-                  <ActionIcon
-                    variant="subtle"
-                    color="red"
-                    size="md"
-                    onClick={openDeleteConfirm}
-                    aria-label="Delete product"
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
+              <Link
+                to="/studio/$productId/strategy"
+                params={{ productId: product._id }}
+                style={{
+                  textDecoration: 'none',
+                  color: 'var(--mantine-color-brand-4)',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  flexShrink: 0,
+                }}
+              >
+                <Group gap={4}>
+                  Strategy
+                  {anglesCount > 0 && (
+                    <Badge size="xs" variant="light" color="brand" radius="sm">
+                      {anglesCount}
+                    </Badge>
+                  )}
+                  <IconArrowRight size={14} />
+                </Group>
+              </Link>
             </Group>
 
             {/* Description */}
