@@ -37,12 +37,7 @@ type NavItem = {
 
 const PRIMARY_NAV: ReadonlyArray<NavItem> = [
   { to: '/home', icon: IconHome2, label: 'Home' },
-  {
-    icon: IconLayoutGrid,
-    label: 'Products',
-    disabled: true,
-    comingSoonNote: 'Products — coming soon',
-  },
+  { to: '/products', icon: IconLayoutGrid, label: 'Products' },
   { to: '/templates', icon: IconSparkles, label: 'Templates' },
   { to: '/library', icon: IconLibrary, label: 'Library' },
   { to: '/account/brand', icon: IconBrush, label: 'Brand kit' },
