@@ -4,7 +4,7 @@ import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useAction, useQuery as useConvexQuery } from 'convex/react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { notifications } from '@mantine/notifications'
-import { useMediaQuery, useHotkeys } from '@mantine/hooks'
+import { useMediaQuery, useHotkeys, useDisclosure } from '@mantine/hooks'
 import { useConvex } from 'convex/react'
 import {
   Container,
@@ -40,6 +40,7 @@ import {
   Tabs,
   ScrollArea,
   Menu,
+  Collapse,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -69,6 +70,9 @@ import {
   IconBookmarkFilled,
   IconExternalLink,
   IconLink,
+  IconChevronDown,
+  IconBlockquote,
+  IconPencil,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -402,6 +406,7 @@ function ProductHeader({
     productDescription?: string
     generationCount: number
     primaryImageId?: Id<'productImages'>
+    customerLanguage?: string[]
   }
   productId: Id<'products'>
   primaryImageUrl?: string
@@ -690,6 +695,12 @@ function ProductHeader({
             {/* Brand association */}
             <BrandPicker productId={productId} brandKitId={brandKitId} />
 
+            {/* Customer voice */}
+            <CustomerVoiceSection
+              productId={productId}
+              customerLanguage={product.customerLanguage ?? []}
+            />
+
             {/* Source images strip */}
             <Stack gap={6}>
               <Text size="xs" tt="uppercase" fw={700} c="dark.2">
@@ -784,6 +795,408 @@ function ProductHeader({
         originalCount={originalCount}
       />
     </>
+  )
+}
+
+// ─── Customer Voice Section ─────────────────────────────────────────────────
+function CustomerVoiceSection({
+  productId,
+  customerLanguage,
+}: {
+  productId: Id<'products'>
+  customerLanguage: string[]
+}) {
+  const [opened, { toggle }] = useDisclosure(customerLanguage.length > 0)
+  const [phrases, setPhrases] = useState<string[]>(customerLanguage)
+  const [isAdding, setIsAdding] = useState(false)
+  const [isPasteMode, setIsPasteMode] = useState(false)
+  const [newPhrase, setNewPhrase] = useState('')
+  const [pasteText, setPasteText] = useState('')
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
+  const [editText, setEditText] = useState('')
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const pasteRef = useRef<HTMLTextAreaElement>(null)
+
+  const updateProduct = useConvexMutation(api.products.updateProduct)
+  const updateMutation = useMutation({ mutationFn: updateProduct })
+
+  // Sync local state when server data changes
+  useEffect(() => {
+    setPhrases(customerLanguage)
+  }, [customerLanguage])
+
+  async function persist(next: string[]) {
+    setPhrases(next)
+    try {
+      await updateMutation.mutateAsync({
+        productId: productId as Id<'products'>,
+        customerLanguage: next,
+      })
+    } catch {
+      notifications.show({ title: 'Error', message: 'Failed to save phrases', color: 'red' })
+    }
+  }
+
+  function handleAddPhrase() {
+    const trimmed = newPhrase.trim()
+    if (!trimmed) return
+    const next = [...phrases, trimmed.slice(0, 500)]
+    setNewPhrase('')
+    persist(next)
+  }
+
+  function handlePasteCommit() {
+    const lines = pasteText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+      .map((l) => l.slice(0, 500))
+    if (lines.length === 0) return
+    const next = [...phrases, ...lines].slice(0, 50)
+    setPasteText('')
+    setIsPasteMode(false)
+    setIsAdding(false)
+    persist(next)
+    notifications.show({
+      title: `${lines.length} phrase${lines.length === 1 ? '' : 's'} added`,
+      message: 'Customer voice updated.',
+      color: 'green',
+    })
+  }
+
+  function handleDelete(idx: number) {
+    const next = phrases.filter((_, i) => i !== idx)
+    persist(next)
+  }
+
+  function handleEditSave(idx: number) {
+    const trimmed = editText.trim()
+    if (!trimmed) {
+      handleDelete(idx)
+      setEditingIdx(null)
+      return
+    }
+    const next = phrases.map((p, i) => (i === idx ? trimmed.slice(0, 500) : p))
+    setEditingIdx(null)
+    persist(next)
+  }
+
+  const count = phrases.length
+  const hasEnough = count >= 3
+
+  const pastePreviewLines = pasteText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+
+  return (
+    <Box>
+      {/* Toggle header */}
+      <UnstyledButton
+        onClick={toggle}
+        w="100%"
+        py={4}
+      >
+        <Group justify="space-between" wrap="nowrap">
+          <Group gap={8} wrap="nowrap">
+            <IconChevronDown
+              size={14}
+              color="var(--mantine-color-dark-2)"
+              style={{
+                transform: opened ? 'rotate(0deg)' : 'rotate(-90deg)',
+                transition: 'transform 150ms',
+              }}
+            />
+            <IconBlockquote
+              size={16}
+              color={hasEnough ? 'var(--mantine-color-green-5)' : count === 0 ? 'var(--mantine-color-yellow-5)' : 'var(--mantine-color-dark-2)'}
+            />
+            <Text size="xs" tt="uppercase" fw={700} c="dark.2">
+              Customer voice{' '}
+              <Text span c={hasEnough ? 'green.5' : 'dark.3'} inherit>
+                ({count === 0 ? 'none yet' : `${count} phrase${count === 1 ? '' : 's'}`})
+              </Text>
+            </Text>
+            {hasEnough && (
+              <Box
+                w={8}
+                h={8}
+                style={{ borderRadius: '50%', background: 'var(--mantine-color-green-6)', flexShrink: 0 }}
+              />
+            )}
+            {count === 0 && (
+              <Box
+                w={8}
+                h={8}
+                style={{ borderRadius: '50%', border: '2px solid var(--mantine-color-yellow-5)', flexShrink: 0 }}
+              />
+            )}
+          </Group>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="brand"
+            leftSection={<IconPlus size={12} />}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!opened) toggle()
+              setIsAdding(true)
+              setIsPasteMode(false)
+              setTimeout(() => inputRef.current?.focus(), 50)
+            }}
+          >
+            {count === 0 ? 'Add phrases' : 'Add phrase'}
+          </Button>
+        </Group>
+      </UnstyledButton>
+
+      <Collapse expanded={opened}>
+        <Box
+          mt={8}
+          p="sm"
+          style={{
+            borderRadius: 'var(--mantine-radius-md)',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid var(--mantine-color-dark-6)',
+          }}
+        >
+          {/* Empty state */}
+          {count === 0 && !isAdding && (
+            <Stack gap="xs" align="center" py="md">
+              <Text size="sm" c="dark.1" ta="center" maw={420} lh={1.6}>
+                Paste real customer reviews, comments, or quotes — even 5 specific
+                phrases dramatically improve the angles and copy our AI writes for
+                this product.
+              </Text>
+              <Text size="xs" c="dark.3" ta="center" fs="italic">
+                Skipping this is the #1 reason AI-generated copy sounds generic.
+              </Text>
+              <Button
+                size="xs"
+                variant="light"
+                color="brand"
+                leftSection={<IconPlus size={13} />}
+                mt={4}
+                onClick={() => {
+                  setIsAdding(true)
+                  setIsPasteMode(true)
+                  setTimeout(() => pasteRef.current?.focus(), 50)
+                }}
+              >
+                Paste phrases
+              </Button>
+            </Stack>
+          )}
+
+          {/* Phrase list */}
+          {count > 0 && (
+            <Stack gap={4}>
+              {phrases.map((phrase, idx) => (
+                <Box
+                  key={idx}
+                  px="sm"
+                  py={6}
+                  style={{
+                    borderRadius: 'var(--mantine-radius-sm)',
+                    border: '1px solid var(--mantine-color-dark-6)',
+                    background: 'rgba(255, 255, 255, 0.015)',
+                    cursor: editingIdx === idx ? 'text' : 'pointer',
+                  }}
+                >
+                  {editingIdx === idx ? (
+                    <Group gap="xs" wrap="nowrap">
+                      <TextInput
+                        value={editText}
+                        onChange={(e) => setEditText(e.currentTarget.value)}
+                        size="xs"
+                        variant="unstyled"
+                        styles={{
+                          input: { color: 'var(--mantine-color-dark-0)', fontSize: 13 },
+                        }}
+                        style={{ flex: 1 }}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleEditSave(idx)
+                          if (e.key === 'Escape') setEditingIdx(null)
+                        }}
+                      />
+                      <ActionIcon
+                        size="xs"
+                        variant="subtle"
+                        color="green"
+                        onClick={() => handleEditSave(idx)}
+                      >
+                        <IconCheck size={12} />
+                      </ActionIcon>
+                      <ActionIcon
+                        size="xs"
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => setEditingIdx(null)}
+                      >
+                        <IconX size={12} />
+                      </ActionIcon>
+                    </Group>
+                  ) : (
+                    <Group gap="xs" wrap="nowrap" justify="space-between">
+                      <Text
+                        size="xs"
+                        c="dark.0"
+                        lh={1.5}
+                        style={{
+                          flex: 1,
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitBoxOrient: 'vertical',
+                          WebkitLineClamp: expandedIdx === idx ? undefined : 2,
+                          cursor: 'pointer',
+                          fontStyle: 'italic',
+                        }}
+                        onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
+                      >
+                        &ldquo;{phrase}&rdquo;
+                      </Text>
+                      <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          color="gray"
+                          onClick={() => {
+                            setEditingIdx(idx)
+                            setEditText(phrase)
+                          }}
+                        >
+                          <IconPencil size={12} />
+                        </ActionIcon>
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          color="red"
+                          onClick={() => handleDelete(idx)}
+                        >
+                          <IconX size={12} />
+                        </ActionIcon>
+                      </Group>
+                    </Group>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          )}
+
+          {/* Add phrase input */}
+          {isAdding && (
+            <Box mt={count > 0 ? 8 : 0}>
+              {!isPasteMode ? (
+                <Group gap="xs" wrap="nowrap">
+                  <TextInput
+                    ref={inputRef}
+                    placeholder="Type a customer phrase..."
+                    size="xs"
+                    value={newPhrase}
+                    onChange={(e) => setNewPhrase(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddPhrase()
+                      if (e.key === 'Escape') {
+                        setIsAdding(false)
+                        setNewPhrase('')
+                      }
+                    }}
+                    style={{ flex: 1 }}
+                    styles={{
+                      input: { fontSize: 13 },
+                    }}
+                    rightSection={
+                      <ActionIcon
+                        size="xs"
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => {
+                          setIsAdding(false)
+                          setNewPhrase('')
+                        }}
+                      >
+                        <IconX size={12} />
+                      </ActionIcon>
+                    }
+                  />
+                  <Button size="compact-xs" color="brand" onClick={handleAddPhrase} disabled={!newPhrase.trim()}>
+                    Add
+                  </Button>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => {
+                      setIsPasteMode(true)
+                      setTimeout(() => pasteRef.current?.focus(), 50)
+                    }}
+                  >
+                    Paste mode
+                  </Button>
+                </Group>
+              ) : (
+                <Stack gap="xs">
+                  <Textarea
+                    ref={pasteRef}
+                    placeholder={"Paste reviews here, one per line...\nMy skin felt like glass overnight\nI was shocked at how fast it worked\nFinally a serum that doesn't pill under makeup"}
+                    autosize
+                    minRows={3}
+                    maxRows={8}
+                    size="xs"
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.currentTarget.value)}
+                    styles={{
+                      input: { fontSize: 13 },
+                    }}
+                  />
+                  {pastePreviewLines.length > 0 && (
+                    <Text size="xs" c="dark.2">
+                      {pastePreviewLines.length} phrase{pastePreviewLines.length === 1 ? '' : 's'} ready to add
+                    </Text>
+                  )}
+                  <Group gap="xs">
+                    <Button
+                      size="compact-xs"
+                      color="brand"
+                      onClick={handlePasteCommit}
+                      disabled={pastePreviewLines.length === 0}
+                    >
+                      Add {pastePreviewLines.length || ''} phrase{pastePreviewLines.length === 1 ? '' : 's'}
+                    </Button>
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => {
+                        setIsPasteMode(false)
+                        setPasteText('')
+                      }}
+                    >
+                      Single mode
+                    </Button>
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => {
+                        setIsAdding(false)
+                        setIsPasteMode(false)
+                        setPasteText('')
+                        setNewPhrase('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </Group>
+                </Stack>
+              )}
+            </Box>
+          )}
+        </Box>
+      </Collapse>
+    </Box>
   )
 }
 

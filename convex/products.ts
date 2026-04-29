@@ -182,6 +182,7 @@ export const runProductAnalysis = internalAction({
     try {
       const result = await ctx.runAction(internal.ai.analyzeProduct, {
         imageUrl: product.imageUrl,
+        customerLanguage: product.customerLanguage,
       })
       await ctx.runMutation(internal.products.saveProductAnalysis, {
         productId,
@@ -256,18 +257,26 @@ export const createProductFromImport = internalMutation({
     userId: v.string(),
     name: v.string(),
     imageUrls: v.array(v.string()),
+    customerLanguage: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, { userId, name, imageUrls }) => {
+  handler: async (ctx, { userId, name, imageUrls, customerLanguage }) => {
     if (imageUrls.length === 0) {
       throw new Error('At least one product image is required')
     }
     await requireProductLimitForUser(ctx, userId, 'createProductFromImport')
     const primaryImageUrl = imageUrls[0]
+    // Clean customer language: non-empty, max 500 chars, max 50
+    const cleanedLanguage = customerLanguage
+      ?.map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .map((s) => s.slice(0, 500))
+      .slice(0, 50)
     const productId = await ctx.db.insert('products', {
       name,
       imageUrl: primaryImageUrl, // back-compat
       status: 'analyzing',
       userId,
+      ...(cleanedLanguage && cleanedLanguage.length > 0 ? { customerLanguage: cleanedLanguage } : {}),
     })
     const imageIds: Id<'productImages'>[] = []
     for (const url of imageUrls) {
@@ -494,8 +503,9 @@ export const updateProduct = mutation({
     productDescription: v.optional(v.string()),
     targetAudience: v.optional(v.string()),
     brandKitId: v.optional(v.id('brandKits')),
+    customerLanguage: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, { productId, name, productDescription, targetAudience, brandKitId }) => {
+  handler: async (ctx, { productId, name, productDescription, targetAudience, brandKitId, customerLanguage }) => {
     const userId = await requireAuth(ctx)
     const product = await ctx.db.get(productId)
     if (!product) throw new Error('Product not found')
@@ -508,6 +518,15 @@ export const updateProduct = mutation({
     if (productDescription !== undefined) patch.productDescription = productDescription
     if (targetAudience !== undefined) patch.targetAudience = targetAudience
     if (brandKitId !== undefined) patch.brandKitId = brandKitId
+    if (customerLanguage !== undefined) {
+      // Validate: non-empty strings, max 500 chars each, max 50 items
+      const cleaned = customerLanguage
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((s) => s.slice(0, 500))
+        .slice(0, 50)
+      patch.customerLanguage = cleaned
+    }
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(productId, patch)
     }

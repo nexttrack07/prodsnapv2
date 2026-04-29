@@ -590,10 +590,11 @@ function BrandForm({
         />
         <Textarea
           label="Customer language"
-          description="Authentic phrases from reviews. One per line."
-          placeholder={"My skin felt like glass overnight\nI was shocked at how fast it worked"}
+          description="Paste real customer reviews, comments, or DMs. One per line. These ground AI-generated copy in authentic voice."
+          placeholder={"My skin felt like glass overnight\nI was shocked at how fast it worked\nFinally a serum that doesn't pill under makeup"}
           autosize
           minRows={3}
+          maxRows={10}
           value={customerLanguageText}
           onChange={(e) => setCustomerLanguageText(e.currentTarget.value)}
         />

@@ -134,6 +134,8 @@ const schema = defineSchema({
     valueProposition: v.optional(v.string()),
     marketingAngles: v.optional(v.array(marketingAngle)),
     // Metadata
+    // Voice of customer: authentic review snippets / phrases per product
+    customerLanguage: v.optional(v.array(v.string())),
     error: v.optional(v.string()),
     archivedAt: v.optional(v.number()), // soft delete timestamp
     // ─── Legacy fields (kept for migration, will be removed) ─────────────
