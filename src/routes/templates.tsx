@@ -6,6 +6,7 @@ import { convexQuery } from '@convex-dev/react-query'
 import { useConvex } from 'convex/react'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
+import { Masonry } from 'masonic'
 import {
   AspectRatio,
   Badge,
@@ -20,7 +21,6 @@ import {
   Modal,
   Paper,
   Select,
-  SimpleGrid,
   Skeleton,
   Stack,
   Text,
@@ -378,11 +378,21 @@ function TemplatesBrowsePage() {
 
       {/* Grid */}
       {templatesLoading ? (
-        <SimpleGrid cols={{ base: 2, md: 4 }} spacing="md">
+        <Box
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+            gap: 1,
+          }}
+        >
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} h={200} radius="md" />
+            <Skeleton
+              key={i}
+              h={i % 3 === 0 ? 240 : i % 3 === 1 ? 320 : 200}
+              radius="sm"
+            />
           ))}
-        </SimpleGrid>
+        </Box>
       ) : templates.length === 0 ? (
         <Paper
           radius="lg"
@@ -406,10 +416,13 @@ function TemplatesBrowsePage() {
         </Paper>
       ) : (
         <>
-          <SimpleGrid cols={{ base: 2, md: 4 }} spacing="md">
-            {templates.map((t) => (
+          <Masonry
+            items={templates}
+            columnCount={isMobile ? 2 : 4}
+            columnGutter={1}
+            rowGutter={1}
+            render={({ data: t }) => (
               <TemplateTile
-                key={t._id}
                 template={t}
                 onClick={() => setPreviewTemplate(t)}
                 isSaved={isTemplateSavedAnywhere(t._id)}
@@ -417,8 +430,8 @@ function TemplatesBrowsePage() {
                 isTemplateSavedToProduct={isTemplateSavedToProduct}
                 onToggleSave={handleToggleSave}
               />
-            ))}
-          </SimpleGrid>
+            )}
+          />
           {/* Infinite scroll sentinel */}
           {hasNextPage && (
             <Center ref={loadMoreRef} py="xl">
@@ -496,55 +509,36 @@ function TemplateTile({
 }) {
   const navigate = useNavigate()
 
+  const aspectRatioCss =
+    template.aspectRatio === '4:5'
+      ? '4/5'
+      : template.aspectRatio === '9:16'
+        ? '9/16'
+        : '1/1'
+
   return (
     <Box pos="relative">
       <UnstyledButton
         onClick={onClick}
         w="100%"
         style={{
-          borderRadius: 'var(--mantine-radius-md)',
+          borderRadius: 'var(--mantine-radius-sm)',
           overflow: 'hidden',
-          border: '1px solid var(--mantine-color-dark-5)',
           backgroundColor: 'var(--mantine-color-dark-7)',
-          transition: 'transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease',
-        }}
-        styles={{
-          root: {
-            '&:hover': {
-              transform: 'translateY(-2px)',
-              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-              borderColor: 'var(--mantine-color-dark-4)',
-            },
-          },
+          display: 'block',
+          transition: 'transform 150ms ease',
         }}
       >
-        <AspectRatio ratio={getAspectRatioValue(template.aspectRatio)}>
+        <Box style={{ aspectRatio: aspectRatioCss }}>
           <Image
             src={template.thumbnailUrl}
             alt="Template"
             fit="cover"
+            h="100%"
+            w="100%"
             style={{ display: 'block' }}
           />
-        </AspectRatio>
-        {(template.productCategory || template.angleType) && (
-          <Group gap={4} px="xs" py={6} wrap="wrap">
-            {template.productCategory && (
-              <Badge size="xs" variant="light" color="gray" radius="sm">
-                {capitalizeWords(template.productCategory)}
-              </Badge>
-            )}
-            {template.angleType && (
-              <Badge
-                size="xs"
-                variant="light"
-                color={angleTypeColor(template.angleType)}
-                radius="sm"
-              >
-                {angleTypeLabel(template.angleType)}
-              </Badge>
-            )}
-          </Group>
-        )}
+        </Box>
       </UnstyledButton>
 
       {/* Bookmark icon — top-right corner */}

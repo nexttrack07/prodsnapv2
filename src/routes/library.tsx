@@ -2,9 +2,8 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState, useMemo } from 'react'
 import { useQuery } from 'convex/react'
 import { useMediaQuery } from '@mantine/hooks'
+import { Masonry } from 'masonic'
 import {
-  AspectRatio,
-  Badge,
   Box,
   Button,
   Center,
@@ -14,7 +13,6 @@ import {
   Loader,
   Paper,
   Select,
-  SimpleGrid,
   Stack,
   Text,
   Title,
@@ -109,7 +107,7 @@ function LibraryPage() {
         <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
           <Box>
             <Title order={1} fz={28} fw={700} c="white" mb={4}>
-              Library
+              Generation library
             </Title>
             <Text size="sm" c="dark.2">
               {isLoading
@@ -199,15 +197,15 @@ function LibraryPage() {
           </Paper>
         ) : (
           <>
-            <SimpleGrid cols={{ base: 2, md: 4 }} spacing="md">
-              {filteredAds.map((ad) => (
-                <AdCard
-                  key={ad._id}
-                  ad={ad}
-                  onClick={() => openAd(ad._id)}
-                />
-              ))}
-            </SimpleGrid>
+            <Masonry
+              items={filteredAds}
+              columnCount={isMobile ? 2 : 4}
+              columnGutter={1}
+              rowGutter={1}
+              render={({ data: ad }) => (
+                <AdCard ad={ad} onClick={() => openAd(ad._id)} />
+              )}
+            />
 
             {/* Load more */}
             {!isDone && (
@@ -246,67 +244,88 @@ function AdCard({
     outputUrl?: string
     productName: string | null
     isWinner?: boolean
+    aspectRatio?: string
   }
   onClick: () => void
 }) {
+  const aspectRatioCss =
+    ad.aspectRatio === '4:5'
+      ? '4/5'
+      : ad.aspectRatio === '9:16'
+        ? '9/16'
+        : ad.aspectRatio === '1:1'
+          ? '1/1'
+          : '4/5'
+
   return (
-    <Paper
-      radius="lg"
-      withBorder
+    <Box
+      pos="relative"
+      onClick={onClick}
       style={{
+        borderRadius: 'var(--mantine-radius-sm)',
         overflow: 'hidden',
         cursor: 'pointer',
         backgroundColor: 'var(--mantine-color-dark-7)',
-        borderColor: 'var(--mantine-color-dark-5)',
-        transition: 'transform 150ms ease, border-color 150ms ease',
+        boxShadow: ad.isWinner
+          ? 'inset 0 0 0 2px var(--mantine-color-yellow-5)'
+          : 'none',
       }}
-      onClick={onClick}
     >
-      <AspectRatio ratio={4 / 5}>
-        <Box pos="relative" w="100%" h="100%">
-          {ad.outputUrl ? (
-            <Image
-              src={ad.outputUrl}
-              alt=""
-              fit="cover"
-              w="100%"
-              h="100%"
+      <Box style={{ aspectRatio: aspectRatioCss }}>
+        {ad.outputUrl ? (
+          <Image
+            src={ad.outputUrl}
+            alt=""
+            fit="cover"
+            w="100%"
+            h="100%"
+            style={{ display: 'block' }}
+          />
+        ) : (
+          <Center bg="dark.6" w="100%" h="100%">
+            <IconPhoto size={32} color="var(--mantine-color-dark-3)" />
+          </Center>
+        )}
+      </Box>
+
+      {/* Gradient bottom overlay — fades into product label so the image
+          and the caption read together rather than as two stacked zones. */}
+      <Box
+        pos="absolute"
+        left={0}
+        right={0}
+        bottom={0}
+        style={{
+          height: '40%',
+          background:
+            'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.8) 100%)',
+          pointerEvents: 'none',
+        }}
+      />
+      <Box
+        pos="absolute"
+        left={0}
+        right={0}
+        bottom={0}
+        px={8}
+        py={6}
+      >
+        <Group gap={4} wrap="nowrap">
+          {ad.isWinner && (
+            <IconStarFilled
+              size={12}
+              color="var(--mantine-color-yellow-5)"
+              style={{ flexShrink: 0 }}
             />
-          ) : (
-            <Center bg="dark.6" w="100%" h="100%">
-              <IconPhoto size={32} color="var(--mantine-color-dark-3)" />
-            </Center>
           )}
-          {/* Overlay: product name + winner star */}
-          <Box
-            pos="absolute"
-            bottom={0}
-            left={0}
-            right={0}
-            p="xs"
-            style={{
-              background:
-                'linear-gradient(transparent, rgba(0,0,0,0.75))',
-            }}
-          >
-            <Group gap={4} wrap="nowrap">
-              {ad.isWinner && (
-                <IconStarFilled
-                  size={12}
-                  color="var(--mantine-color-yellow-5)"
-                  style={{ flexShrink: 0 }}
-                />
-              )}
-              {ad.productName && (
-                <Text size="xs" c="white" fw={500} truncate>
-                  {capitalizeWords(ad.productName)}
-                </Text>
-              )}
-            </Group>
-          </Box>
-        </Box>
-      </AspectRatio>
-    </Paper>
+          {ad.productName && (
+            <Text size="xs" c="white" fw={500} truncate>
+              {capitalizeWords(ad.productName)}
+            </Text>
+          )}
+        </Group>
+      </Box>
+    </Box>
   )
 }
 
