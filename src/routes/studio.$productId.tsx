@@ -395,12 +395,54 @@ function ProductHeader({
     convexQuery(api.productImages.getProductImagesList, { productId }),
   )
 
+  // Long-lived toast watcher for bg-removal (and future enhancements):
+  // detect when an enhancement transitions out of 'processing' so the user
+  // gets explicit feedback even if they're not looking at the strip.
+  const lastSeenStatusRef = useRef<Map<string, 'processing' | 'ready' | 'failed'>>(new Map())
+  useEffect(() => {
+    const seen = lastSeenStatusRef.current
+    for (const img of productImages ?? []) {
+      if (img.type === 'original') continue
+      const prev = seen.get(img._id as string)
+      if (prev === 'processing' && img.status === 'ready') {
+        notifications.show({
+          title: 'Background removed',
+          message: 'New transparent version is ready in your source images.',
+          color: 'green',
+          autoClose: 6000,
+        })
+      }
+      if (prev === 'processing' && img.status === 'failed') {
+        notifications.show({
+          title: 'Background removal failed',
+          message: img.error ?? 'Try again or use a different image.',
+          color: 'red',
+          autoClose: 8000,
+        })
+      }
+      seen.set(img._id as string, img.status)
+    }
+  }, [productImages])
+
   const uploadAction = useAction(api.r2.uploadProductImage)
   const addImage = useConvexMutation(api.productImages.addProductImage)
   const addImageMutation = useMutation({ mutationFn: addImage })
 
-  const sourceImages = (productImages ?? []).filter((img) => img.type === 'original')
-  const originalCount = sourceImages.length
+  // Include both originals and their bg-removed (or future) enhancements in
+  // the strip so the user sees processing/ready state for everything they
+  // generated. Originals first, then enhancements grouped under the parent.
+  const allImages = (productImages ?? [])
+  const originals = allImages.filter((img) => img.type === 'original')
+  const sourceImages = (() => {
+    const out: typeof allImages = []
+    for (const orig of originals) {
+      out.push(orig)
+      const enhancements = allImages.filter((e) => e.parentImageId === orig._id)
+      out.push(...enhancements)
+    }
+    return out
+  })()
+  const originalCount = originals.length
 
   async function handleSaveName() {
     if (!editedName.trim()) return
@@ -627,6 +669,7 @@ function ProductHeader({
                     <SourceImageTile
                       key={img._id}
                       imageUrl={img.imageUrl}
+                      type={img.type}
                       status={img.status}
                       isPrimary={isPrimary}
                       onClick={() =>
@@ -707,15 +750,18 @@ function ProductHeader({
 
 function SourceImageTile({
   imageUrl,
+  type,
   status,
   isPrimary,
   onClick,
 }: {
   imageUrl: string
+  type: 'original' | 'background-removed'
   status: 'processing' | 'ready' | 'failed'
   isPrimary: boolean
   onClick: () => void
 }) {
+  const isBgRemoved = type === 'background-removed'
   return (
     <Box
       role="button"
@@ -735,6 +781,10 @@ function SourceImageTile({
         overflow: 'hidden',
         cursor: 'pointer',
         backgroundColor: 'var(--mantine-color-dark-6)',
+        // Checkered backdrop for bg-removed images so transparency reads
+        backgroundImage: isBgRemoved
+          ? 'repeating-conic-gradient(#222 0% 25%, #1a1a1a 25% 50%) 0 0 / 12px 12px'
+          : undefined,
         border: isPrimary
           ? '2px solid var(--mantine-color-brand-5)'
           : '1px solid var(--mantine-color-dark-5)',
@@ -743,11 +793,15 @@ function SourceImageTile({
       }}
     >
       {status === 'processing' ? (
-        <Center h="100%">
+        <Stack align="center" justify="center" h="100%" gap={2}>
           <Loader size="xs" color="brand" />
+        </Stack>
+      ) : status === 'failed' ? (
+        <Center h="100%">
+          <IconAlertTriangle size={18} color="var(--mantine-color-red-5)" />
         </Center>
       ) : (
-        <Image src={imageUrl} alt="" fit="cover" w="100%" h="100%" />
+        <Image src={imageUrl} alt="" fit="contain" w="100%" h="100%" />
       )}
       {isPrimary && (
         <Box
@@ -766,6 +820,25 @@ function SourceImageTile({
           }}
         >
           <IconStarFilled size={10} />
+        </Box>
+      )}
+      {isBgRemoved && status === 'ready' && (
+        <Box
+          pos="absolute"
+          bottom={2}
+          left={2}
+          px={5}
+          py={1}
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            borderRadius: 4,
+            fontSize: 9,
+            fontWeight: 600,
+            color: 'white',
+            letterSpacing: 0.4,
+          }}
+        >
+          BG
         </Box>
       )}
     </Box>
@@ -2366,30 +2439,10 @@ function GenerationCard({
         </Group>
       )}
 
-      {/* Ad copy preview — first variant of each field */}
-      {isComplete && (
-        generation.adCopy ? (
-          <Box mt="xs" px="xs" pb="xs" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
-            {generation.adCopy.headlines[0] && (
-              <Text size="sm" fw={600} c="white" lineClamp={2}>
-                {generation.adCopy.headlines[0]}
-              </Text>
-            )}
-            {generation.adCopy.primaryTexts[0] && (
-              <Text size="xs" c="dark.1" mt={4} lineClamp={2}>
-                {generation.adCopy.primaryTexts[0]}
-              </Text>
-            )}
-            {generation.adCopy.ctas[0] && (
-              <Badge size="xs" variant="light" color="brand" mt={6}>
-                {generation.adCopy.ctas[0]}
-              </Badge>
-            )}
-          </Box>
-        ) : (
-          <Text size="xs" c="dark.3" mt="xs" pl="xs" pb="xs">Drafting copy…</Text>
-        )
-      )}
+      {/* Ad copy preview deferred — see ux-flow-redesign plan, "Ad copy
+          surfacing" follow-up. Server-side copy generation still runs and
+          the Ad Detail panel can still surface it; we just don't auto-show
+          the first variant on the gallery card until we refine the UX. */}
 
     </Card>
   )

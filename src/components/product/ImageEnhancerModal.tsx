@@ -185,21 +185,17 @@ export function ImageEnhancerModal({
     <Modal
       opened={opened}
       onClose={onClose}
-      size="90%"
+      fullScreen
       padding={0}
       withCloseButton={false}
-      centered
       styles={{
         content: {
           backgroundColor: 'var(--mantine-color-dark-7)',
-          borderRadius: 12,
-          overflow: 'hidden',
-          maxWidth: 1100,
         },
-        body: { padding: 0 },
+        body: { padding: 0, height: '100vh' },
       }}
     >
-      <Group gap={0} align="stretch" wrap="nowrap" style={{ minHeight: 520 }}>
+      <Group gap={0} align="stretch" wrap="nowrap" style={{ minHeight: '100vh' }}>
         {/* Image preview */}
         <Box
           style={{
@@ -213,7 +209,7 @@ export function ImageEnhancerModal({
             alignItems: 'center',
             justifyContent: 'center',
             position: 'relative',
-            minHeight: 480,
+            minHeight: '100vh',
           }}
         >
           {isProcessing ? (
@@ -242,7 +238,7 @@ export function ImageEnhancerModal({
               fit="contain"
               w="100%"
               h="100%"
-              style={{ maxHeight: '70vh', padding: 24 }}
+              style={{ maxHeight: '90vh', padding: 32 }}
             />
           )}
         </Box>
