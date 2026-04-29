@@ -3547,7 +3547,7 @@ function GenerateWizard({
                       key={i}
                       className="shimmer"
                       style={{
-                        borderRadius: 'var(--mantine-radius-lg)',
+                        borderRadius: 'var(--mantine-radius-sm)',
                         aspectRatio: i % 3 === 0 ? '4/5' : i % 3 === 1 ? '9/16' : '1/1',
                       }}
                     />
@@ -3579,7 +3579,7 @@ function GenerateWizard({
                           aria-pressed={picked}
                           aria-label={`Select template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`}
                           style={{
-                            borderRadius: 'var(--mantine-radius-lg)',
+                            borderRadius: 'var(--mantine-radius-sm)',
                             overflow: 'hidden',
                             boxShadow: picked
                               ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(84, 116, 180, 0.35)'
