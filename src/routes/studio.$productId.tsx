@@ -82,6 +82,7 @@ import {
   ImageEnhancerModal,
   type ImageEnhancerImage,
 } from '../components/product/ImageEnhancerModal'
+import { PageHeaderActions } from '../components/layout/PageHeaderActions'
 import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 import { ModelSelect } from '../components/ModelSelect'
 import { mapGenerationError } from '../lib/billing/mapBillingError'
@@ -589,16 +590,7 @@ function ProductHeader({
 
   return (
     <>
-      <Paper
-        radius="lg"
-        p={isMobile ? 'md' : 'xl'}
-        mb="xl"
-        pos="relative"
-        style={{
-          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
-          border: '1px solid var(--mantine-color-dark-6)',
-        }}
-      >
+      <PageHeaderActions>
         <Tooltip label="Delete product" position="left" withArrow>
           <ActionIcon
             variant="subtle"
@@ -607,14 +599,21 @@ function ProductHeader({
             radius="md"
             onClick={openDeleteConfirm}
             aria-label="Delete product"
-            pos="absolute"
-            top={10}
-            right={10}
-            style={{ zIndex: 2 }}
           >
             <IconTrash size={16} />
           </ActionIcon>
         </Tooltip>
+      </PageHeaderActions>
+
+      <Paper
+        radius="lg"
+        p={isMobile ? 'md' : 'xl'}
+        mb="xl"
+        style={{
+          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
+          border: '1px solid var(--mantine-color-dark-6)',
+        }}
+      >
         <Group
           align="flex-start"
           gap={isMobile ? 'md' : 'xl'}

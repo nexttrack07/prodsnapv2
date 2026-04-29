@@ -75,7 +75,14 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
 
       <AppShell.Main>
         <Box px={{ base: 'md', sm: 'xl' }} pt="md" pb={48}>
-          <Breadcrumbs />
+          {/* Breadcrumbs row + slot for page-level actions (right-aligned).
+              Pages render into #page-header-actions via createPortal. */}
+          <Group justify="space-between" align="center" wrap="nowrap" gap="md" mih={24}>
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Breadcrumbs />
+            </Box>
+            <Box id="page-header-actions" style={{ flexShrink: 0 }} />
+          </Group>
           <Box mt="md">{children}</Box>
         </Box>
       </AppShell.Main>
