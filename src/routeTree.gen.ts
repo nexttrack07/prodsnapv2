@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
@@ -18,7 +19,6 @@ import { Route as LibraryRouteImport } from './routes/library'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as AdminRouteImport } from './routes/admin'
-import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
@@ -33,14 +33,14 @@ import { Route as AccountBrandRouteImport } from './routes/account.brand'
 import { Route as AccountBillingRouteImport } from './routes/account.billing'
 import { Route as StudioProductIdStrategyRouteImport } from './routes/studio.$productId.strategy'
 
-const TemplatesRoute = TemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudioRoute = StudioRouteImport.update({
@@ -319,18 +319,18 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/templates': {
-      id: '/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof TemplatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/terms': {
       id: '/terms'
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/studio': {
