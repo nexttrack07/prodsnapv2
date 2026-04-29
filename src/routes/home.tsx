@@ -39,8 +39,17 @@ import type { Id } from '../../convex/_generated/dataModel'
 import { mapBillingError } from '../lib/billing/mapBillingError'
 import { MAX_PRODUCT_IMAGE_SIZE } from '../utils/constants'
 import { capitalizeWords } from '../utils/strings'
+import { AdDetailPanel } from '../components/ads/AdDetailPanel'
+
+type HomeSearch = { ad?: string }
 
 export const Route = createFileRoute('/home')({
+  validateSearch: (search: Record<string, unknown>): HomeSearch => {
+    if (typeof search.ad === 'string' && search.ad.length > 0) {
+      return { ad: search.ad }
+    }
+    return {}
+  },
   component: HomePage,
 })
 
@@ -49,9 +58,21 @@ function HomePage() {
   const dashboard = useQuery(api.products.getFocusProduct, {})
   const products = useQuery(api.products.listProducts, {})
   const templates = useQuery(api.templates.listPublished, {})
+  const search = Route.useSearch()
+  const navigate = useNavigate()
 
   const isLoading =
     dashboard === undefined || products === undefined || templates === undefined
+
+  const openAd = (id: string) =>
+    navigate({ to: '/home', search: { ad: id } })
+  const closeAd = () =>
+    navigate({ to: '/home', search: {}, replace: true })
+
+  // Siblings for prev/next nav: the focus product's recent ads
+  const siblings = (dashboard?.recentAds ?? []).map(
+    (a) => a._id as Id<'templateGenerations'>,
+  )
 
   return (
     <Container size="lg" py="xl">
@@ -60,6 +81,7 @@ function HomePage() {
           dashboard={dashboard ?? null}
           isLoading={isLoading}
           isMobile={!!isMobile}
+          onOpenAd={openAd}
         />
 
         {!!products && products.length > 0 && (
@@ -73,6 +95,13 @@ function HomePage() {
           />
         )}
       </Stack>
+
+      <AdDetailPanel
+        opened={!!search.ad}
+        onClose={closeAd}
+        adId={(search.ad ?? null) as Id<'templateGenerations'> | null}
+        siblings={siblings}
+      />
     </Container>
   )
 }
@@ -87,10 +116,12 @@ function HeroSection({
   dashboard,
   isLoading,
   isMobile,
+  onOpenAd,
 }: {
   dashboard: DashboardData | null
   isLoading: boolean
   isMobile: boolean
+  onOpenAd: (id: string) => void
 }) {
   if (isLoading || !dashboard) return <HeroSkeleton />
   if (!dashboard.focusProduct) return <EmptyHero isMobile={isMobile} />
@@ -99,6 +130,7 @@ function HeroSection({
       product={dashboard.focusProduct}
       recentAds={dashboard.recentAds}
       totalGenerations={dashboard.totalGenerations}
+      onOpenAd={onOpenAd}
     />
   )
 }
@@ -107,10 +139,12 @@ function FocusHero({
   product,
   recentAds,
   totalGenerations,
+  onOpenAd,
 }: {
   product: NonNullable<DashboardData['focusProduct']>
   recentAds: DashboardData['recentAds']
   totalGenerations: number
+  onOpenAd: (id: string) => void
 }) {
   const navigate = useNavigate()
   const goToProduct = () =>
@@ -130,7 +164,7 @@ function FocusHero({
     >
       <Box pos="relative">
         {recentAds.length > 0 ? (
-          <CollageBackground ads={recentAds} />
+          <CollageBackground ads={recentAds} onOpenAd={onOpenAd} />
         ) : (
           <SinglePrimaryBackground imageUrl={product.imageUrl ?? null} />
         )}
@@ -196,8 +230,10 @@ function FocusHero({
 
 function CollageBackground({
   ads,
+  onOpenAd,
 }: {
   ads: DashboardData['recentAds']
+  onOpenAd: (id: string) => void
 }) {
   // Masonry-ish 3-column layout for up to 6 ads. Heights vary slightly to
   // give it visual interest. Below ~600px we collapse to 2 columns.
@@ -210,9 +246,23 @@ function CollageBackground({
       {ads.slice(0, 6).map((ad, i) => (
         <Box
           key={ad._id}
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenAd(ad._id)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              e.stopPropagation()
+              onOpenAd(ad._id)
+            }
+          }}
           style={{
             aspectRatio: i % 3 === 1 ? '1 / 1.2' : '1 / 1',
             overflow: 'hidden',
+            cursor: 'pointer',
           }}
         >
           <Image

@@ -76,14 +76,18 @@ import { mapGenerationError } from '../lib/billing/mapBillingError'
 import { fetchDownloadAsset } from '../utils/downloads'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 
-type ProductSearch = { compose?: string }
+type ProductSearch = { compose?: string; ad?: string }
 
 export const Route = createFileRoute('/studio/$productId')({
   validateSearch: (search: Record<string, unknown>): ProductSearch => {
-    const compose = typeof search.compose === 'string' && search.compose.length > 0
-      ? search.compose
-      : undefined
-    return compose ? { compose } : {}
+    const out: ProductSearch = {}
+    if (typeof search.compose === 'string' && search.compose.length > 0) {
+      out.compose = search.compose
+    }
+    if (typeof search.ad === 'string' && search.ad.length > 0) {
+      out.ad = search.ad
+    }
+    return out
   },
   component: ProductWorkspacePage,
 })
@@ -336,6 +340,25 @@ function ProductWorkspacePage() {
           pendingGenerations={pendingGenerations}
           onGenerateMore={() => setView('generate')}
           creditsExhausted={creditsExhausted}
+          activeAdId={
+            (search.ad ?? null) as Id<'templateGenerations'> | null
+          }
+          onOpenAd={(id) =>
+            navigate({
+              to: '/studio/$productId',
+              params: { productId },
+              search: { ...search, ad: id as string },
+            })
+          }
+          onCloseAd={() => {
+            const { ad: _omit, ...rest } = search
+            navigate({
+              to: '/studio/$productId',
+              params: { productId },
+              search: rest,
+              replace: true,
+            })
+          }}
         />
       )}
 
@@ -1713,6 +1736,9 @@ function GalleryView({
   pendingGenerations,
   onGenerateMore,
   creditsExhausted,
+  activeAdId,
+  onOpenAd,
+  onCloseAd,
 }: {
   product: {
     status: string
@@ -1726,9 +1752,11 @@ function GalleryView({
   pendingGenerations: GenerationData[]
   onGenerateMore: () => void
   creditsExhausted: boolean
+  activeAdId: Id<'templateGenerations'> | null
+  onOpenAd: (id: Id<'templateGenerations'>) => void
+  onCloseAd: () => void
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
-  const [activeAdId, setActiveAdId] = useState<Id<'templateGenerations'> | null>(null)
   const [variationTarget, setVariationTarget] = useState<{ _id: Id<'templateGenerations'>; outputUrl: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Id<'templateGenerations'> | null>(null)
   const [retryingId, setRetryingId] = useState<Id<'templateGenerations'> | null>(null)
@@ -1740,7 +1768,7 @@ function GalleryView({
   // Keyboard shortcuts
   useHotkeys([
     ['Escape', () => {
-      if (activeAdId) setActiveAdId(null)
+      if (activeAdId) onCloseAd()
       else if (variationTarget) setVariationTarget(null)
       else if (deleteTarget) setDeleteTarget(null)
     }],
@@ -1811,7 +1839,7 @@ function GalleryView({
                 key={gen._id}
                 generation={gen}
                 title={`${product.name} #${completedGenerations.length + index + 1}`}
-                onExpand={(gen) => setActiveAdId(gen._id)}
+                onExpand={(gen) => onOpenAd(gen._id)}
                 onDelete={handleDelete}
                 onCreateVariations={setVariationTarget}
                 onRetry={handleRetry}
@@ -1882,7 +1910,7 @@ function GalleryView({
               key={gen._id}
               generation={gen}
               title={`${product.name} #${index + 1}`}
-              onExpand={(g) => setActiveAdId(g._id)}
+              onExpand={(g) => onOpenAd(g._id)}
               onDelete={handleDelete}
               onCreateVariations={setVariationTarget}
               onRetry={handleRetry}
@@ -1895,7 +1923,7 @@ function GalleryView({
       {/* Ad Detail Panel (replaces old lightbox) */}
       <AdDetailPanel
         opened={!!activeAdId}
-        onClose={() => setActiveAdId(null)}
+        onClose={onCloseAd}
         adId={activeAdId}
         siblings={siblingIds}
       />
