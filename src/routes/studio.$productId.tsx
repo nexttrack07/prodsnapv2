@@ -277,7 +277,7 @@ function ProductWorkspacePage() {
         </Group>
         <Stack gap="xl">
           <Paper p="lg" radius="lg" withBorder style={{ borderColor: 'var(--mantine-color-dark-5)' }}>
-            <Group align="flex-start" gap="xl">
+            <Group align="flex-start" gap="xl" wrap="wrap">
               <Skeleton height={200} width={200} radius="md" />
               <Stack gap="md" style={{ flex: 1 }}>
                 <Skeleton height={28} width="60%" />
@@ -610,13 +610,13 @@ function ProductHeader({
         <Tabs.List>
           <Tabs.Tab
             value="overview"
-            leftSection={<IconLayoutGrid size={14} />}
+            leftSection={<Box visibleFrom="sm"><IconLayoutGrid size={14} /></Box>}
           >
             Overview
           </Tabs.Tab>
           <Tabs.Tab
             value="images"
-            leftSection={<IconPhoto size={14} />}
+            leftSection={<Box visibleFrom="sm"><IconPhoto size={14} /></Box>}
             rightSection={
               originalCount > 0 ? (
                 <Badge size="xs" variant="light" color="gray" radius="sm">
@@ -629,13 +629,13 @@ function ProductHeader({
           </Tabs.Tab>
           <Tabs.Tab
             value="inspiration"
-            leftSection={<IconBookmark size={14} />}
+            leftSection={<Box visibleFrom="sm"><IconBookmark size={14} /></Box>}
           >
             Inspiration
           </Tabs.Tab>
           <Tabs.Tab
             value="voice"
-            leftSection={<IconBlockquote size={14} />}
+            leftSection={<Box visibleFrom="sm"><IconBlockquote size={14} /></Box>}
             rightSection={
               (product.customerLanguage?.length ?? 0) > 0 ? (
                 <Badge size="xs" variant="light" color="gray" radius="sm">
@@ -1155,7 +1155,7 @@ function CustomerVoiceSection({
                         }}
                       />
                       <ActionIcon
-                        size="xs"
+                        size="sm"
                         variant="subtle"
                         color="green"
                         onClick={() => handleEditSave(idx)}
@@ -1163,7 +1163,7 @@ function CustomerVoiceSection({
                         <IconCheck size={12} />
                       </ActionIcon>
                       <ActionIcon
-                        size="xs"
+                        size="sm"
                         variant="subtle"
                         color="gray"
                         onClick={() => setEditingIdx(null)}
@@ -1192,7 +1192,7 @@ function CustomerVoiceSection({
                       </Text>
                       <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
                         <ActionIcon
-                          size="xs"
+                          size="sm"
                           variant="subtle"
                           color="gray"
                           onClick={() => {
@@ -1203,7 +1203,7 @@ function CustomerVoiceSection({
                           <IconPencil size={12} />
                         </ActionIcon>
                         <ActionIcon
-                          size="xs"
+                          size="sm"
                           variant="subtle"
                           color="red"
                           onClick={() => handleDelete(idx)}
@@ -1347,6 +1347,8 @@ function SourceImageTile({
   onClick: () => void
 }) {
   const isBgRemoved = type === 'background-removed'
+  const isMobileTile = useMediaQuery('(max-width: 768px)')
+  const tileSize = isMobileTile ? 100 : 120
   return (
     <Box
       role="button"
@@ -1358,8 +1360,8 @@ function SourceImageTile({
           onClick()
         }
       }}
-      w={120}
-      h={120}
+      w={tileSize}
+      h={tileSize}
       pos="relative"
       style={{
         borderRadius: 8,
@@ -1437,6 +1439,8 @@ function SourceImageDropzone({
   onDrop: (files: File[]) => void
   loading: boolean
 }) {
+  const isMobileDropzone = useMediaQuery('(max-width: 768px)')
+  const tileSize = isMobileDropzone ? 100 : 120
   return (
     <Dropzone
       onDrop={onDrop}
@@ -1448,8 +1452,8 @@ function SourceImageDropzone({
         border: '1px dashed var(--mantine-color-dark-4)',
         borderRadius: 8,
         backgroundColor: 'var(--mantine-color-dark-7)',
-        width: 120,
-        height: 120,
+        width: tileSize,
+        height: tileSize,
         padding: 0,
         minHeight: 'auto',
         display: 'flex',
@@ -3344,7 +3348,7 @@ function GenerateWizard({
           style={{
             overflowY: isMobile ? 'visible' : 'auto',
             paddingRight: isMobile ? 0 : 'var(--mantine-spacing-sm)',
-            order: 1,
+            order: isMobile ? 2 : 1,
           }}
         >
           {/* ─── Custom segment ─── */}
@@ -3615,7 +3619,7 @@ function GenerateWizard({
                   value={filterCategory}
                   onChange={setFilterCategory}
                   size="sm"
-                  w={150}
+                  w={isMobile ? '100%' : 150}
                 />
                 <Select
                   placeholder="Style"
@@ -3624,7 +3628,7 @@ function GenerateWizard({
                   value={filterImageStyle}
                   onChange={setFilterImageStyle}
                   size="sm"
-                  w={150}
+                  w={isMobile ? '100%' : 150}
                 />
                 <Select
                   placeholder="Setting"
@@ -3633,7 +3637,7 @@ function GenerateWizard({
                   value={filterSetting}
                   onChange={setFilterSetting}
                   size="sm"
-                  w={150}
+                  w={isMobile ? '100%' : 150}
                 />
                 <Select
                   placeholder="Angle type"
@@ -3646,7 +3650,7 @@ function GenerateWizard({
                   value={filterAngleType}
                   onChange={setFilterAngleType}
                   size="sm"
-                  w={150}
+                  w={isMobile ? '100%' : 150}
                 />
                 <Select
                   placeholder="Aspect"
@@ -3659,7 +3663,7 @@ function GenerateWizard({
                   value={filterAspectRatio}
                   onChange={setFilterAspectRatio}
                   size="sm"
-                  w={110}
+                  w={isMobile ? '100%' : 110}
                 />
                 {filtersActive && (
                   <Button
@@ -3820,7 +3824,7 @@ function GenerateWizard({
             alignSelf: 'flex-start',
             position: isMobile ? 'relative' : 'sticky',
             top: isMobile ? undefined : 80,
-            order: 2,
+            order: isMobile ? 1 : 2,
           }}
         >
           {/* Source image picker */}
@@ -4429,6 +4433,7 @@ function InspirationPreviewModal({
   const updateNoteMutation = useMutation({ mutationFn: updateNote })
   const [editingNote, setEditingNote] = useState(false)
   const [noteText, setNoteText] = useState('')
+  const isMobileModal = useMediaQuery('(max-width: 768px)')
 
   useEffect(() => {
     if (item) {
@@ -4462,7 +4467,8 @@ function InspirationPreviewModal({
     <Modal
       opened={!!item}
       onClose={onClose}
-      size="lg"
+      size={isMobileModal ? '100%' : 'lg'}
+      fullScreen={isMobileModal}
       radius="md"
       centered
       title="Inspiration"
@@ -4768,7 +4774,8 @@ function AddInspirationModal({
     <Modal
       opened={opened}
       onClose={handleClose}
-      size="xl"
+      size={isMobile ? '100%' : 'xl'}
+      fullScreen={isMobile}
       radius="md"
       title="Add inspiration"
       styles={{

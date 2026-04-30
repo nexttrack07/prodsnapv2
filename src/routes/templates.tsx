@@ -668,13 +668,15 @@ function TemplatePreviewModal({
   onClose: () => void
   onUseTemplate: () => void
 }) {
+  const isMobilePreview = useMediaQuery('(max-width: 768px)')
   if (!template) return null
 
   return (
     <Modal
       opened={!!template}
       onClose={onClose}
-      size="lg"
+      size={isMobilePreview ? '100%' : 'lg'}
+      fullScreen={isMobilePreview}
       radius="md"
       centered
       title="Template preview"

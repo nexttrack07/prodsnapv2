@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useConvexMutation } from '@convex-dev/react-query'
 import { notifications } from '@mantine/notifications'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   Box,
   Badge,
@@ -194,6 +195,7 @@ export function MarketingAnalysisPanel({
   onExploreAngle: (filters: TemplateFilters, angleIndex: number) => void
 }) {
   const submitAngle = useConvexMutation(api.angleGenerations.submitAngleGeneration)
+  const isMobile = useMediaQuery('(max-width: 768px)')
   const [angleGenState, setAngleGenState] = useState<{
     angleIndex: number
     angleTitle: string
@@ -246,7 +248,7 @@ export function MarketingAnalysisPanel({
                 p="lg"
                 style={{ background: 'rgba(255,255,255,0.02)' }}
               >
-                <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+                <Stack gap="md">
                   <Box style={{ flex: 1, minWidth: 200 }}>
                     <Group gap="sm" align="center">
                       <Text size="sm" fw={700} c="white">
@@ -268,12 +270,13 @@ export function MarketingAnalysisPanel({
                       "{angle.hook}"
                     </Text>
                   </Box>
-                  <Stack gap={6}>
+                  <Group gap={6} wrap={isMobile ? 'wrap' : 'nowrap'}>
                     <Button
-                      size="xs"
+                      size="sm"
                       variant="light"
                       color="brand"
                       leftSection={<IconSparkles size={12} />}
+                      fullWidth={isMobile}
                       onClick={() =>
                         setAngleGenState({ angleIndex: index, angleTitle: angle.title })
                       }
@@ -281,9 +284,10 @@ export function MarketingAnalysisPanel({
                       Generate visuals
                     </Button>
                     <Button
-                      size="xs"
+                      size="sm"
                       variant="default"
                       leftSection={<IconLayoutGrid size={12} />}
+                      fullWidth={isMobile}
                       onClick={() => {
                         const filters: TemplateFilters = {
                           ...(angle.tags
@@ -300,8 +304,8 @@ export function MarketingAnalysisPanel({
                     >
                       Explore templates
                     </Button>
-                  </Stack>
-                </Group>
+                  </Group>
+                </Stack>
               </Paper>
             ))}
           </Stack>

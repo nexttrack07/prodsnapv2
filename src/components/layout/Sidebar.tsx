@@ -6,6 +6,7 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
 import { UserButton } from '@clerk/react'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   Box,
   Center,
@@ -49,11 +50,12 @@ const SECONDARY_NAV: ReadonlyArray<NavItem> = [
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const billingStatus = useQuery(api.billing.syncPlan.getBillingStatus, {})
+  const isMobile = useMediaQuery('(max-width: 768px)')
 
   return (
-    <Stack h="100%" gap={0} justify="space-between" py="md" align="center">
-      <Stack gap="xs" align="center" w="100%">
-        <Center pb="sm">
+    <Stack h="100%" gap={0} justify="space-between" py="md" align={isMobile ? 'flex-start' : 'center'}>
+      <Stack gap="xs" align={isMobile ? 'flex-start' : 'center'} w="100%">
+        <Center pb="sm" w="100%" style={isMobile ? { justifyContent: 'flex-start', paddingLeft: 16 } : undefined}>
           <Tooltip label="Landing page" position="right">
             <UnstyledButton
               component={Link}
@@ -66,21 +68,21 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </Tooltip>
         </Center>
 
-        <Stack gap={6} align="center" w="100%" px={8}>
+        <Stack gap={6} align={isMobile ? 'flex-start' : 'center'} w="100%" px={8}>
           {PRIMARY_NAV.map((item) => (
-            <NavIcon key={item.label} item={item} onNavigate={onNavigate} />
+            <NavIcon key={item.label} item={item} onNavigate={onNavigate} isMobile={isMobile ?? false} />
           ))}
         </Stack>
       </Stack>
 
-      <Stack gap={6} align="center" w="100%" px={8}>
+      <Stack gap={6} align={isMobile ? 'flex-start' : 'center'} w="100%" px={8}>
         {SECONDARY_NAV.map((item) => (
-          <NavIcon key={item.label} item={item} onNavigate={onNavigate} />
+          <NavIcon key={item.label} item={item} onNavigate={onNavigate} isMobile={isMobile ?? false} />
         ))}
 
-        <CreditsIcon billingStatus={billingStatus ?? null} />
+        <CreditsIcon billingStatus={billingStatus ?? null} isMobile={isMobile ?? false} />
 
-        <Box pt={6}>
+        <Box pt={6} style={isMobile ? { paddingLeft: 4 } : undefined}>
           <UserButton
             appearance={{
               elements: {
@@ -97,9 +99,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 function NavIcon({
   item,
   onNavigate,
+  isMobile,
 }: {
   item: NavItem
   onNavigate?: () => void
+  isMobile: boolean
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const Icon = item.icon
@@ -109,12 +113,14 @@ function NavIcon({
     (item.to === '/home' ? pathname === '/home' : pathname.startsWith(item.to))
 
   const buttonStyle: React.CSSProperties = {
-    width: 40,
+    width: isMobile ? '100%' : 40,
     height: 40,
     borderRadius: 10,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: isMobile ? 'flex-start' : 'center',
+    gap: isMobile ? 10 : 0,
+    paddingLeft: isMobile ? 8 : 0,
     transition: 'background-color 120ms ease, color 120ms ease',
     backgroundColor: isActive ? 'var(--mantine-color-dark-6)' : 'transparent',
     color: item.disabled
@@ -130,12 +136,30 @@ function NavIcon({
   const inner = (
     <Box style={buttonStyle}>
       <Icon size={20} stroke={1.6} />
-      {isActive && (
+      {isMobile && (
+        <Text size="sm" fw={isActive ? 600 : 400} c="inherit" style={{ lineHeight: 1 }}>
+          {item.label}
+        </Text>
+      )}
+      {isActive && !isMobile && (
         <Box
           pos="absolute"
           left={-8}
           top={8}
           bottom={8}
+          w={3}
+          style={{
+            backgroundColor: 'var(--mantine-color-brand-5)',
+            borderRadius: 2,
+          }}
+        />
+      )}
+      {isActive && isMobile && (
+        <Box
+          pos="absolute"
+          left={0}
+          top={4}
+          bottom={4}
           w={3}
           style={{
             backgroundColor: 'var(--mantine-color-brand-5)',
@@ -152,8 +176,14 @@ function NavIcon({
         label={item.comingSoonNote ?? `${item.label} — coming soon`}
         position="right"
         offset={8}
+        disabled={isMobile}
       >
-        <UnstyledButton component="div" aria-disabled="true" aria-label={item.label}>
+        <UnstyledButton
+          component="div"
+          aria-disabled="true"
+          aria-label={item.label}
+          style={isMobile ? { width: '100%' } : undefined}
+        >
           {inner}
         </UnstyledButton>
       </Tooltip>
@@ -163,12 +193,13 @@ function NavIcon({
   if (!item.to) return null
 
   return (
-    <Tooltip label={item.label} position="right" offset={8}>
+    <Tooltip label={item.label} position="right" offset={8} disabled={isMobile}>
       <UnstyledButton
         component={Link}
         to={item.to}
         onClick={onNavigate}
         aria-label={item.label}
+        style={isMobile ? { width: '100%' } : undefined}
         styles={{
           root: {
             '&:hover > div': isActive
@@ -188,12 +219,14 @@ function NavIcon({
 
 function CreditsIcon({
   billingStatus,
+  isMobile,
 }: {
   billingStatus:
     | NonNullable<
         ReturnType<typeof useQuery<typeof api.billing.syncPlan.getBillingStatus>>
       >
     | null
+  isMobile: boolean
 }) {
   if (!billingStatus || !billingStatus.signedIn) return null
 
@@ -215,6 +248,7 @@ function CreditsIcon({
     <Tooltip
       position="right"
       offset={8}
+      disabled={isMobile}
       label={
         <Stack gap={2}>
           <Text size="xs" fw={600}>
@@ -236,17 +270,24 @@ function CreditsIcon({
         to="/account/billing"
         aria-label="Plan and credits"
         style={{
-          width: 40,
+          width: isMobile ? '100%' : 40,
           height: 40,
           borderRadius: 10,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          justifyContent: isMobile ? 'flex-start' : 'center',
+          gap: isMobile ? 10 : 0,
+          paddingLeft: isMobile ? 8 : 0,
           color: 'var(--mantine-color-brand-5)',
           backgroundColor: 'rgba(84, 116, 180, 0.10)',
         }}
       >
         <IconBolt size={18} stroke={1.6} />
+        {isMobile && (
+          <Text size="sm" fw={400} c="inherit" style={{ lineHeight: 1 }}>
+            {planName} · {creditsLeft} credits
+          </Text>
+        )}
       </UnstyledButton>
     </Tooltip>
   )
