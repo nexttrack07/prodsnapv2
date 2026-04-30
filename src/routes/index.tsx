@@ -17,26 +17,19 @@ import {
 } from '@mantine/core'
 import {
   IconArrowRight,
-  IconBlockquote,
   IconBolt,
-  IconBookmark,
   IconBrain,
   IconDownload,
-  IconEqual,
   IconEraser,
   IconLayersIntersect,
-  IconLibrary,
   IconPalette,
   IconPhotoSpark,
   IconPhotoUp,
-  IconShape3,
   IconSparkles,
   IconStack2,
   IconStarFilled,
   IconTemplate,
-  IconTextSize,
   IconWand,
-  IconX,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import { HeroMediaFlow } from '~/components/landing/HeroMediaFlow'
@@ -57,7 +50,6 @@ export const Route = createFileRoute('/')({
 })
 
 const templateLibraryShot = '/landing/shots/template-library.png'
-const generatedResultsShot = '/landing/shots/generated-results.png'
 const variationDrawerShot = '/landing/shots/variation-drawer-controls.png'
 const heroProductShot = '/landing/shots/hero-product-toiletry-bag-no-bg.png'
 const heroTemplateShot = '/landing/shots/hero-template-selection.png'
@@ -65,12 +57,6 @@ const heroVariationShots = [
   '/landing/shots/hero-variation-exact-a.png',
   '/landing/shots/hero-variation-exact-b.png',
   '/landing/shots/hero-variation-variation.png',
-]
-
-const aspectRatios = [
-  { label: '1:1', meaning: 'Feed' },
-  { label: '4:5', meaning: 'Feed vertical' },
-  { label: '9:16', meaning: 'Stories & Reels' },
 ]
 
 const generationPaths = [
@@ -94,24 +80,6 @@ const generationPaths = [
   },
 ]
 
-const iterationAxes = [
-  {
-    title: 'Just the text',
-    description: 'New headlines, body copy, and messaging. Keep the visual identical.',
-    icon: IconTextSize,
-  },
-  {
-    title: 'Just the icons',
-    description: 'Replace badges, callouts, and decorative graphics. Preserve the layout.',
-    icon: IconShape3,
-  },
-  {
-    title: 'Just the colors',
-    description: 'Adjust palette and tone. Keep the composition you already approved.',
-    icon: IconPalette,
-  },
-]
-
 const includedFeatures = [
   {
     title: 'Background removal',
@@ -126,22 +94,10 @@ const includedFeatures = [
     icon: IconPhotoUp,
   },
   {
-    title: 'Per-product brand kits',
-    description:
-      "Colors, fonts, voice — per product. Useful when you're running multiple brands or running ads for clients.",
-    icon: IconPalette,
-  },
-  {
     title: 'Native ad formats',
     description:
       'Download every output as PNG, WebP, or JPG — ready for Meta Ads Manager out of the box.',
     icon: IconDownload,
-  },
-  {
-    title: 'Two AI models',
-    description:
-      'Pick nano-banana-2 (fast, default) or gpt-image-2 (higher quality, slower) per generation.',
-    icon: IconBolt,
   },
 ]
 
@@ -299,7 +255,8 @@ function Home() {
 
   return (
     <Box className="landing-page">
-      {/* Hero */}
+
+      {/* ── 1. Hero ──────────────────────────────────────────────────── */}
       <Box component="section" className="landing-shell landing-hero-shell">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48} className="landing-hero-grid">
@@ -313,8 +270,7 @@ function Home() {
                   Three paths to a winning ad. One product photo. One click.
                 </Title>
                 <Text className="landing-subtitle">
-                  Templates. Custom prompts. Marketing angles. Pick your path, drop your product in, and ship
-                  Meta-ready creative in 1:1, 4:5, 9:16 — without leaving the tab.
+                  Templates, custom prompts, and marketing angles — all Meta-ready in 1:1, 4:5, and 9:16.
                 </Text>
               </Stack>
 
@@ -349,7 +305,7 @@ function Home() {
         </Container>
       </Box>
 
-      {/* Three paths section */}
+      {/* ── 2. Three paths cards ─────────────────────────────────────── */}
       <Box component="section" className="landing-shell landing-band-alt">
         <Container size="xl">
           <Stack gap="md" mb="xl" maw={760}>
@@ -360,8 +316,8 @@ function Home() {
               Pick a path. Any path. They all ship Meta-ready creative.
             </Title>
             <Text className="landing-section-copy">
-              Most tools give you one generation mode. ProdSnap gives you three — each built for a different
-              job. Start with the one that fits how you think today.
+              Most tools give you one generation mode. ProdSnap gives you three — each built for a
+              different job.
             </Text>
           </Stack>
 
@@ -383,39 +339,99 @@ function Home() {
         </Container>
       </Box>
 
-      {/* Strategy / angles section */}
+      {/* ── 3. Templates ─────────────────────────────────────────────── */}
       <Box component="section" className="landing-shell">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
-            <Stack gap="lg">
-              <Badge variant="light" color="grape" radius="xl" w="fit-content">
-                Marketing strategy
-              </Badge>
+            <Stack gap="lg" justify="center">
               <Title order={2} className="landing-section-title">
-                Generate against a media buyer's angle.
+                Stop staring at the blank page.
               </Title>
-              <Text className="landing-section-copy">
-                We analyze your product and surface 3–5 distinct angles a media buyer would test. Pick one
-                and generate ads tuned for that angle — without writing a single brief.
+              <Text size="lg" c="dark.1" mt={4}>
+                Start with what's already winning.
               </Text>
-              <Stack gap="md" mt="xs">
-                <Box>
-                  <Text size="sm" fw={700} c="white">Comparison</Text>
-                  <Text mt={4} size="sm" c="dark.1">Position your product against the category norm or a named alternative.</Text>
-                </Box>
-                <Box>
-                  <Text size="sm" fw={700} c="white">Curiosity</Text>
-                  <Text mt={4} size="sm" c="dark.1">Lead with an intriguing hook that makes the scroll stop.</Text>
-                </Box>
-                <Box>
-                  <Text size="sm" fw={700} c="white">Social Proof</Text>
-                  <Text mt={4} size="sm" c="dark.1">Lead with results, numbers, and customer language.</Text>
-                </Box>
-                <Box>
-                  <Text size="sm" fw={700} c="white">Problem Callout</Text>
-                  <Text mt={4} size="sm" c="dark.1">Name the pain, then frame your product as the obvious fix.</Text>
-                </Box>
-              </Stack>
+              <Text className="landing-section-copy">
+                Hundreds of curated Facebook ad templates, searchable by category, style, setting,
+                and angle. Pick up to three per batch.
+              </Text>
+              <Box>
+                <Button
+                  component={Link}
+                  to="/templates"
+                  variant="default"
+                  rightSection={<IconArrowRight size={16} />}
+                >
+                  Browse the library →
+                </Button>
+              </Box>
+            </Stack>
+
+            <Image
+              src={templateLibraryShot}
+              alt="ProdSnap template library"
+              radius="md"
+            />
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* ── 4. Custom prompts ────────────────────────────────────────── */}
+      <Box component="section" className="landing-shell landing-band-alt">
+        <Container size="xl">
+          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
+            <Stack gap="lg" justify="center">
+              <Title order={2} className="landing-section-title">
+                Stop fighting prompt engineering.
+              </Title>
+              <Text size="lg" c="dark.1" mt={4}>
+                Tell us what you want, in plain English.
+              </Text>
+              <Text className="landing-section-copy">
+                Build a prompt with smart chips, or get AI suggestions tailored to your product.
+                No prompt-tuning required.
+              </Text>
+              <Box>
+                <Button
+                  component={Link}
+                  to="/home"
+                  variant="default"
+                  rightSection={<IconArrowRight size={16} />}
+                >
+                  Try a custom prompt →
+                </Button>
+              </Box>
+            </Stack>
+
+            <PlaceholderShot label="Custom prompt builder with AI suggestions" />
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* ── 5. Marketing angles ──────────────────────────────────────── */}
+      <Box component="section" className="landing-shell">
+        <Container size="xl">
+          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
+            <Stack gap="lg" justify="center">
+              <Title order={2} className="landing-section-title">
+                Stop guessing the angle.
+              </Title>
+              <Text size="lg" c="dark.1" mt={4}>
+                We extract them for you.
+              </Text>
+              <Text className="landing-section-copy">
+                ProdSnap analyzes your product and surfaces the angles a media buyer would test —
+                Comparison, Curiosity, Social Proof, Problem Callout. Pick one and generate.
+              </Text>
+              <Box>
+                <Button
+                  component={Link}
+                  to="/home"
+                  variant="default"
+                  rightSection={<IconArrowRight size={16} />}
+                >
+                  See how angles work →
+                </Button>
+              </Box>
             </Stack>
 
             <PlaceholderShot label="Strategy panel: extracted angles for a product" />
@@ -423,38 +439,31 @@ function Home() {
         </Container>
       </Box>
 
-      {/* Voice of customer section */}
+      {/* ── 6. Voice of customer ─────────────────────────────────────── */}
       <Box component="section" className="landing-shell landing-band-alt">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
-            <Stack gap="lg">
-              <Badge variant="light" color="orange" radius="xl" w="fit-content">
-                Voice of customer
-              </Badge>
+            <Stack gap="lg" justify="center">
               <Title order={2} className="landing-section-title">
-                Ad copy that sounds like your customer, not like an AI.
+                Stop sounding like AI.
               </Title>
-              <Text className="landing-section-copy">
-                Paste reviews. Type the phrases your customers actually use. ProdSnap captures them per
-                product and turns them into ad copy that speaks the language your buyer already trusts.
+              <Text size="lg" c="dark.1" mt={4}>
+                Sound like your customers.
               </Text>
-              <Stack gap="xs">
-                <Group gap="xs" align="center">
-                  <IconBlockquote size={16} color="var(--mantine-color-orange-4)" />
-                  <Text size="sm" c="dark.1">"Works better than anything I've tried"</Text>
-                </Group>
-                <Group gap="xs" align="center">
-                  <IconBlockquote size={16} color="var(--mantine-color-orange-4)" />
-                  <Text size="sm" c="dark.1">"Finally doesn't smell like chemicals"</Text>
-                </Group>
-                <Group gap="xs" align="center">
-                  <IconBlockquote size={16} color="var(--mantine-color-orange-4)" />
-                  <Text size="sm" c="dark.1">"My kids actually eat it"</Text>
-                </Group>
-                <Text size="xs" c="dark.3" mt="xs">
-                  Real phrases captured per product → fed into every generation.
-                </Text>
-              </Stack>
+              <Text className="landing-section-copy">
+                Paste real reviews, testimonials, and the phrases your customers actually use.
+                ProdSnap weaves them into the ad copy.
+              </Text>
+              <Box>
+                <Button
+                  component={Link}
+                  to="/home"
+                  variant="default"
+                  rightSection={<IconArrowRight size={16} />}
+                >
+                  Capture customer language →
+                </Button>
+              </Box>
             </Stack>
 
             <PlaceholderShot label="Customer voice: real phrases captured per product" />
@@ -462,42 +471,31 @@ function Home() {
         </Container>
       </Box>
 
-      {/* Inspiration / swipe file section */}
+      {/* ── 7. Inspiration / swipe file ──────────────────────────────── */}
       <Box component="section" className="landing-shell">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
-            <Stack gap="lg">
-              <Badge variant="light" color="cyan" radius="xl" w="fit-content">
-                Swipe file
-              </Badge>
+            <Stack gap="lg" justify="center">
               <Title order={2} className="landing-section-title">
-                Save what's winning. Generate in that direction.
+                Stop reinventing the wheel.
               </Title>
-              <Text className="landing-section-copy">
-                Save the ads that work — from our template library or any URL. We use them as visual
-                references when you generate, so the output rhymes with what's already winning in
-                your category.
+              <Text size="lg" c="dark.1" mt={4}>
+                Save what works. We riff on it.
               </Text>
-              <Stack gap="sm">
-                <Group gap="sm" align="center">
-                  <ThemeIcon size={32} radius="md" color="cyan" variant="light">
-                    <IconBookmark size={16} />
-                  </ThemeIcon>
-                  <Text size="sm" c="dark.1">Save templates directly from the library</Text>
-                </Group>
-                <Group gap="sm" align="center">
-                  <ThemeIcon size={32} radius="md" color="cyan" variant="light">
-                    <IconBookmark size={16} />
-                  </ThemeIcon>
-                  <Text size="sm" c="dark.1">Paste any competitor or reference URL</Text>
-                </Group>
-                <Group gap="sm" align="center">
-                  <ThemeIcon size={32} radius="md" color="cyan" variant="light">
-                    <IconBookmark size={16} />
-                  </ThemeIcon>
-                  <Text size="sm" c="dark.1">Per-product — each product has its own swipe file</Text>
-                </Group>
-              </Stack>
+              <Text className="landing-section-copy">
+                Bookmark proven ads from our library or paste competitor URLs. We use them as
+                visual references when you generate, so output rhymes with what already works.
+              </Text>
+              <Box>
+                <Button
+                  component={Link}
+                  to="/home"
+                  variant="default"
+                  rightSection={<IconArrowRight size={16} />}
+                >
+                  Build your swipe file →
+                </Button>
+              </Box>
             </Stack>
 
             <PlaceholderShot label="Inspiration: saved templates and competitor URLs" />
@@ -505,8 +503,8 @@ function Home() {
         </Container>
       </Box>
 
-      {/* Template feed marquee */}
-      <Box component="section" className="landing-shell landing-rail-shell">
+      {/* ── 8. Template marquee ──────────────────────────────────────── */}
+      <Box component="section" className="landing-shell landing-rail-shell landing-band-alt">
         <Container size="xl">
           <Stack gap="md" mb="xl" maw={760}>
             <Group gap="sm">
@@ -523,9 +521,8 @@ function Home() {
               A curated wall of proven ad directions.
             </Title>
             <Text className="landing-section-copy">
-              Skip the guesswork. Every template is hand-picked from Facebook ads that have already proven themselves
-              in the wild. Search and filter by category, style, setting, or aspect ratio — then pick up to three
-              templates per batch and generate.
+              Every template is hand-picked from Facebook ads that have already proven themselves.
+              Search by category, style, setting, or aspect ratio — then pick up to three per batch.
             </Text>
           </Stack>
 
@@ -547,124 +544,31 @@ function Home() {
         </Container>
       </Box>
 
-      {/* One photo. Three templates. Twelve ads. */}
-      <Box component="section" className="landing-shell landing-band-alt">
-        <Container size="xl">
-          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
-            <Stack gap="lg">
-              <Badge variant="light" color="lime" radius="xl" w="fit-content">
-                One click
-              </Badge>
-              <Title order={2} className="landing-section-title">
-                One photo. Three templates. Twelve ads.
-              </Title>
-              <Text className="landing-section-copy">
-                Pick up to three templates per batch and choose 1–4 variations per template. That's up to twelve
-                distinct ad concepts in a single generation — without rebuilding the creative direction once.
-              </Text>
-
-              <Group gap="sm" wrap="nowrap" align="center">
-                <Paper
-                  className="landing-proof-card"
-                  withBorder
-                  radius="md"
-                  p="sm"
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    minHeight: 'auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text size="xl" fw={700} c="white">3</Text>
-                  <Text size="xs" tt="uppercase" fw={700} c="dark.2" mt={4}>
-                    Templates
-                  </Text>
-                </Paper>
-                <IconX size={20} stroke={2.5} color="var(--mantine-color-dark-2)" />
-                <Paper
-                  className="landing-proof-card"
-                  withBorder
-                  radius="md"
-                  p="sm"
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    minHeight: 'auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text size="xl" fw={700} c="white">4</Text>
-                  <Text size="xs" tt="uppercase" fw={700} c="dark.2" mt={4}>
-                    Variants
-                  </Text>
-                </Paper>
-                <IconEqual size={20} stroke={2.5} color="var(--mantine-color-dark-2)" />
-                <Paper
-                  className="landing-proof-card"
-                  withBorder
-                  radius="md"
-                  p="sm"
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    minHeight: 'auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text size="xl" fw={700} c="white">12</Text>
-                  <Text size="xs" tt="uppercase" fw={700} c="dark.2" mt={4}>
-                    Ads
-                  </Text>
-                </Paper>
-              </Group>
-            </Stack>
-
-            <Image
-              src={generatedResultsShot}
-              alt="Twelve ad variations generated from one product photo and three templates"
-              radius="md"
-            />
-          </SimpleGrid>
-        </Container>
-      </Box>
-
-      {/* Surgical iteration */}
+      {/* ── 9. Surgical iteration ────────────────────────────────────── */}
       <Box component="section" className="landing-shell">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
-            <Stack gap="lg">
-              <Badge variant="outline" color="gray" radius="xl" w="fit-content">
-                Surgical iteration
-              </Badge>
+            <Stack gap="lg" justify="center">
               <Title order={2} className="landing-section-title">
-                Change what's not working. Keep what is.
+                Stop regenerating and praying.
               </Title>
-              <Text className="landing-section-copy">
-                Found an output that's almost right? Tell us exactly what to vary — and we preserve everything else.
-                No "regenerate everything and pray" loop.
+              <Text size="lg" c="dark.1" mt={4}>
+                Change one thing at a time.
               </Text>
-              <Stack gap="md" mt="xs">
-                {iterationAxes.map(({ title, description }) => (
-                  <Box key={title}>
-                    <Text size="sm" fw={700} c="white">
-                      {title}
-                    </Text>
-                    <Text mt={4} size="sm" c="dark.1">
-                      {description}
-                    </Text>
-                  </Box>
-                ))}
-              </Stack>
+              <Text className="landing-section-copy">
+                Found an output that's almost right? Tell us exactly what to vary — just the text,
+                just the icons, just the colors — and we lock everything else.
+              </Text>
+              <Box>
+                <Button
+                  component={Link}
+                  to="/home"
+                  variant="default"
+                  rightSection={<IconArrowRight size={16} />}
+                >
+                  See how it works →
+                </Button>
+              </Box>
             </Stack>
 
             <Box mx="auto" maw={320}>
@@ -678,41 +582,31 @@ function Home() {
         </Container>
       </Box>
 
-      {/* Library + Winners section */}
+      {/* ── 10. Library + Winners ────────────────────────────────────── */}
       <Box component="section" className="landing-shell landing-band-alt">
         <Container size="xl">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
-            <Stack gap="lg">
-              <Badge variant="light" color="yellow" radius="xl" w="fit-content">
-                Library
-              </Badge>
+            <Stack gap="lg" justify="center">
               <Title order={2} className="landing-section-title">
-                Star winners. Filter by them. Iterate on what works.
+                Stop losing track of winners.
               </Title>
-              <Text className="landing-section-copy">
-                Every generation lands in your cross-product library. Star the winners, filter by winners,
-                iterate on what works. The full ship→tag→iterate loop — in one place.
+              <Text size="lg" c="dark.1" mt={4}>
+                Tag, filter, iterate.
               </Text>
-              <Stack gap="sm">
-                <Group gap="sm" align="center">
-                  <ThemeIcon size={32} radius="md" color="yellow" variant="light">
-                    <IconLibrary size={16} />
-                  </ThemeIcon>
-                  <Text size="sm" c="dark.1">All generations across all products in one view</Text>
-                </Group>
-                <Group gap="sm" align="center">
-                  <ThemeIcon size={32} radius="md" color="yellow" variant="light">
-                    <IconStarFilled size={16} />
-                  </ThemeIcon>
-                  <Text size="sm" c="dark.1">Star winners and filter to only see them</Text>
-                </Group>
-                <Group gap="sm" align="center">
-                  <ThemeIcon size={32} radius="md" color="yellow" variant="light">
-                    <IconLayersIntersect size={16} />
-                  </ThemeIcon>
-                  <Text size="sm" c="dark.1">Iterate on any starred ad without starting from scratch</Text>
-                </Group>
-              </Stack>
+              <Text className="landing-section-copy">
+                Every generation lands in your cross-product library. Star the winners, filter by
+                them, build on what's already converting.
+              </Text>
+              <Box>
+                <Button
+                  component={Link}
+                  to="/home"
+                  variant="default"
+                  rightSection={<IconArrowRight size={16} />}
+                >
+                  See the library →
+                </Button>
+              </Box>
             </Stack>
 
             <PlaceholderShot label="Generation library with starred winners" ratio="16 / 10" />
@@ -720,7 +614,84 @@ function Home() {
         </Container>
       </Box>
 
-      {/* Included */}
+      {/* ── 11. Multi-brand ──────────────────────────────────────────── */}
+      <Box component="section" className="landing-shell">
+        <Container size="xl">
+          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={48} verticalSpacing={48}>
+            <Stack gap="lg" justify="center">
+              <Title order={2} className="landing-section-title">
+                Stop adapting one brand at a time.
+              </Title>
+              <Text size="lg" c="dark.1" mt={4}>
+                Brand kit per product.
+              </Text>
+              <Text className="landing-section-copy">
+                Run multiple brands? Each product gets its own colors, fonts, and voice. Switch
+                contexts without losing settings.
+              </Text>
+              <Box>
+                <Button
+                  component={Link}
+                  to="/home"
+                  variant="default"
+                  rightSection={<IconArrowRight size={16} />}
+                >
+                  See multi-brand →
+                </Button>
+              </Box>
+            </Stack>
+
+            <PlaceholderShot label="Brand kit picker" />
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* ── 12. Two AI models ────────────────────────────────────────── */}
+      <Box component="section" className="landing-shell landing-band-alt">
+        <Container size="xl">
+          <Stack gap="md" mb="xl" maw={760}>
+            <Title order={2} className="landing-section-title">
+              Stop choosing between fast and beautiful.
+            </Title>
+            <Text size="lg" c="dark.1" mt={4}>
+              Pick your model per generation.
+            </Text>
+          </Stack>
+
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" maw={640}>
+            <Paper className="landing-feature-card" withBorder radius="md" p="xl">
+              <ThemeIcon size={44} radius="md" color="teal" variant="light">
+                <IconBolt size={20} />
+              </ThemeIcon>
+              <Text mt="lg" size="lg" fw={600} c="white">
+                nano-banana-2
+              </Text>
+              <Text mt={4} size="xs" tt="uppercase" fw={700} c="teal.4">
+                Fast · Default
+              </Text>
+              <Text mt="sm" size="sm" c="dark.2">
+                Snappy generations for iteration and testing. Ship volume, find the winner.
+              </Text>
+            </Paper>
+            <Paper className="landing-feature-card" withBorder radius="md" p="xl">
+              <ThemeIcon size={44} radius="md" color="grape" variant="light">
+                <IconSparkles size={20} />
+              </ThemeIcon>
+              <Text mt="lg" size="lg" fw={600} c="white">
+                gpt-image-2
+              </Text>
+              <Text mt={4} size="xs" tt="uppercase" fw={700} c="grape.4">
+                High quality · Slower
+              </Text>
+              <Text mt="sm" size="sm" c="dark.2">
+                When fidelity matters — hero shots, launch creative, or anything client-facing.
+              </Text>
+            </Paper>
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* ── 13. Included ─────────────────────────────────────────────── */}
       <Box component="section" className="landing-shell">
         <Container size="xl">
           <Stack gap="md" mb="xl" maw={760}>
@@ -731,8 +702,8 @@ function Home() {
               The little things that usually cost extra.
             </Title>
             <Text className="landing-section-copy">
-              No upsells, no separate tools. Background removal, brand kits, multi-image management,
-              and Meta-ready exports come with every plan.
+              No upsells, no separate tools. Background removal, multi-image management, and
+              Meta-ready exports come with every plan.
             </Text>
           </Stack>
 
@@ -754,7 +725,7 @@ function Home() {
         </Container>
       </Box>
 
-      {/* How it works */}
+      {/* ── 14. How it works ─────────────────────────────────────────── */}
       <Box component="section" className="landing-shell landing-band-alt">
         <Container size="xl">
           <Stack gap="md" mb="xl" maw={760}>
@@ -789,7 +760,7 @@ function Home() {
         </Container>
       </Box>
 
-      {/* FAQs */}
+      {/* ── 15. FAQs ─────────────────────────────────────────────────── */}
       <Box component="section" className="landing-shell">
         <Container size="md">
           <Stack gap="md" mb="xl">
@@ -816,7 +787,7 @@ function Home() {
         </Container>
       </Box>
 
-      {/* Final CTA */}
+      {/* ── 16. Final CTA ────────────────────────────────────────────── */}
       <Box component="section" className="landing-shell landing-cta-band">
         <Container size="lg">
           <Stack align="center" ta="center" gap="lg">
@@ -824,11 +795,14 @@ function Home() {
               Ready to ship
             </Badge>
             <Title order={2} className="landing-cta-title">
-              Stop staring at the blank page. Start with what's already winning.
+              Stop staring at the blank page.
             </Title>
-            <Text className="landing-section-copy" maw={680}>
-              Pick a path — templates, custom prompt, or marketing angle. Drop your product in, generate
-              up to twelve ad variants, star the winners, and iterate. All in one tab.
+            <Text size="lg" c="dark.1">
+              Start with what's already winning.
+            </Text>
+            <Text className="landing-section-copy" maw={560}>
+              Pick a path, drop your product in, generate up to twelve ad variants, star the
+              winners, and iterate. All in one tab.
             </Text>
             <Stack align="center" gap="xs">
               <Group gap="md">
@@ -853,6 +827,7 @@ function Home() {
           </Stack>
         </Container>
       </Box>
+
     </Box>
   )
 }
