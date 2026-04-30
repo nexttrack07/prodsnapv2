@@ -27,6 +27,10 @@ import { Footer } from '../Footer'
 export function MarketingLayout({ children }: { children: React.ReactNode }) {
   const [mobileNavOpened, { toggle: toggleMobileNav, close: closeMobileNav }] =
     useDisclosure(false)
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // The landing page (/) renders its own footer that's part of the design;
+  // skip the shared MarketingLayout footer there to avoid duplication.
+  const renderSharedFooter = pathname !== '/'
 
   return (
     <>
@@ -84,7 +88,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
         <AppShell.Main>{children}</AppShell.Main>
       </AppShell>
 
-      <Footer />
+      {renderSharedFooter && <Footer />}
 
       <Drawer
         opened={mobileNavOpened}
