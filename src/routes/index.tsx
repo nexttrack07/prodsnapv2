@@ -1698,7 +1698,9 @@ function LandingFooter() {
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '48px 32px 32px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 32, marginBottom: 40 }}>
           <div>
-            <LogoMark size="sm" />
+            <span style={{ display: 'inline-block' }}>
+              <LogoMark size="sm" />
+            </span>
             <div style={{ fontFamily: fontBody, fontSize: 14, color: T.textDim, marginTop: 16, maxWidth: 280, lineHeight: 1.5 }}>
               Performance creative co-pilot for media buyers and small agencies running multiple brands.
             </div>
