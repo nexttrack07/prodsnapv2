@@ -105,41 +105,6 @@ function Pill({ children, color, bg, style }: { children: React.ReactNode; color
   )
 }
 
-// Striped image placeholder
-function ImgPh({ label, ratio = 1, h, w = '100%', style, theme = 'dark', children, tag }: {
-  label?: string; ratio?: number; h?: string | number; w?: string; style?: React.CSSProperties; theme?: 'dark' | 'light'; children?: React.ReactNode; tag?: string
-}) {
-  const aspect = h ? undefined : { aspectRatio: String(ratio) }
-  const stripes = theme === 'dark'
-    ? 'repeating-linear-gradient(135deg, rgba(255,255,255,0.018) 0 18px, rgba(255,255,255,0.04) 18px 36px)'
-    : 'repeating-linear-gradient(135deg, rgba(0,0,0,0.03) 0 18px, rgba(0,0,0,0.06) 18px 36px)'
-  const base = theme === 'dark' ? '#15181D' : '#F1F3F5'
-  const txt = theme === 'dark' ? T.textDim : T.textOnCreamMuted
-  return (
-    <div style={{
-      width: w,
-      height: h,
-      ...aspect,
-      background: `${stripes}, ${base}`,
-      borderRadius: 6,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: fontMono,
-      fontSize: 10,
-      letterSpacing: '0.06em',
-      color: txt,
-      position: 'relative',
-      overflow: 'hidden',
-      border: theme === 'dark' ? `1px solid ${T.border}` : `1px solid ${T.borderCream}`,
-      ...style,
-    }}>
-      {tag && <div style={{ position: 'absolute', top: 6, left: 6, fontSize: 9, padding: '2px 6px', background: theme === 'dark' ? '#0B0D10cc' : '#fff', border: `1px solid ${theme === 'dark' ? T.border : T.borderCream}`, borderRadius: 4 }}>{tag}</div>}
-      {label && <span style={{ textTransform: 'uppercase', opacity: 0.7 }}>{label}</span>}
-      {children}
-    </div>
-  )
-}
 
 function Btn({ children, kind = 'primary', size = 'md', style, icon }: {
   children: React.ReactNode; kind?: 'primary' | 'secondary' | 'secondaryCream' | 'ghost' | 'light'; size?: 'sm' | 'md' | 'lg'; style?: React.CSSProperties; icon?: React.ReactNode
@@ -179,38 +144,28 @@ function Btn({ children, kind = 'primary', size = 'md', style, icon }: {
 // ============================================================
 // Ad thumbnail mock for hero
 // ============================================================
+const adThumbColors: Record<'a' | 'b' | 'c' | 'd', { bg: string; fg: string }> = {
+  a: { bg: 'E5E7EB', fg: '0B0D10' },
+  b: { bg: '0F1216', fg: 'FFFFFF' },
+  c: { bg: 'FFFFFF', fg: '0B0D10' },
+  d: { bg: '1A1A1A', fg: 'FFFFFF' },
+}
 function AdThumb({ label, kind }: { label?: string; kind: 'a' | 'b' | 'c' | 'd' }) {
-  const palettes = {
-    a: { bg: '#E5E7EB', fg: '#0B0D10', accent: '#374151' },
-    b: { bg: '#0F1216', fg: '#FFFFFF', accent: T.brand },
-    c: { bg: '#FFFFFF', fg: '#0B0D10', accent: T.teal },
-    d: { bg: '#1A1A1A', fg: '#FFFFFF', accent: '#1d72fe' },
-  }
-  const p = palettes[kind] || palettes.a
+  const p = adThumbColors[kind] || adThumbColors.a
+  const text = label ? label.replace(/#/, 'Ad+') : 'Ad'
   return (
-    <div style={{
-      width: '100%',
-      aspectRatio: '1',
-      background: p.bg,
-      borderRadius: 8,
-      border: `1px solid ${T.border}`,
-      padding: 10,
-      boxSizing: 'border-box',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'space-between',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ width: 18, height: 18, borderRadius: 4, background: p.accent }} />
-        {label && <div style={{ fontFamily: fontMono, fontSize: 8, color: p.fg, opacity: 0.6 }}>{label}</div>}
-      </div>
-      <div>
-        <div style={{ width: '70%', height: 6, background: p.fg, opacity: 0.85, marginBottom: 4, borderRadius: 2 }} />
-        <div style={{ width: '40%', height: 4, background: p.fg, opacity: 0.4, borderRadius: 2 }} />
-      </div>
-    </div>
+    <img
+      src={`https://placehold.co/200x200/${p.bg}/${p.fg}?text=${text}`}
+      alt={label || 'Ad thumbnail'}
+      style={{
+        width: '100%',
+        aspectRatio: '1',
+        objectFit: 'cover',
+        borderRadius: 8,
+        border: `1px solid ${T.border}`,
+        display: 'block',
+      }}
+    />
   )
 }
 
@@ -286,7 +241,18 @@ function Hero() {
               padding: 14,
               position: 'relative',
             }}>
-              <ImgPh h="100%" theme="dark" label="product shot" />
+              <img
+                src="https://placehold.co/600x600/15181D/6B7079?text=Product+Shot"
+                alt="Product shot"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: 6,
+                  border: `1px solid ${T.border}`,
+                  display: 'block',
+                }}
+              />
               <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14, padding: '8px 10px', background: '#0B0D10ee', borderRadius: 6, border: `1px solid ${T.border}`, fontFamily: fontMono, fontSize: 10, color: T.textMuted }}>
                 <div style={{ color: T.teal }}>✓ background removed</div>
                 <div>✓ analyzed · "ceramic matcha whisk"</div>
@@ -431,9 +397,19 @@ function LoopSection() {
             >
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
                 {[0,1,2,3,4,5].map(i => (
-                  <div key={i} style={{ aspectRatio: '1', borderRadius: 4, background: i % 3 === 0 ? '#D1D5DB' : '#E5E7EB', border: `1px solid ${T.borderCream}`, position: 'relative' }}>
-                    {i === 0 && <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(135deg, transparent 0 4px, rgba(0,0,0,0.04) 4px 8px)' }}/>}
-                  </div>
+                  <img
+                    key={i}
+                    src={`https://placehold.co/120x120/${i % 3 === 0 ? 'D1D5DB' : 'E5E7EB'}/5A6068?text=Ref+${i+1}`}
+                    alt={`Reference ${i+1}`}
+                    style={{
+                      width: '100%',
+                      aspectRatio: '1',
+                      objectFit: 'cover',
+                      borderRadius: 4,
+                      border: `1px solid ${T.borderCream}`,
+                      display: 'block',
+                    }}
+                  />
                 ))}
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -479,18 +455,19 @@ function LoopSection() {
             >
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
                 {[true, false, false, true].map((star, i) => (
-                  <div key={i} style={{
-                    aspectRatio: '1',
-                    borderRadius: 4,
-                    background: star ? '#0F1216' : '#E5E7EB',
-                    border: `1px solid ${star ? T.brand : T.borderCream}`,
-                    position: 'relative',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    {star && <span style={{ fontSize: 16, color: T.teal }}>★</span>}
-                  </div>
+                  <img
+                    key={i}
+                    src={`https://placehold.co/120x120/${star ? '0F1216' : 'E5E7EB'}/${star ? '5FB8A6' : '5A6068'}?text=${star ? 'Winner' : 'Ad'}`}
+                    alt={star ? 'Winner ad' : 'Ad thumbnail'}
+                    style={{
+                      width: '100%',
+                      aspectRatio: '1',
+                      objectFit: 'cover',
+                      borderRadius: 4,
+                      border: `1px solid ${star ? T.brand : T.borderCream}`,
+                      display: 'block',
+                    }}
+                  />
                 ))}
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -775,26 +752,26 @@ function OnrampsSection() {
           >
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
               {[
-                { bg: '#E5E7EB', accent: '#374151' },
-                { bg: '#0F1216', accent: T.teal },
-                { bg: '#FFFFFF', accent: T.brand },
-                { bg: '#1A1A1A', accent: '#1d72fe' },
-                { bg: '#0F1216', accent: '#374151' },
-                { bg: '#E5E7EB', accent: T.brand },
+                { bg: 'E5E7EB', fg: '374151' },
+                { bg: '0F1216', fg: '5FB8A6' },
+                { bg: 'FFFFFF', fg: '0063ff' },
+                { bg: '1A1A1A', fg: '1d72fe' },
+                { bg: '0F1216', fg: '374151' },
+                { bg: 'E5E7EB', fg: '0063ff' },
               ].map((p, i) => (
-                <div key={i} style={{
-                  aspectRatio: '1',
-                  background: p.bg,
-                  border: `1px solid ${T.borderCream}`,
-                  borderRadius: 4,
-                  padding: 6,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                }}>
-                  <div style={{ width: 12, height: 12, background: p.accent, borderRadius: 2 }}/>
-                  <div style={{ width: '70%', height: 3, background: p.bg === '#0F1216' || p.bg === '#1A1A1A' ? '#FFFFFF' : '#0B0D10', borderRadius: 1 }}/>
-                </div>
+                <img
+                  key={i}
+                  src={`https://placehold.co/120x120/${p.bg}/${p.fg}?text=Template+${i+1}`}
+                  alt={`Template ${i+1}`}
+                  style={{
+                    width: '100%',
+                    aspectRatio: '1',
+                    objectFit: 'cover',
+                    borderRadius: 4,
+                    border: `1px solid ${T.borderCream}`,
+                    display: 'block',
+                  }}
+                />
               ))}
             </div>
             <div style={{ marginTop: 12, padding: 10, background: '#fff', border: `1px solid ${T.borderCream}`, borderRadius: 6, display: 'flex', gap: 6, alignItems: 'center', fontFamily: fontMono, fontSize: 11, color: T.textOnCreamMuted }}>
@@ -1225,24 +1202,18 @@ function SurgicalSection() {
             {/* Source */}
             <div>
               <MonoLabel style={{ display: 'block', marginBottom: 10 }}>source · winner #08</MonoLabel>
-              <div style={{
-                aspectRatio: '1',
-                borderRadius: 10,
-                background: '#0F1216',
-                border: `1px solid ${T.border}`,
-                padding: 18,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                position: 'relative',
-              }}>
-                <div style={{ width: 28, height: 28, borderRadius: 6, background: T.brand }} />
-                <div>
-                  <div style={{ fontFamily: fontDisplay, fontSize: 18, color: '#FFFFFF', fontWeight: 600, lineHeight: 1.1, letterSpacing: '-0.01em' }}>Worth buying twice.</div>
-                  <div style={{ fontFamily: fontBody, fontSize: 11, color: '#FFFFFF99', marginTop: 4 }}>The second is usually a gift.</div>
-                  <div style={{ marginTop: 10, display: 'inline-flex', padding: '4px 10px', borderRadius: 999, background: T.brand, fontFamily: fontBody, fontSize: 10, color: '#fff', fontWeight: 600 }}>Shop now</div>
-                </div>
-              </div>
+              <img
+                src="https://placehold.co/400x400/0F1216/FFFFFF?text=Winner+%238"
+                alt="Winner #8"
+                style={{
+                  width: '100%',
+                  aspectRatio: '1',
+                  objectFit: 'cover',
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  display: 'block',
+                }}
+              />
               <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between' }}>
                 <MonoLabel>★ 2.4× ROAS</MonoLabel>
                 <MonoLabel color={T.brandSoft}>locked</MonoLabel>
@@ -1268,25 +1239,24 @@ function SurgicalSection() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                 {[
-                  { bg: '#E5E7EB', accent: '#374151', fg: '#0B0D10', label: 'paper / slate' },
-                  { bg: '#1A1A1A', accent: T.teal, fg: '#FFFFFF', label: 'ink / teal' },
-                  { bg: '#FFFFFF', accent: '#0F1216', fg: '#0B0D10', label: 'paper / ink' },
-                  { bg: '#1F2937', accent: '#1d72fe', fg: '#FFFFFF', label: 'slate / blue' },
+                  { bg: 'E5E7EB', fg: '0B0D10', label: 'paper / slate' },
+                  { bg: '1A1A1A', fg: 'FFFFFF', label: 'ink / teal' },
+                  { bg: 'FFFFFF', fg: '0B0D10', label: 'paper / ink' },
+                  { bg: '1F2937', fg: 'FFFFFF', label: 'slate / blue' },
                 ].map((p, i) => (
                   <div key={i}>
-                    <div style={{
-                      aspectRatio: '1', borderRadius: 10, background: p.bg,
-                      border: `1px solid ${T.border}`, padding: 14,
-                      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-                      position: 'relative', overflow: 'hidden',
-                    }}>
-                      <div style={{ width: 22, height: 22, borderRadius: 5, background: p.accent }} />
-                      <div>
-                        <div style={{ fontFamily: fontDisplay, fontSize: 13, color: p.fg, fontWeight: 600, lineHeight: 1.1, letterSpacing: '-0.01em' }}>Worth buying twice.</div>
-                        <div style={{ fontFamily: fontBody, fontSize: 9, color: p.fg, opacity: 0.65, marginTop: 3 }}>The second is usually a gift.</div>
-                        <div style={{ marginTop: 7, display: 'inline-flex', padding: '3px 8px', borderRadius: 999, background: p.accent, fontFamily: fontBody, fontSize: 8, color: p.bg === '#E5E7EB' || p.bg === '#FFFFFF' ? '#0B0D10' : '#fff', fontWeight: 600 }}>Shop now</div>
-                      </div>
-                    </div>
+                    <img
+                      src={`https://placehold.co/300x300/${p.bg}/${p.fg}?text=${encodeURIComponent(p.label)}`}
+                      alt={p.label}
+                      style={{
+                        width: '100%',
+                        aspectRatio: '1',
+                        objectFit: 'cover',
+                        borderRadius: 10,
+                        border: `1px solid ${T.border}`,
+                        display: 'block',
+                      }}
+                    />
                     <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <MonoLabel color={T.textDim}>{p.label}</MonoLabel>
                       <span style={{ fontFamily: fontMono, fontSize: 10, color: T.textDim, cursor: 'pointer' }}>♡</span>
