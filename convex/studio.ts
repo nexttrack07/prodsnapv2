@@ -577,12 +577,19 @@ export const setGenerationStep = internalMutation({
 export const markGenerationRunning = internalMutation({
   args: { generationId: v.id('templateGenerations') },
   handler: async (ctx, { generationId }) => {
+    // Only clear dynamicPrompt for flows that have a composer step that
+    // will repopulate it (angle, template). For prompt-mode and variation
+    // flows the prompt is set at insert time and there's no composer to
+    // rewrite it — clearing here causes generateFromAngle to throw
+    // "Dynamic prompt missing" downstream.
+    const gen = await ctx.db.get(generationId)
+    const hasComposer = gen?.mode === 'angle' || gen?.mode === 'exact' || gen?.mode === 'remix'
     await ctx.db.patch(generationId, {
       status: 'running',
       currentStep: 'Queuing',
       startedAt: Date.now(),
       error: undefined,
-      dynamicPrompt: undefined,
+      ...(hasComposer ? { dynamicPrompt: undefined } : {}),
     })
   },
 })
