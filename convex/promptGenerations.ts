@@ -31,8 +31,9 @@ export const submitPromptGeneration = mutation({
     count: v.number(),
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
     productImageId: v.optional(v.id('productImages')),
+    sourceAdId: v.optional(v.id('templateGenerations')),
   },
-  handler: async (ctx, { productId, prompt, aspectRatio: ar, count, model, productImageId }) => {
+  handler: async (ctx, { productId, prompt, aspectRatio: ar, count, model, productImageId, sourceAdId }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -78,6 +79,18 @@ export const submitPromptGeneration = mutation({
       if (!primaryImage) throw new Error('Primary image not found')
       resolvedImageId = product.primaryImageId
       productImageUrl = primaryImage.imageUrl
+    }
+
+    // When sourceAdId is provided, use the ad's outputUrl as the generation source image.
+    if (sourceAdId) {
+      const sourceAd = await ctx.db.get(sourceAdId)
+      if (!sourceAd) throw new Error('Source ad not found')
+      if (sourceAd.userId && sourceAd.userId !== userId) {
+        throw new Error('Not authorized to use this ad as source')
+      }
+      if (sourceAd.status !== 'complete') throw new Error('Source ad is not complete')
+      if (!sourceAd.outputUrl) throw new Error('Source ad has no output image')
+      productImageUrl = sourceAd.outputUrl
     }
 
     // Billing gates: capability, batch guard, credit reservation.

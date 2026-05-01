@@ -61,6 +61,27 @@ export const getAdById = query({
 })
 
 /**
+ * Lightweight getter — returns the raw generation row (no product enrichment).
+ * Used by the studio wizard to display the "editing from" banner.
+ */
+export const getById = query({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }) => {
+    const gen = await ctx.db.get(generationId)
+    if (!gen) return null
+    // Optional ownership check via parent product
+    if (gen.productId) {
+      const product = await ctx.db.get(gen.productId)
+      if (product) {
+        const userId = await getAuthUserId(ctx)
+        if (product.userId && product.userId !== userId) return null
+      }
+    }
+    return gen
+  },
+})
+
+/**
  * Paginated query returning all completed ads for the authenticated user,
  * newest first. Each row is enriched with the parent product's name and
  * primary image URL (same pattern as getAdById).

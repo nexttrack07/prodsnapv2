@@ -92,7 +92,7 @@ import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
 import { BrandPicker } from '../components/brand/BrandPicker'
 
-type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string }
+type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string; editAd?: string }
 
 export const Route = createFileRoute('/studio/$productId')({
   validateSearch: (search: Record<string, unknown>): ProductSearch => {
@@ -108,6 +108,9 @@ export const Route = createFileRoute('/studio/$productId')({
     }
     if (typeof search.angle === 'string' && /^\d+$/.test(search.angle)) {
       out.angle = search.angle
+    }
+    if (typeof search.editAd === 'string' && search.editAd.length > 0) {
+      out.editAd = search.editAd
     }
     return out
   },
@@ -199,7 +202,7 @@ function ProductWorkspacePage() {
   // Nested routes (e.g. /studio/$productId/strategy) take over the page —
   // render only the child Outlet and skip the workspace content.
   const isChildActive = pathname !== `/studio/${productId}`
-  const [view, setView] = useState<View>(search.compose || search.template || search.angle ? 'generate' : 'gallery')
+  const [view, setView] = useState<View>(search.compose || search.template || search.angle || search.editAd ? 'generate' : 'gallery')
   const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
 
   // When the URL gets ?compose=:adId / ?template=:id / ?angle=:i, open the
@@ -219,9 +222,13 @@ function ProductWorkspacePage() {
     if (search.angle) setView('generate')
   }, [search.angle])
 
+  useEffect(() => {
+    if (search.editAd) setView('generate')
+  }, [search.editAd])
+
   const closeCompose = () => {
     setView('gallery')
-    if (search.compose || search.template || search.angle) {
+    if (search.compose || search.template || search.angle || search.editAd) {
       navigate({
         to: '/studio/$productId',
         params: { productId },
@@ -395,6 +402,9 @@ function ProductWorkspacePage() {
           }
           prefillAngleIndex={
             search.angle != null ? Number(search.angle) : null
+          }
+          prefillEditAdId={
+            (search.editAd ?? null) as Id<'templateGenerations'> | null
           }
         />
       )}
@@ -2863,6 +2873,7 @@ function GenerateWizard({
   prefillFromAdId,
   prefillTemplateId,
   prefillAngleIndex,
+  prefillEditAdId,
 }: {
   productId: Id<'products'>
   product: {
@@ -2890,11 +2901,16 @@ function GenerateWizard({
   prefillFromAdId?: Id<'templateGenerations'> | null
   prefillTemplateId?: Id<'adTemplates'> | null
   prefillAngleIndex?: number | null
+  prefillEditAdId?: Id<'templateGenerations'> | null
 }) {
   // ── Segment state ──────────────────────────────────────────────────────────
   const [activeSegment, setActiveSegment] = useState<WizardSegment>(
     prefillTemplateId ? 'template' : 'custom',
   )
+  // When editing from an ad, ensure we land on the Custom segment
+  useEffect(() => {
+    if (prefillEditAdId) setActiveSegment('custom')
+  }, [prefillEditAdId])
 
   // ── Shared state (persists across segment switches) ────────────────────────
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
@@ -3016,6 +3032,14 @@ function GenerateWizard({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillAngleIndex, product.marketingAngles, anglePrefillApplied, prefillTemplateId, prefillFromAdId])
+
+  // ── Source ad for "Edit with custom prompt" ───────────────────────────────
+  const { data: editSourceAd } = useQuery({
+    ...convexQuery(api.templateGenerations.getById, {
+      generationId: prefillEditAdId as Id<'templateGenerations'>,
+    }),
+    enabled: !!prefillEditAdId,
+  })
 
   // ── Template browse filters ────────────────────────────────────────────────
   const [search, setSearch] = useState('')
@@ -3225,6 +3249,7 @@ function GenerateWizard({
           count: variationsCount,
           model: wizardModel,
           productImageId: sourceImageId ?? undefined,
+          sourceAdId: prefillEditAdId ?? undefined,
         })
         notifications.show({
           title: 'Generating',
@@ -3354,6 +3379,33 @@ function GenerateWizard({
           {/* ─── Custom segment ─── */}
           {activeSegment === 'custom' && (
             <Stack gap="md" px="md">
+              {/* ─── "Editing from" banner (editAd flow) ─── */}
+              {prefillEditAdId && editSourceAd?.outputUrl && (
+                <Paper
+                  p="sm"
+                  radius="md"
+                  bg="dark.7"
+                  style={{ border: '1px solid var(--mantine-color-violet-8)' }}
+                >
+                  <Group gap="sm" align="center" wrap="nowrap">
+                    <Image
+                      src={editSourceAd.outputUrl}
+                      alt="Source ad"
+                      w={48}
+                      h={48}
+                      radius="sm"
+                      fit="cover"
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="xs" fw={600} c="violet.4">Editing from ad</Text>
+                      <Text size="xs" c="dark.2" lineClamp={1}>
+                        Write a prompt below — the generation will use this ad as the source image.
+                      </Text>
+                    </Box>
+                  </Group>
+                </Paper>
+              )}
               {/* Textarea — shared destination for all prompt paths */}
               <Box>
                 <Text size="sm" fw={600} c="white" mb="xs">Describe your ad</Text>

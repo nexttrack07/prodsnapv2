@@ -43,6 +43,7 @@ import {
   IconTrash,
   IconSparkles,
   IconExternalLink,
+  IconWand,
 } from '@tabler/icons-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -297,6 +298,15 @@ export function AdDetailContent({
     })
   }, [ad, navigate])
 
+  const handleEditWithCustomPrompt = useCallback(() => {
+    if (!ad?.productId) return
+    navigate({
+      to: '/studio/$productId',
+      params: { productId: ad.productId },
+      search: { editAd: ad._id as string },
+    })
+  }, [ad, navigate])
+
   // ─── Loading / empty states ────────────────────────────────────────────────
 
   if (isLoading) {
@@ -467,6 +477,16 @@ export function AdDetailContent({
           Edit in compose
         </Button>
       </Group>
+      <Button
+        variant="light"
+        color="violet"
+        leftSection={<IconWand size={16} />}
+        onClick={handleEditWithCustomPrompt}
+        disabled={!ad.outputUrl}
+        fullWidth
+      >
+        Edit with custom prompt
+      </Button>
 
       {/* Secondary actions */}
       <Group gap="xs">
