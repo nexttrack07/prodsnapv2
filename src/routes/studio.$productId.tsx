@@ -3013,12 +3013,28 @@ function GenerateWizard({
   }, [prefillAngleIndex, product.marketingAngles, anglePrefillApplied, prefillTemplateId, prefillFromAdId])
 
   // ── Source ad for "Edit with custom prompt" ───────────────────────────────
+  // When editing from an ad, force variations to 1 (single edit) and seed
+  // the aspect ratio to match the ad. The user can still override the AR.
+  useEffect(() => {
+    if (!prefillEditAdId) return
+    setVariationsPerTemplate('1')
+  }, [prefillEditAdId])
+
   const { data: editSourceAd } = useQuery({
     ...convexQuery(api.templateGenerations.getById, {
       generationId: prefillEditAdId as Id<'templateGenerations'>,
     }),
     enabled: !!prefillEditAdId,
   })
+
+  // Seed aspect ratio from the source ad once it loads (user can still override).
+  const seededAspectFromEditAdRef = useRef(false)
+  useEffect(() => {
+    if (!prefillEditAdId || !editSourceAd?.aspectRatio) return
+    if (seededAspectFromEditAdRef.current) return
+    setAspectRatio(editSourceAd.aspectRatio as AspectRatio)
+    seededAspectFromEditAdRef.current = true
+  }, [prefillEditAdId, editSourceAd])
 
 
   const isMobile = useMediaQuery('(max-width: 768px)')
@@ -3439,7 +3455,7 @@ function GenerateWizard({
             />
           </Box>
 
-          {/* Variations */}
+          {/* Variations — locked at 1 when editing an existing ad. */}
           <Box mb="md">
             <Text size="sm" fw={500} c="white" mb="xs">Variations</Text>
             <SegmentedControl
@@ -3448,7 +3464,13 @@ function GenerateWizard({
               data={['1', '2', '3', '4']}
               fullWidth
               color="brand"
+              disabled={!!prefillEditAdId}
             />
+            {prefillEditAdId && (
+              <Text size="xs" c="dark.2" mt={4}>
+                Locked to 1 when editing an existing ad.
+              </Text>
+            )}
           </Box>
 
           {/* Model */}
