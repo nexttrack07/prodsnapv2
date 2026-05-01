@@ -628,6 +628,49 @@ async function callImageEditModel({
 }
 
 /**
+ * Text-to-image generation (no source/reference image).
+ * Routes to the base (non-edit) endpoint of each model.
+ * Called when productImageUrl is empty (useSourceImage === false).
+ */
+async function callImageGenModel({
+  model,
+  prompt,
+  aspectRatio,
+}: {
+  model: ImageEditModel
+  prompt: string
+  aspectRatio: string
+}): Promise<{ generatedUrl: string; rawResponse: unknown }> {
+  let result: { data: unknown }
+  try {
+    if (model === 'gpt-image-2') {
+      const image_size =
+        aspectRatio === '9:16' ? 'portrait_16_9'
+        : aspectRatio === '4:5' ? { width: 1024, height: 1280 }
+        : 'square_hd'
+      result = await fal.subscribe('openai/gpt-image-2', {
+        input: { prompt, image_size, quality: 'high', output_format: 'png' },
+      })
+    } else {
+      // nano-banana-2 text-to-image (no /edit suffix)
+      result = await fal.subscribe('fal-ai/nano-banana-2', {
+        input: { prompt, aspect_ratio: aspectRatio, output_format: 'png', resolution: '1K' },
+      })
+    }
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err)
+    if (/safety|blocked|rejected/i.test(raw)) {
+      throw new Error('Image model rejected the request — try softening the prompt.')
+    }
+    throw err
+  }
+  const data = result.data as { images?: Array<{ url?: string }> }
+  const generatedUrl = data.images?.[0]?.url
+  if (!generatedUrl) throw new Error('Model did not return an image URL')
+  return { generatedUrl, rawResponse: result.data }
+}
+
+/**
  * Calls nano-banana using the dynamic prompt that composePrompt wrote
  * to the generation row. Uploads the result to R2 and returns the URL.
  */
@@ -794,13 +837,24 @@ export const generateFromAngle = internalAction({
       throw new Error('Dynamic prompt missing — composer step did not complete')
     }
     const aspectRatio = generation.aspectRatio ?? '1:1'
+    const mdl = (generation.model ?? 'nano-banana-2') as ImageEditModel
 
-    const { generatedUrl } = await callImageEditModel({
-      model: (generation.model ?? 'nano-banana-2') as ImageEditModel,
-      prompt: generation.dynamicPrompt,
-      imageUrls: [generation.productImageUrl],
-      aspectRatio,
-    })
+    // When productImageUrl is empty the caller requested text-to-image (no source).
+    let generatedUrl: string
+    if (!generation.productImageUrl) {
+      ;({ generatedUrl } = await callImageGenModel({
+        model: mdl,
+        prompt: generation.dynamicPrompt,
+        aspectRatio,
+      }))
+    } else {
+      ;({ generatedUrl } = await callImageEditModel({
+        model: mdl,
+        prompt: generation.dynamicPrompt,
+        imageUrls: [generation.productImageUrl],
+        aspectRatio,
+      }))
+    }
 
     const key = `studio/outputs/${generation.productId ?? 'angle'}/${generation.variationIndex}-${nanoid(6)}.png`
     const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')

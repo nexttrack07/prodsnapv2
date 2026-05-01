@@ -32,8 +32,11 @@ export const submitPromptGeneration = mutation({
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
     productImageId: v.optional(v.id('productImages')),
     sourceAdId: v.optional(v.id('templateGenerations')),
+    // When false the generation skips the source image entirely and calls the
+    // text-to-image variant of the model instead of the edit variant.
+    useSourceImage: v.optional(v.boolean()),
   },
-  handler: async (ctx, { productId, prompt, aspectRatio: ar, count, model, productImageId, sourceAdId }) => {
+  handler: async (ctx, { productId, prompt, aspectRatio: ar, count, model, productImageId, sourceAdId, useSourceImage }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -57,40 +60,52 @@ export const submitPromptGeneration = mutation({
       throw new Error('Product analysis is not ready yet')
     }
 
-    // Resolve source: caller-supplied productImageId wins; fall back to primary.
+    // Default useSourceImage to true for backwards-compatibility.
+    const shouldUseSource = useSourceImage !== false
+
     let resolvedImageId: typeof product.primaryImageId
     let productImageUrl: string
-    if (productImageId) {
-      const picked = await ctx.db.get(productImageId)
-      if (!picked) throw new Error('Source image not found')
-      if (picked.productId !== productId) {
-        throw new Error('Source image does not belong to this product')
-      }
-      if (picked.status !== 'ready') {
-        throw new Error('Source image not ready')
-      }
-      resolvedImageId = picked._id
-      productImageUrl = picked.imageUrl
-    } else {
-      if (!product.primaryImageId) {
-        throw new Error('Product has no primary image set')
-      }
-      const primaryImage = await ctx.db.get(product.primaryImageId)
-      if (!primaryImage) throw new Error('Primary image not found')
-      resolvedImageId = product.primaryImageId
-      productImageUrl = primaryImage.imageUrl
-    }
 
-    // When sourceAdId is provided, use the ad's outputUrl as the generation source image.
-    if (sourceAdId) {
-      const sourceAd = await ctx.db.get(sourceAdId)
-      if (!sourceAd) throw new Error('Source ad not found')
-      if (sourceAd.userId && sourceAd.userId !== userId) {
-        throw new Error('Not authorized to use this ad as source')
+    if (!shouldUseSource) {
+      // Text-to-image: skip source resolution entirely.
+      // Store an empty string so the existing non-nullable schema field is satisfied;
+      // generateFromAngle detects this and routes to the text-to-image endpoint.
+      resolvedImageId = undefined
+      productImageUrl = ''
+    } else {
+      // Resolve source: caller-supplied productImageId wins; fall back to primary.
+      if (productImageId) {
+        const picked = await ctx.db.get(productImageId)
+        if (!picked) throw new Error('Source image not found')
+        if (picked.productId !== productId) {
+          throw new Error('Source image does not belong to this product')
+        }
+        if (picked.status !== 'ready') {
+          throw new Error('Source image not ready')
+        }
+        resolvedImageId = picked._id
+        productImageUrl = picked.imageUrl
+      } else {
+        if (!product.primaryImageId) {
+          throw new Error('Product has no primary image set')
+        }
+        const primaryImage = await ctx.db.get(product.primaryImageId)
+        if (!primaryImage) throw new Error('Primary image not found')
+        resolvedImageId = product.primaryImageId
+        productImageUrl = primaryImage.imageUrl
       }
-      if (sourceAd.status !== 'complete') throw new Error('Source ad is not complete')
-      if (!sourceAd.outputUrl) throw new Error('Source ad has no output image')
-      productImageUrl = sourceAd.outputUrl
+
+      // When sourceAdId is provided, use the ad's outputUrl as the generation source image.
+      if (sourceAdId) {
+        const sourceAd = await ctx.db.get(sourceAdId)
+        if (!sourceAd) throw new Error('Source ad not found')
+        if (sourceAd.userId && sourceAd.userId !== userId) {
+          throw new Error('Not authorized to use this ad as source')
+        }
+        if (sourceAd.status !== 'complete') throw new Error('Source ad is not complete')
+        if (!sourceAd.outputUrl) throw new Error('Source ad has no output image')
+        productImageUrl = sourceAd.outputUrl
+      }
     }
 
     // Billing gates: capability, batch guard, credit reservation.
