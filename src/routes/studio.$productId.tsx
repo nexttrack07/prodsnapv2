@@ -2853,7 +2853,7 @@ function WinnerToggle({ generation }: { generation: GenerationData }) {
   )
 }
 
-type WizardSegment = 'custom'
+type WizardSegment = 'custom' | 'template'
 
 // ── Chip taxonomy for the structured prompt builder ─────────────────────────
 const PROMPT_SETTINGS = ['Studio', 'Kitchen', 'Bathroom', 'Outdoor / nature', 'Cafe', 'Beach', 'Urban street', 'Home interior', 'Gym']
@@ -2903,8 +2903,14 @@ function GenerateWizard({
   prefillAngleIndex?: number | null
   prefillEditAdId?: Id<'templateGenerations'> | null
 }) {
-  // ── Segment state — wizard is Custom-only; template segment removed ───────
-  const [activeSegment] = useState<WizardSegment>('custom')
+  // ── Segment state ──────────────────────────────────────────────────────────
+  const [activeSegment, setActiveSegment] = useState<WizardSegment>(
+    prefillTemplateId ? 'template' : 'custom',
+  )
+  // When editing from an ad, ensure we land on the Custom segment
+  useEffect(() => {
+    if (prefillEditAdId) setActiveSegment('custom')
+  }, [prefillEditAdId])
 
   // ── Shared state (persists across segment switches) ────────────────────────
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
@@ -2914,12 +2920,23 @@ function GenerateWizard({
   const [wizardModel, setWizardModel] = useState<'nano-banana-2' | 'gpt-image-2'>('nano-banana-2')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // ── Per-segment state ────────────────────────────────────────────────────
+  // ── Per-segment state (all preserved regardless of active segment) ─────────
   const [prompt, setPrompt] = useState('')
+  const [pickedIds, setPickedIds] = useState<Id<'adTemplates'>[]>(
+    prefillTemplateId ? [prefillTemplateId] : [],
+  )
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null)
 
-  // ── Source image toggle ───────────────────────────────────────────────────
-  const [includeSourceImage, setIncludeSourceImage] = useState(true)
+  // ── Prompt builder + suggestion state ─────────────────────────────────────
+  const [builderOpen, setBuilderOpen] = useState(false)
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [chipSetting, setChipSetting] = useState<string | null>(null)
+  const [chipMood, setChipMood] = useState<string | null>(null)
+  const [chipLighting, setChipLighting] = useState<string | null>(null)
+  const [chipComposition, setChipComposition] = useState<string | null>(null)
+  const [chipPeople, setChipPeople] = useState<string | null>(null)
 
   // ── Source image picker ────────────────────────────────────────────────────
   // Defaults to the product's primary image; user can pick any other ready
@@ -2961,25 +2978,28 @@ function GenerateWizard({
     }
     if (prefillAd.mode === 'exact' || prefillAd.mode === 'remix') {
       setMode(prefillAd.mode)
-      // Template segment is removed; "Edit in compose" for template-based ads
-      // now lands in the Custom segment. The user can write a new prompt.
-      // TODO: consider pre-filling the prompt with the original ad's scene description.
+      setActiveSegment('template')
+      if (prefillAd.templateId) {
+        setPickedIds([prefillAd.templateId as Id<'adTemplates'>])
+      }
     }
     if (prefillAd.mode === 'prompt') {
       // Re-populate the textarea with the original prompt
       if (prefillAd.dynamicPrompt) {
         setPrompt(prefillAd.dynamicPrompt)
       }
+      setActiveSegment('custom')
     }
     if (prefillAd.mode === 'angle') {
-      // Try to find the matching angle by title; landing in Custom since
-      // angle is picked via the chips.
+      // Try to find the matching angle by title; landing in Custom either way
+      // since the Angle tab no longer exists — angle is picked via the chips.
       const matchIdx = product.marketingAngles?.findIndex(
         (a) => a.title === prefillAd.angleSeed?.title,
       )
       if (matchIdx != null && matchIdx >= 0) {
         setSelectedAngleIndex(matchIdx)
       }
+      setActiveSegment('custom')
     }
     if (typeof prefillAd.colorAdapt === 'boolean') {
       setColorAdapt(prefillAd.colorAdapt)
@@ -3003,6 +3023,7 @@ function GenerateWizard({
       prefillAngleIndex < product.marketingAngles.length
     ) {
       setSelectedAngleIndex(prefillAngleIndex)
+      setActiveSegment('custom')
       // Seed the prompt with the angle's hook (matches chip-click behavior)
       if (prompt.trim().length === 0) {
         setPrompt(product.marketingAngles[prefillAngleIndex].hook)
@@ -3013,13 +3034,6 @@ function GenerateWizard({
   }, [prefillAngleIndex, product.marketingAngles, anglePrefillApplied, prefillTemplateId, prefillFromAdId])
 
   // ── Source ad for "Edit with custom prompt" ───────────────────────────────
-  // When editing from an ad, force variations to 1 (single edit) and seed
-  // the aspect ratio to match the ad. The user can still override the AR.
-  useEffect(() => {
-    if (!prefillEditAdId) return
-    setVariationsPerTemplate('1')
-  }, [prefillEditAdId])
-
   const { data: editSourceAd } = useQuery({
     ...convexQuery(api.templateGenerations.getById, {
       generationId: prefillEditAdId as Id<'templateGenerations'>,
@@ -3027,15 +3041,48 @@ function GenerateWizard({
     enabled: !!prefillEditAdId,
   })
 
-  // Seed aspect ratio from the source ad once it loads (user can still override).
-  const seededAspectFromEditAdRef = useRef(false)
-  useEffect(() => {
-    if (!prefillEditAdId || !editSourceAd?.aspectRatio) return
-    if (seededAspectFromEditAdRef.current) return
-    setAspectRatio(editSourceAd.aspectRatio as AspectRatio)
-    seededAspectFromEditAdRef.current = true
-  }, [prefillEditAdId, editSourceAd])
+  // ── "Include source image" checkbox (edit + normal flows) ─────────────────
+  const [includeSourceImage, setIncludeSourceImage] = useState(true)
 
+  // ── Seed aspect ratio from editSourceAd on first load ────────────────────
+  const [editArSeedApplied, setEditArSeedApplied] = useState(false)
+  useEffect(() => {
+    if (editArSeedApplied || !editSourceAd) return
+    if (editSourceAd.aspectRatio) {
+      setAspectRatio(editSourceAd.aspectRatio as AspectRatio)
+    }
+    setEditArSeedApplied(true)
+  }, [editSourceAd, editArSeedApplied])
+
+  // ── Lock variations to 1 when editing ────────────────────────────────────
+  useEffect(() => {
+    if (prefillEditAdId) {
+      setVariationsPerTemplate('1')
+    }
+  }, [prefillEditAdId])
+
+  // ── Template browse filters ────────────────────────────────────────────────
+  const [search, setSearch] = useState('')
+  const [filterCategory, setFilterCategory] = useState<string | null>(initialFilters?.productCategory ?? null)
+  const [filterImageStyle, setFilterImageStyle] = useState<string | null>(initialFilters?.imageStyle ?? null)
+  const [filterSetting, setFilterSetting] = useState<string | null>(initialFilters?.setting ?? null)
+  const [filterAngleType, setFilterAngleType] = useState<string | null>(initialFilters?.angleType ?? null)
+  const [filterAspectRatio, setFilterAspectRatio] = useState<string | null>(null)
+  const [mySavesOnly, setMySavesOnly] = useState(false)
+
+  // ── Product inspirations for "My saves" filter ────────────────────────────
+  const { data: productInspirations } = useQuery(
+    convexQuery(api.productInspirations.listInspirationsForProduct, { productId }),
+  )
+  const savedTemplateIdsForProduct = new Set(
+    (productInspirations ?? [])
+      .filter((i: { kind: string; templateId?: unknown }) => i.kind === 'template' && i.templateId)
+      .map((i: { templateId?: unknown }) => i.templateId as string),
+  )
+  const hasSavedTemplates = savedTemplateIdsForProduct.size > 0
+  const { data: filterOptions } = useQuery(
+    convexQuery(api.products.listTemplateFilterOptions, {}),
+  )
 
   const isMobile = useMediaQuery('(max-width: 768px)')
   const convex = useConvex()
@@ -3045,22 +3092,176 @@ function GenerateWizard({
   const generateMutation = useMutation({ mutationFn: generateFromProduct })
   const submitAngleMutation = useConvexMutation(api.angleGenerations.submitAngleGeneration)
   const submitPromptMutation = useConvexMutation(api.promptGenerations.submitPromptGeneration)
+  const suggestPromptsAction = useAction(api.promptSuggestions.suggestPromptIdeas)
+
+  // ── Template infinite query ────────────────────────────────────────────────
+  const filterArgs = {
+    search: search.trim() || undefined,
+    productCategory: filterCategory ?? undefined,
+    imageStyle: filterImageStyle ?? undefined,
+    setting: filterSetting ?? undefined,
+    angleType: filterAngleType ?? undefined,
+    aspectRatio:
+      (filterAspectRatio as '1:1' | '4:5' | '9:16' | undefined) ?? undefined,
+  }
+  const filtersActive =
+    !!filterArgs.search ||
+    !!filterArgs.productCategory ||
+    !!filterArgs.imageStyle ||
+    !!filterArgs.setting ||
+    !!filterArgs.angleType ||
+    !!filterArgs.aspectRatio
+
+  const {
+    data: templatesData,
+    isLoading: templatesLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: [
+      'listTemplates',
+      filterArgs.search,
+      filterArgs.productCategory,
+      filterArgs.imageStyle,
+      filterArgs.setting,
+      filterArgs.angleType,
+      filterArgs.aspectRatio,
+    ],
+    queryFn: async ({ pageParam }) => {
+      return convex.query(api.products.listTemplates, {
+        cursor: pageParam,
+        limit: 24,
+        ...filterArgs,
+      })
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: undefined as string | undefined,
+  })
+
+  const allTemplates = templatesData?.pages.flatMap((page) => page.items) || []
+  // When "My saves" chip is on, filter to only saved templates
+  const templates = mySavesOnly
+    ? allTemplates.filter((t) => savedTemplateIdsForProduct.has(t._id as string))
+    : allTemplates
+
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const loadMoreRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (isFetchingNextPage) return
+      if (observerRef.current) observerRef.current.disconnect()
+      observerRef.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasNextPage) {
+          fetchNextPage()
+        }
+      })
+      if (node) observerRef.current.observe(node)
+    },
+    [isFetchingNextPage, hasNextPage, fetchNextPage],
+  )
+
+  function toggleTemplate(id: Id<'adTemplates'>) {
+    setPickedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id)
+      if (prev.length >= 3) {
+        notifications.show({ title: 'Limit', message: 'Max 3 templates', color: 'yellow' })
+        return prev
+      }
+      return [...prev, id]
+    })
+  }
+
+  // ── Builder preview assembly ────────────────────────────────────────────────
+  const builderPreview = [
+    chipComposition,
+    chipComposition ? 'of' : null,
+    product.name,
+    chipSetting ? `in ${chipSetting}` : null,
+    chipLighting ? `${chipLighting} lighting` : null,
+    chipMood ? `${chipMood} mood` : null,
+    chipPeople ? `${chipPeople}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ')
+    .replace(/,([^,]*)$/, '.$1') + '.'
+
+  function applyBuilderToPrompt() {
+    const assembled = builderPreview
+    if (prompt.trim().length > 0) {
+      if (!window.confirm('This will replace your current prompt. Continue?')) return
+    }
+    setPrompt(assembled)
+    setBuilderOpen(false)
+  }
+
+  function resetBuilder() {
+    setChipSetting(null)
+    setChipMood(null)
+    setChipLighting(null)
+    setChipComposition(null)
+    setChipPeople(null)
+  }
+
+  // ── Suggestions handler ───────────────────────────────────────────────────
+  async function handleSuggestPrompts() {
+    if (suggestionsLoading) return
+    setSuggestionsLoading(true)
+    setSuggestionsOpen(true)
+    try {
+      const result = await suggestPromptsAction({ productId })
+      setSuggestions(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      notifications.show({ title: 'Suggestion failed', message: msg, color: 'red' })
+    } finally {
+      setSuggestionsLoading(false)
+    }
+  }
+
+  function useSuggestion(text: string) {
+    if (prompt.trim().length > 0) {
+      if (!window.confirm('This will replace your current prompt. Continue?')) return
+    }
+    setPrompt(text)
+    setSelectedAngleIndex(null)
+  }
 
   // ── Generate logic ─────────────────────────────────────────────────────────
+  // The active segment dictates which generation path runs. Selections from
+  // the other segment are kept in state (so switching back doesn't lose
+  // them) but ignored at submit time.
   const hasAngle = selectedAngleIndex !== null
-  const hasPrompt = prompt.trim().length >= 10
-  const usePromptPath = hasPrompt
-  const useAnglePath = !hasPrompt && hasAngle
-  const canGenerate = usePromptPath || useAnglePath
+  const hasPrompt = activeSegment === 'custom' && prompt.trim().length >= 10
+  const hasTemplates = pickedIds.length > 0
+  const useTemplatePath = activeSegment === 'template' && hasTemplates
+  const usePromptPath = activeSegment === 'custom' && hasPrompt
+  const useAnglePath = activeSegment === 'custom' && !hasPrompt && hasAngle
+  const canGenerate = useTemplatePath || usePromptPath || useAnglePath
 
   const variationsCount = parseInt(variationsPerTemplate, 10)
-  const totalCount = canGenerate ? variationsCount : 0
+  const totalCount = useTemplatePath
+    ? pickedIds.length * variationsCount
+    : (usePromptPath || useAnglePath)
+      ? variationsCount
+      : 0
 
   async function handleGenerate() {
     if (!canGenerate) return
     setIsSubmitting(true)
     try {
-      if (usePromptPath) {
+      if (useTemplatePath) {
+        await generateMutation.mutateAsync({
+          productId,
+          templateIds: pickedIds,
+          mode,
+          colorAdapt,
+          variationsPerTemplate: variationsCount,
+          aspectRatio,
+          model: wizardModel,
+          productImageId: sourceImageId ?? undefined,
+        })
+        notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
+      } else if (usePromptPath) {
         await submitPromptMutation({
           productId,
           prompt: prompt.trim(),
@@ -3150,6 +3351,11 @@ function GenerateWizard({
           <Text fw={600} size="lg" c="white">Create ad</Text>
         </Group>
         <Group gap="sm">
+          {hasTemplates && (
+            <Badge size="md" variant="light" color="brand" radius="md">
+              {pickedIds.length}/3 templates
+            </Badge>
+          )}
           {hasPrompt && (
             <Badge size="md" variant="light" color="grape" radius="md">
               Prompt ({prompt.trim().length} chars)
@@ -3163,6 +3369,21 @@ function GenerateWizard({
         </Group>
       </Group>
 
+      {/* Segmented control — hidden when editing an existing ad */}
+      {!prefillEditAdId && (
+        <Box px="md" mb="lg">
+          <SegmentedControl
+            value={activeSegment}
+            onChange={(val) => setActiveSegment(val as WizardSegment)}
+            data={[
+              { value: 'custom', label: 'Custom' },
+              { value: 'template', label: 'Template' },
+            ]}
+            color="brand"
+            fullWidth={!!isMobile}
+          />
+        </Box>
+      )}
 
       <Box style={{
         display: 'grid',
@@ -3178,86 +3399,499 @@ function GenerateWizard({
             order: isMobile ? 2 : 1,
           }}
         >
-          {/* ─── Custom segment (wizard is Custom-only) ─── */}
-          <Stack gap="md" px="md">
-            {/* Textarea */}
-            <Box>
-              <Text size="sm" fw={600} c="white" mb="xs">Describe your ad</Text>
-              <Textarea
-                placeholder="e.g. Product on a marble countertop with soft morning light, lifestyle feel..."
-                value={prompt}
-                onChange={(e) => {
-                  setPrompt(e.currentTarget.value)
-                  // Clear angle selection when user types freely
-                  if (selectedAngleIndex !== null) setSelectedAngleIndex(null)
-                }}
-                minRows={4}
-                maxRows={8}
-                autosize
-              />
-              <Group justify="flex-end" mt={6}>
-                <Text size="xs" c="dark.3">{prompt.length} chars</Text>
-              </Group>
-            </Box>
-
-            {/* ─── Angle chips ─── */}
-            {angles.length > 0 && (
+          {/* ─── Custom segment ─── */}
+          {activeSegment === 'custom' && (
+            <Stack gap="md" px="md">
+              {/* ─── "Editing from" banner (editAd flow) ─── */}
+              {prefillEditAdId && editSourceAd?.outputUrl && (
+                <Paper
+                  p="sm"
+                  radius="md"
+                  bg="dark.7"
+                  style={{ border: '1px solid var(--mantine-color-violet-8)' }}
+                >
+                  <Group gap="sm" align="center" wrap="nowrap">
+                    <Image
+                      src={editSourceAd.outputUrl}
+                      alt="Source ad"
+                      w={48}
+                      h={48}
+                      radius="sm"
+                      fit="cover"
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="xs" fw={600} c="violet.4">Editing from ad</Text>
+                      <Text size="xs" c="dark.2" lineClamp={1}>
+                        Write a prompt below — the generation will use this ad as the source image.
+                      </Text>
+                    </Box>
+                  </Group>
+                </Paper>
+              )}
+              {/* Textarea — shared destination for all prompt paths */}
               <Box>
-                <Text size="xs" c="dark.2" mb="xs">Or pick an angle:</Text>
-                <Group gap="xs" wrap="wrap">
-                  {angles.slice(0, 5).map((angle, idx) => (
-                    <Button
-                      key={idx}
-                      size="xs"
-                      variant={selectedAngleIndex === idx ? 'filled' : 'light'}
-                      color={selectedAngleIndex === idx ? 'brand' : 'gray'}
-                      radius="xl"
-                      leftSection={<IconTarget size={12} />}
-                      onClick={() => {
-                        if (selectedAngleIndex === idx) {
-                          setSelectedAngleIndex(null)
-                        } else {
-                          setSelectedAngleIndex(idx)
-                          // Only auto-fill the prompt if textarea is empty
-                          if (prompt.trim().length === 0) {
-                            setPrompt(angle.hook)
+                <Text size="sm" fw={600} c="white" mb="xs">Describe your ad</Text>
+                <Textarea
+                  placeholder="e.g. Product on a marble countertop with soft morning light, lifestyle feel..."
+                  value={prompt}
+                  onChange={(e) => {
+                    setPrompt(e.currentTarget.value)
+                    // Clear angle selection when user types freely
+                    if (selectedAngleIndex !== null) setSelectedAngleIndex(null)
+                  }}
+                  minRows={4}
+                  maxRows={8}
+                  autosize
+                />
+                <Group justify="space-between" mt={6}>
+                  <Group gap="xs">
+                    {!prefillEditAdId && (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="grape"
+                        radius="xl"
+                        leftSection={<IconSparkles size={12} />}
+                        loading={suggestionsLoading}
+                        onClick={handleSuggestPrompts}
+                      >
+                        Suggest prompts
+                      </Button>
+                    )}
+                    {!prefillEditAdId && (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="gray"
+                        radius="xl"
+                        leftSection={<IconLayoutGrid size={12} />}
+                        onClick={() => setBuilderOpen((v) => !v)}
+                      >
+                        {builderOpen ? 'Hide builder' : 'Build prompt'}
+                      </Button>
+                    )}
+                  </Group>
+                  <Text size="xs" c="dark.3">{prompt.length} chars</Text>
+                </Group>
+              </Box>
+
+              {/* ─── AI suggestions panel ─── */}
+              {!prefillEditAdId && suggestionsOpen && (
+                <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="xs" fw={600} c="white">AI suggestions</Text>
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="grape"
+                        leftSection={<IconRefresh size={12} />}
+                        loading={suggestionsLoading}
+                        onClick={handleSuggestPrompts}
+                      >
+                        Regenerate
+                      </Button>
+                      <ActionIcon size="xs" variant="subtle" color="dark.2" onClick={() => setSuggestionsOpen(false)}>
+                        <IconX size={12} />
+                      </ActionIcon>
+                    </Group>
+                  </Group>
+                  {suggestionsLoading && suggestions.length === 0 ? (
+                    <Stack gap="xs">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} h={48} radius="md" />
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Stack gap="xs">
+                      {suggestions.map((s, i) => (
+                        <Paper
+                          key={i}
+                          p="xs"
+                          radius="md"
+                          bg="dark.6"
+                          style={{ border: '1px solid var(--mantine-color-dark-4)', cursor: 'pointer' }}
+                          onClick={() => useSuggestion(s)}
+                        >
+                          <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
+                            <Text size="xs" c="dark.1" style={{ flex: 1, lineHeight: 1.4 }}>
+                              {s}
+                            </Text>
+                            <Button size="xs" variant="light" color="brand" radius="xl" style={{ flexShrink: 0 }}>
+                              Use this
+                            </Button>
+                          </Group>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  )}
+                </Paper>
+              )}
+
+              {/* ─── Structured chip builder ─── */}
+              {!prefillEditAdId && builderOpen && (
+                <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
+                  <Text size="xs" fw={600} c="white" mb="sm">Build a prompt</Text>
+                  {([
+                    ['Setting', PROMPT_SETTINGS, chipSetting, setChipSetting],
+                    ['Mood', PROMPT_MOODS, chipMood, setChipMood],
+                    ['Lighting', PROMPT_LIGHTING, chipLighting, setChipLighting],
+                    ['Composition', PROMPT_COMPOSITIONS, chipComposition, setChipComposition],
+                    ['People', PROMPT_PEOPLE, chipPeople, setChipPeople],
+                  ] as [string, string[], string | null, (v: string | null) => void][]).map(([label, options, value, setter]) => (
+                    <Box key={label} mb="xs">
+                      <Text size="xs" c="dark.2" mb={4}>{label}</Text>
+                      <Group gap={4} wrap="wrap">
+                        {options.map((opt) => (
+                          <Button
+                            key={opt}
+                            size="xs"
+                            variant={value === opt ? 'filled' : 'light'}
+                            color={value === opt ? 'brand' : 'dark.4'}
+                            radius="xl"
+                            onClick={() => setter(value === opt ? null : opt)}
+                            styles={{ root: { height: 26, paddingInline: 10, fontSize: 11 } }}
+                          >
+                            {opt}
+                          </Button>
+                        ))}
+                      </Group>
+                    </Box>
+                  ))}
+                  <Box mt="sm" pt="sm" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
+                    <Text size="xs" c="dark.2" mb={6}>Preview:</Text>
+                    <Text size="xs" c="dark.1" fs="italic" mb="sm">{builderPreview}</Text>
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        variant="filled"
+                        color="brand"
+                        radius="xl"
+                        onClick={applyBuilderToPrompt}
+                        disabled={!chipSetting && !chipMood && !chipLighting && !chipComposition && !chipPeople}
+                      >
+                        Apply to prompt
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="gray"
+                        radius="xl"
+                        onClick={resetBuilder}
+                      >
+                        Reset
+                      </Button>
+                    </Group>
+                  </Box>
+                </Paper>
+              )}
+
+              {/* ─── Angle chips ─── */}
+              {angles.length > 0 && (
+                <Box>
+                  <Text size="xs" c="dark.2" mb="xs">Or pick an angle:</Text>
+                  <Group gap="xs" wrap="wrap">
+                    {angles.slice(0, 5).map((angle, idx) => (
+                      <Button
+                        key={idx}
+                        size="xs"
+                        variant={selectedAngleIndex === idx ? 'filled' : 'light'}
+                        color={selectedAngleIndex === idx ? 'brand' : 'gray'}
+                        radius="xl"
+                        leftSection={<IconTarget size={12} />}
+                        onClick={() => {
+                          if (selectedAngleIndex === idx) {
+                            setSelectedAngleIndex(null)
+                          } else {
+                            setSelectedAngleIndex(idx)
+                            // Only auto-fill the prompt if textarea is empty
+                            if (prompt.trim().length === 0) {
+                              setPrompt(angle.hook)
+                            }
                           }
+                        }}
+                      >
+                        {angle.title}
+                      </Button>
+                    ))}
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="grape"
+                      radius="xl"
+                      leftSection={<IconSparkles size={12} />}
+                      onClick={() => {
+                        if (angles.length === 0) return
+                        const randomIdx = Math.floor(Math.random() * angles.length)
+                        setSelectedAngleIndex(randomIdx)
+                        if (prompt.trim().length === 0) {
+                          setPrompt(angles[randomIdx].hook)
                         }
                       }}
                     >
-                      {angle.title}
+                      Surprise me
                     </Button>
-                  ))}
+                  </Group>
+                </Box>
+              )}
+
+              {/* ─── Template shortcut — hidden when editing an existing ad ─── */}
+              {!prefillEditAdId && (
+                <Box>
+                  <Text size="xs" c="dark.2" mb="xs">
+                    Or use a template:
+                  </Text>
                   <Button
                     size="xs"
-                    variant="light"
-                    color="grape"
+                    variant="default"
                     radius="xl"
-                    leftSection={<IconSparkles size={12} />}
+                    leftSection={<IconPhoto size={12} />}
+                    onClick={() => setActiveSegment('template')}
+                  >
+                    Browse templates{hasTemplates ? ` (${pickedIds.length} picked)` : ''}
+                  </Button>
+                </Box>
+              )}
+              {!canGenerate && (
+                <Alert color="gray" variant="light" radius="md">
+                  <Text size="sm" c="dark.1">
+                    Type a prompt (10+ chars) or pick an angle to generate.
+                  </Text>
+                </Alert>
+              )}
+            </Stack>
+          )}
+
+          {/* ─── Template segment ─── */}
+          {activeSegment === 'template' && (
+            <Box>
+              <Group gap="sm" wrap="wrap" mb="md" align="flex-end">
+                <TextInput
+                  placeholder="Search templates"
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                  leftSection={<IconPhoto size={14} />}
+                  size="sm"
+                  style={{ flex: 1, minWidth: 200 }}
+                />
+                <Tooltip
+                  label={hasSavedTemplates ? undefined : 'Save templates to this product first'}
+                  disabled={hasSavedTemplates}
+                  events={{ hover: true, focus: true, touch: true }}
+                >
+                  <Button
+                    size="sm"
+                    variant={mySavesOnly ? 'filled' : 'default'}
+                    color={mySavesOnly ? 'brand' : 'gray'}
+                    radius="xl"
+                    leftSection={<IconBookmarkFilled size={13} />}
+                    disabled={!hasSavedTemplates}
+                    onClick={() => setMySavesOnly((v) => !v)}
+                    styles={{ root: { height: 36 } }}
+                  >
+                    My saves{hasSavedTemplates ? ` (${savedTemplateIdsForProduct.size})` : ''}
+                  </Button>
+                </Tooltip>
+                <Select
+                  placeholder="Category"
+                  clearable
+                  data={filterOptions?.productCategories ?? []}
+                  value={filterCategory}
+                  onChange={setFilterCategory}
+                  size="sm"
+                  w={isMobile ? '100%' : 150}
+                />
+                <Select
+                  placeholder="Style"
+                  clearable
+                  data={filterOptions?.imageStyles ?? []}
+                  value={filterImageStyle}
+                  onChange={setFilterImageStyle}
+                  size="sm"
+                  w={isMobile ? '100%' : 150}
+                />
+                <Select
+                  placeholder="Setting"
+                  clearable
+                  data={filterOptions?.settings ?? []}
+                  value={filterSetting}
+                  onChange={setFilterSetting}
+                  size="sm"
+                  w={isMobile ? '100%' : 150}
+                />
+                <Select
+                  placeholder="Angle type"
+                  clearable
+                  data={
+                    filterOptions?.angleTypes
+                      ? filterOptions.angleTypes.map((t: string) => ({ value: t, label: angleTypeLabel(t) }))
+                      : []
+                  }
+                  value={filterAngleType}
+                  onChange={setFilterAngleType}
+                  size="sm"
+                  w={isMobile ? '100%' : 150}
+                />
+                <Select
+                  placeholder="Aspect"
+                  clearable
+                  data={[
+                    { value: '1:1', label: '1:1' },
+                    { value: '4:5', label: '4:5' },
+                    { value: '9:16', label: '9:16' },
+                  ]}
+                  value={filterAspectRatio}
+                  onChange={setFilterAspectRatio}
+                  size="sm"
+                  w={isMobile ? '100%' : 110}
+                />
+                {filtersActive && (
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    color="gray"
                     onClick={() => {
-                      if (angles.length === 0) return
-                      const randomIdx = Math.floor(Math.random() * angles.length)
-                      setSelectedAngleIndex(randomIdx)
-                      if (prompt.trim().length === 0) {
-                        setPrompt(angles[randomIdx].hook)
-                      }
+                      setSearch('')
+                      setFilterCategory(null)
+                      setFilterImageStyle(null)
+                      setFilterSetting(null)
+                      setFilterAngleType(null)
+                      setFilterAspectRatio(null)
                     }}
                   >
-                    Surprise me
+                    Clear filters
                   </Button>
-                </Group>
-              </Box>
-            )}
+                )}
+                {pickedIds.length > 0 && (
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    color="red"
+                    leftSection={<IconX size={14} />}
+                    onClick={() => setPickedIds([])}
+                  >
+                    Clear selection ({pickedIds.length})
+                  </Button>
+                )}
+              </Group>
 
-            {!canGenerate && (
-              <Alert color="gray" variant="light" radius="md">
-                <Text size="sm" c="dark.1">
-                  Type a prompt (10+ chars) or pick an angle to generate.
-                </Text>
-              </Alert>
-            )}
-          </Stack>
-
+              {templatesLoading && templates.length === 0 ? (
+                <Box style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile
+                    ? 'repeat(2, 1fr)'
+                    : 'repeat(4, 1fr)',
+                  gap: 1,
+                }}>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <Box
+                      key={i}
+                      className="shimmer"
+                      style={{
+                        borderRadius: 'var(--mantine-radius-sm)',
+                        aspectRatio: i % 3 === 0 ? '4/5' : i % 3 === 1 ? '9/16' : '1/1',
+                      }}
+                    />
+                  ))}
+                </Box>
+              ) : templates.length === 0 ? (
+                <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
+              ) : (
+                <>
+                  {/* Masonic caches cell positions and crashes when items
+                      shrink. Re-key on filter changes so it remounts. */}
+                  <Masonry
+                    key={[
+                      filterArgs.search ?? '',
+                      filterArgs.productCategory ?? '',
+                      filterArgs.imageStyle ?? '',
+                      filterArgs.setting ?? '',
+                      filterArgs.angleType ?? '',
+                      filterArgs.aspectRatio ?? '',
+                    ].join('|')}
+                    items={templates}
+                    columnCount={isMobile ? 2 : 4}
+                    columnGutter={1}
+                    rowGutter={1}
+                    render={({ data: tpl }) => {
+                      const picked = pickedIds.includes(tpl._id)
+                      const aspectRatio =
+                        tpl.aspectRatio === '4:5'
+                          ? '4/5'
+                          : tpl.aspectRatio === '9:16'
+                            ? '9/16'
+                            : '1/1'
+                      return (
+                        <UnstyledButton
+                          onClick={() => toggleTemplate(tpl._id)}
+                          w="100%"
+                          className="template-card-selectable"
+                          data-testid={`template-card-${tpl._id}`}
+                          aria-pressed={picked}
+                          aria-label={`Select template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`}
+                          style={{
+                            borderRadius: 'var(--mantine-radius-sm)',
+                            overflow: 'hidden',
+                            boxShadow: picked
+                              ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(84, 116, 180, 0.35)'
+                              : 'none',
+                            position: 'relative',
+                            display: 'block',
+                            transition: 'all 200ms ease',
+                            transform: picked ? 'scale(1.02)' : 'scale(1)',
+                          }}
+                        >
+                          <Box style={{ aspectRatio }}>
+                            <Image src={tpl.thumbnailUrl} alt={`Template: ${[tpl.imageStyle, tpl.setting, tpl.productCategory].filter(Boolean).join(', ') || 'Ad template'}`} fit="cover" h="100%" w="100%" />
+                          </Box>
+                          <Badge
+                            size="xs"
+                            variant="filled"
+                            color="brand"
+                            pos="absolute"
+                            bottom={6}
+                            left={6}
+                            style={{ opacity: 0.8 }}
+                          >
+                            {tpl.aspectRatio}
+                          </Badge>
+                          {picked && (
+                            <Box
+                              pos="absolute"
+                              top={8}
+                              right={8}
+                              w={24}
+                              h={24}
+                              bg="brand"
+                              style={{
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 2px 8px rgba(84, 116, 180, 0.4)',
+                              }}
+                            >
+                              <IconCheck size={14} color="white" strokeWidth={3} />
+                            </Box>
+                          )}
+                        </UnstyledButton>
+                      )
+                    }}
+                  />
+                  {hasNextPage && (
+                    <Box ref={loadMoreRef} py="md" ta="center">
+                      {isFetchingNextPage ? (
+                        <Loader size="sm" color="brand" />
+                      ) : (
+                        <Text size="sm" c="dark.2">Scroll for more</Text>
+                      )}
+                    </Box>
+                  )}
+                </>
+              )}
+            </Box>
+          )}
 
         </Box>
 
@@ -3274,14 +3908,14 @@ function GenerateWizard({
             order: isMobile ? 1 : 2,
           }}
         >
-          {/* Source image panel */}
+          {/* Source image picker */}
           <Box mb="md">
             <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb="xs">
               Source image
             </Text>
             <Paper p="sm" bg="dark.7" radius="md" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
-              {prefillEditAdId && editSourceAd?.outputUrl ? (
-                /* Editing from an ad — show the ad as the source */
+              {prefillEditAdId ? (
+                /* ── Editing flow: show the source ad as the reference image ── */
                 <Group gap="sm" align="center">
                   <Box
                     w={56}
@@ -3290,11 +3924,11 @@ function GenerateWizard({
                       borderRadius: 6,
                       overflow: 'hidden',
                       flexShrink: 0,
-                      border: '1px solid var(--mantine-color-violet-5)',
+                      border: '1px solid var(--mantine-color-violet-6)',
                     }}
                   >
                     <Image
-                      src={editSourceAd.outputUrl}
+                      src={editSourceAd?.outputUrl || ''}
                       alt="Source ad"
                       fit="cover"
                       w="100%"
@@ -3302,12 +3936,16 @@ function GenerateWizard({
                     />
                   </Box>
                   <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Text size="xs" fw={600} c="violet.4">Editing from ad</Text>
-                    <Text size="xs" c="dark.2">Generation uses this ad as reference.</Text>
+                    <Text size="sm" fw={600} c="white" lineClamp={1}>
+                      Editing from ad
+                    </Text>
+                    <Text size="xs" c="dark.2">
+                      Source ad image
+                    </Text>
                   </Box>
                 </Group>
               ) : (
-                /* Regular product-image flow */
+                /* ── Normal flow: product image picker ── */
                 <>
                   <Group gap="sm" align="center" mb={readySourceImages.length > 1 ? 'sm' : 0}>
                     <Box
@@ -3376,30 +4014,95 @@ function GenerateWizard({
                   )}
                 </>
               )}
-              {/* Include-source-image toggle — shown in both editing and regular flows */}
+              {/* Include source image checkbox — visible in both flows */}
               <Box mt="sm" pt="sm" style={{ borderTop: '1px solid var(--mantine-color-dark-6)' }}>
                 <Checkbox
                   label="Include source image"
-                  description="When unchecked, generate purely from your prompt — no visual reference."
                   checked={includeSourceImage}
                   onChange={(e) => setIncludeSourceImage(e.currentTarget.checked)}
                   size="xs"
                 />
+                <Text size="xs" c="dark.3" mt={4}>
+                  When unchecked, generate purely from your prompt — no visual reference.
+                </Text>
               </Box>
             </Paper>
           </Box>
 
-          {/* Selection summary */}
+          {/* Segment-aware selection summary */}
           <Box mb="md">
-            <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb="xs">Starting from</Text>
-            {prompt.trim().length >= 10 ? (
-              <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-brand-5)' }}>
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="xs" c="dark.2">Custom prompt</Text>
-                  <Text size="xs" c="dark.1" lineClamp={2}>
-                    {prompt.trim()}
+            <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb="xs">
+              {activeSegment === 'template' ? 'Templates' : 'Starting from'}
+            </Text>
+            {activeSegment === 'template' ? (
+              pickedIds.length === 0 ? (
+                <Paper
+                  p="sm"
+                  radius="md"
+                  bg="dark.7"
+                  style={{ border: '1px dashed var(--mantine-color-dark-4)' }}
+                >
+                  <Text size="xs" c="dark.2" ta="center">
+                    No templates picked — choose from the gallery
                   </Text>
-                </Box>
+                </Paper>
+              ) : (
+                <Stack gap={6}>
+                  <Group gap={6} wrap="wrap">
+                    {pickedIds.map((id) => {
+                      const tpl = templates.find((t) => t._id === id)
+                      if (!tpl) return null
+                      return (
+                        <Box
+                          key={id}
+                          pos="relative"
+                          w={48}
+                          h={48}
+                          style={{
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                            border: '1px solid var(--mantine-color-brand-5)',
+                          }}
+                        >
+                          <Image src={tpl.thumbnailUrl ?? tpl.imageUrl} alt="" fit="cover" w="100%" h="100%" />
+                          <UnstyledButton
+                            onClick={() => setPickedIds((p) => p.filter((x) => x !== id))}
+                            aria-label="Remove template"
+                            style={{
+                              position: 'absolute',
+                              top: 2,
+                              right: 2,
+                              width: 16,
+                              height: 16,
+                              borderRadius: '50%',
+                              backgroundColor: 'rgba(0,0,0,0.7)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'white',
+                            }}
+                          >
+                            <IconX size={10} />
+                          </UnstyledButton>
+                        </Box>
+                      )
+                    })}
+                  </Group>
+                  <Text size="xs" c="dark.2">
+                    {pickedIds.length}/3 selected
+                  </Text>
+                </Stack>
+              )
+            ) : prompt.trim().length >= 10 ? (
+              <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-brand-5)' }}>
+                <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
+                  <Box style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="xs" c="dark.2">Custom prompt</Text>
+                    <Text size="xs" c="dark.1" lineClamp={2}>
+                      {prompt.trim()}
+                    </Text>
+                  </Box>
+                </Group>
               </Paper>
             ) : selectedAngleIndex !== null && product.marketingAngles?.[selectedAngleIndex] ? (
               <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-brand-5)' }}>
@@ -3455,9 +4158,67 @@ function GenerateWizard({
             />
           </Box>
 
-          {/* Variations — locked at 1 when editing an existing ad. */}
+          {/* Mode — only relevant for template path */}
+          {activeSegment === 'template' && hasTemplates && (
+            <Box mb="md">
+              <Text size="sm" fw={500} c="white" mb="xs">Mode</Text>
+              <Radio.Group value={mode} onChange={(val) => setMode(val as Mode)}>
+                <Stack gap="xs">
+                  <Radio
+                    value="exact"
+                    label={
+                      <Box>
+                        <Text fw={500} size="sm">Exact</Text>
+                        <Text size="xs" c="dark.2">Swap the product into the template scene</Text>
+                      </Box>
+                    }
+                    styles={{
+                      root: {
+                        padding: 'var(--mantine-spacing-sm)',
+                        border: '1px solid var(--mantine-color-dark-5)',
+                        borderRadius: 'var(--mantine-radius-md)',
+                      },
+                      body: { alignItems: 'flex-start' },
+                      labelWrapper: { width: '100%' },
+                    }}
+                  />
+                  <Radio
+                    value="remix"
+                    label={
+                      <Box>
+                        <Text fw={500} size="sm">Remix</Text>
+                        <Text size="xs" c="dark.2">Generate a new scene inspired by the template</Text>
+                      </Box>
+                    }
+                    styles={{
+                      root: {
+                        padding: 'var(--mantine-spacing-sm)',
+                        border: '1px solid var(--mantine-color-dark-5)',
+                        borderRadius: 'var(--mantine-radius-md)',
+                      },
+                      body: { alignItems: 'flex-start' },
+                      labelWrapper: { width: '100%' },
+                    }}
+                  />
+                </Stack>
+              </Radio.Group>
+              {mode === 'exact' && (
+                <Checkbox
+                  mt="sm"
+                  label="Adapt colors to product"
+                  checked={colorAdapt}
+                  onChange={(e) => setColorAdapt(e.currentTarget.checked)}
+                />
+              )}
+            </Box>
+          )}
+
+          {/* Variations */}
           <Box mb="md">
-            <Text size="sm" fw={500} c="white" mb="xs">Variations</Text>
+            <Text size="sm" fw={500} c="white" mb="xs">
+              Variations
+              {activeSegment === 'template' && hasTemplates ? ' per template' : ''}
+            </Text>
             <SegmentedControl
               value={variationsPerTemplate}
               onChange={setVariationsPerTemplate}
@@ -3467,7 +4228,7 @@ function GenerateWizard({
               disabled={!!prefillEditAdId}
             />
             {prefillEditAdId && (
-              <Text size="xs" c="dark.2" mt={4}>
+              <Text size="xs" c="dark.3" mt={4}>
                 Locked to 1 when editing an existing ad.
               </Text>
             )}
@@ -3483,7 +4244,7 @@ function GenerateWizard({
           <Box pt="lg" mt="lg" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
             {!canGenerate ? (
               <Text size="sm" c="dark.2" ta="center" mb="md">
-                Type a prompt (10+ chars) or pick an angle
+                {activeSegment === 'template' ? 'Pick a template' : 'Type a prompt (10+ chars) or pick an angle'}
               </Text>
             ) : (
               <Paper p="sm" mb="md" radius="md" bg="dark.7">
@@ -3492,9 +4253,11 @@ function GenerateWizard({
                   <Text size="lg" fw={700} c="white">{totalCount}</Text>
                 </Group>
                 <Text size="xs" c="dark.2" mt={4}>
-                  {usePromptPath
-                    ? `${variationsPerTemplate} image${variationsCount > 1 ? 's' : ''} from prompt`
-                    : `${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''} from angle`}
+                  {useTemplatePath
+                    ? `${pickedIds.length} template${pickedIds.length > 1 ? 's' : ''} × ${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''}`
+                    : usePromptPath
+                      ? `${variationsPerTemplate} image${variationsCount > 1 ? 's' : ''} from prompt`
+                      : `${variationsPerTemplate} variation${variationsCount > 1 ? 's' : ''} from angle`}
                 </Text>
               </Paper>
             )}
