@@ -554,7 +554,13 @@ export const saveDynamicPrompt = internalMutation({
     dynamicPrompt: v.string(),
   },
   handler: async (ctx, { generationId, dynamicPrompt }) => {
+    console.log(`[saveDynamicPrompt] generationId=${generationId} incomingLen=${dynamicPrompt.length}`)
+    if (!dynamicPrompt || dynamicPrompt.length === 0) {
+      throw new Error(`saveDynamicPrompt called with empty string for generationId=${generationId}`)
+    }
     await ctx.db.patch(generationId, { dynamicPrompt })
+    const after = await ctx.db.get(generationId)
+    console.log(`[saveDynamicPrompt] generationId=${generationId} postPatchLen=${after?.dynamicPrompt?.length ?? 'undef'}`)
   },
 })
 
