@@ -30,6 +30,7 @@ type FirecrawlScrapeResponse = {
   success?: boolean
   data?: {
     markdown?: string
+    html?: string
     json?: FirecrawlExtractedJson
     metadata?: {
       title?: string
@@ -141,7 +142,9 @@ export const runUrlImport = internalAction({
         },
         body: JSON.stringify({
           url: importRow.sourceUrl,
-          formats: ['markdown', 'json'],
+          // Include 'html' so we can fish out lazy-loaded gallery images
+          // (data-src, srcset) that markdown conversion drops.
+          formats: ['markdown', 'html', 'json'],
           jsonOptions: {
             schema: FIRECRAWL_EXTRACTION_SCHEMA,
             prompt: FIRECRAWL_PROMPT,
@@ -150,13 +153,20 @@ export const runUrlImport = internalAction({
           // including product galleries Firecrawl considers "supporting".
           // Disable it so the LLM sees every gallery thumbnail.
           onlyMainContent: false,
-          // Wait briefly for JS hydration on Shopify/Wix product pages,
-          // but keep this small — Firecrawl's overall budget is the
-          // sum of waitFor + render + LLM extraction. Pages with very
-          // slow client rendering may still need waitForSelector.
-          waitFor: 2000,
+          // Trigger lazy-loaded gallery images by scrolling before snapshot.
+          // Most product galleries use IntersectionObserver to load images
+          // only when scrolled into view; without this the gallery never
+          // hydrates beyond the hero.
+          actions: [
+            { type: 'wait', milliseconds: 1500 },
+            { type: 'scroll', direction: 'down' },
+            { type: 'wait', milliseconds: 800 },
+            { type: 'scroll', direction: 'down' },
+            { type: 'wait', milliseconds: 800 },
+          ],
           // Default Firecrawl timeout is 30s for both render + extraction.
-          // LLM extraction with our richer schema needs more headroom.
+          // LLM extraction with our richer schema + scroll actions needs
+          // more headroom.
           timeout: 60000,
         }),
       })
@@ -199,24 +209,28 @@ export const runUrlImport = internalAction({
           currentStep: 'Reading product details',
         })
 
-        // Pull candidate images from three sources, in order of trust:
+        // Pull candidate images from four sources, in order of trust:
         // 1) Firecrawl's LLM extraction (high precision, low recall)
         // 2) og:image meta tag (high precision, single image)
-        // 3) <img src> URLs scraped from the page's markdown (high recall,
-        //    needs filtering — looksLikeImageUrl rejects logos/icons/page
-        //    URLs that sneak in)
+        // 3) Markdown <img> URLs (medium recall, drops lazy-load attrs)
+        // 4) Raw HTML <img> tag attrs incl data-src + srcset (highest
+        //    recall, catches lazy-loaded gallery images that the other
+        //    sources miss)
         const markdownImages = extractMarkdownImageUrls(scrapePayload.data.markdown ?? '')
+        const htmlImages = extractHtmlImageUrls(scrapePayload.data.html ?? '')
         const rawImageUrls = [
           ...(extracted.productImageUrls ?? []),
           ...(fallbackImage ? [fallbackImage] : []),
           ...markdownImages,
+          ...htmlImages,
         ]
         const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 5)
         console.log(
           `[urlImport ${importId}] image urls: raw=${rawImageUrls.length} ` +
             `(llm=${(extracted.productImageUrls ?? []).length} ` +
             `og=${fallbackImage ? 1 : 0} ` +
-            `markdown=${markdownImages.length}) ` +
+            `markdown=${markdownImages.length} ` +
+            `html=${htmlImages.length}) ` +
             `valid=${candidateImages.length} ` +
             `rejected=${rawImageUrls.length - candidateImages.length}`,
         )
@@ -424,6 +438,40 @@ function extractMarkdownImageUrls(markdown: string): string[] {
   let m: RegExpExecArray | null
   while ((m = re.exec(markdown)) !== null) {
     if (m[1]) out.push(m[1])
+  }
+  return out
+}
+
+// Pulls image URLs out of raw HTML, including lazy-load attributes
+// (data-src, data-srcset) and srcset variants. Markdown conversion
+// drops these because lazy-loaded <img> tags often have an empty
+// or 1×1 placeholder src= and the real URL lives in data-src.
+function extractHtmlImageUrls(html: string): string[] {
+  if (!html) return []
+  const out: string[] = []
+  // Match every <img ...> tag, then pull every src/data-src/srcset/
+  // data-srcset/data-original attribute we can find on it.
+  const imgTagRe = /<img\b[^>]*>/gi
+  const attrRe = /\b(?:data-src|data-original|data-srcset|src|srcset)=["']([^"']+)["']/gi
+  let imgMatch: RegExpExecArray | null
+  while ((imgMatch = imgTagRe.exec(html)) !== null) {
+    const tag = imgMatch[0]
+    let attrMatch: RegExpExecArray | null
+    while ((attrMatch = attrRe.exec(tag)) !== null) {
+      const value = attrMatch[1]
+      if (!value) continue
+      // srcset: "url1 1x, url2 2x" — split on comma + take first token of each
+      if (value.includes(',') && /\s\d+(?:\.\d+)?[wx]/i.test(value)) {
+        for (const part of value.split(',')) {
+          const url = part.trim().split(/\s+/)[0]
+          if (url) out.push(url)
+        }
+      } else {
+        out.push(value)
+      }
+    }
+    // Reset attrRe lastIndex per tag (it's a /g regex)
+    attrRe.lastIndex = 0
   }
   return out
 }
