@@ -413,11 +413,26 @@ const schema = defineSchema({
       v.literal('product-and-brand'),
       v.literal('brand-only'),
     )),
-    productId: v.optional(v.id('products')), // populated when product is created
+    // Kept for potential future repurposing; no longer set by the import pipeline.
+    // The import flow now stores distilled fields directly on the row and lets
+    // the frontend create the product only when the user clicks Save.
+    productId: v.optional(v.id('products')),
     brandKitUpdated: v.optional(v.boolean()),
     error: v.optional(v.string()),
     createdAt: v.number(),
     finishedAt: v.optional(v.number()),
+    // Distilled scrape output — populated by runUrlImport before status='done'.
+    // Read by the /products/new form to autofill; the actual product row is
+    // only created when the user clicks Save.
+    distilledName: v.optional(v.string()),
+    distilledDescription: v.optional(v.string()),
+    distilledCategory: v.optional(v.string()),
+    distilledTags: v.optional(v.array(v.string())),
+    distilledAiNotes: v.optional(v.string()),
+    distilledPrice: v.optional(v.number()),
+    distilledCurrency: v.optional(v.string()),
+    distilledReviewSnippets: v.optional(v.array(v.string())),
+    uploadedImageUrls: v.optional(v.array(v.string())), // R2 URLs after upload
   })
     .index('by_userId', ['userId'])
     .index('by_status', ['status'])

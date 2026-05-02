@@ -7,7 +7,6 @@
 import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import { internal } from './_generated/api'
-import type { Id } from './_generated/dataModel'
 import { uploadFromUrl } from './r2'
 import { nanoid } from 'nanoid'
 
@@ -199,9 +198,11 @@ export const runUrlImport = internalAction({
 
       const isBrandOnly = importRow.mode === 'brand-only'
 
-      // 2-4. Product image extraction + upload + creation.
+      // 2-4. Product image extraction, upload, and distillation.
       // Skipped entirely for brand-only imports (used by onboarding).
-      let productId: Id<'products'> | undefined
+      // NOTE: product row is NOT created here anymore — distilled fields are
+      // stored on the urlImports row and the frontend creates the product when
+      // the user explicitly clicks Save.
       if (!isBrandOnly) {
         await ctx.runMutation(internal.urlImports.patchImportStatus, {
           importId,
@@ -326,17 +327,20 @@ export const runUrlImport = internalAction({
           tags: rawTags,
         })
 
-        productId = await ctx.runMutation(internal.products.createProductFromImport, {
-          userId: importRow.userId,
-          name: productName,
-          imageUrls: uploadedUrls,
-          customerLanguage: productReviewSnippets,
-          ...(distilled.description ? { description: distilled.description } : {}),
-          ...(cleanPrice != null ? { price: cleanPrice } : {}),
-          ...(cleanCurrency ? { currency: cleanCurrency } : {}),
-          ...(distilled.category ? { category: distilled.category } : {}),
-          ...(distilled.tags && distilled.tags.length > 0 ? { tags: distilled.tags } : {}),
-          ...(distilled.aiNotes ? { aiNotes: distilled.aiNotes } : {}),
+        // Store distilled fields on the import row. The frontend reads these
+        // to autofill the form; the actual product row is created only when
+        // the user clicks Save.
+        await ctx.runMutation(internal.urlImports.saveDistilledResults, {
+          importId,
+          distilledName: productName,
+          uploadedImageUrls: uploadedUrls,
+          ...(productReviewSnippets ? { distilledReviewSnippets: productReviewSnippets } : {}),
+          ...(distilled.description ? { distilledDescription: distilled.description } : {}),
+          ...(cleanPrice != null ? { distilledPrice: cleanPrice } : {}),
+          ...(cleanCurrency ? { distilledCurrency: cleanCurrency } : {}),
+          ...(distilled.category ? { distilledCategory: distilled.category } : {}),
+          ...(distilled.tags && distilled.tags.length > 0 ? { distilledTags: distilled.tags } : {}),
+          ...(distilled.aiNotes ? { distilledAiNotes: distilled.aiNotes } : {}),
         })
       } else {
         await ctx.runMutation(internal.urlImports.patchImportStatus, {
@@ -398,7 +402,6 @@ export const runUrlImport = internalAction({
         importId,
         status: 'done',
         currentStep: 'Done',
-        productId,
         brandKitUpdated,
         finishedAt: Date.now(),
       })

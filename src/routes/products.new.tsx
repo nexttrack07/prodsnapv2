@@ -2,17 +2,17 @@
  * /products/new — Full-page product creation form.
  *
  * URL-import flow:
- *   - Calling `api.urlImports.createUrlImport` creates a product end-to-end
- *     (scrape → upload → analysis). Once the import row reaches `done`, the
- *     product already exists in the DB.
- *   - We auto-fill form fields from the resulting product row but DO NOT call
- *     `createProductRich` again. Instead, "Create product" just navigates to
- *     `/studio/$productId` so the user lands directly on the product that was
- *     already created by the import pipeline.
+ *   - Calling `api.urlImports.createUrlImport` scrapes the page, distils
+ *     product fields + uploads images to R2, and stores the results on the
+ *     urlImports row (status='done'). NO product row is created yet.
+ *   - The form autofills from the distilled fields on the import row.
+ *   - Clicking Save calls `createProductRich` with the current form state
+ *     (including any edits). Clicking Cancel navigates back without writing
+ *     anything to the products table.
  *
  * Direct-upload flow:
  *   - User uploads images via `api.r2.uploadProductImage`, fills the form, and
- *     clicks "Create product" → calls `createProductRich` → navigates to studio.
+ *     clicks Save → calls `createProductRich` → navigates to studio.
  */
 
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
@@ -80,26 +80,11 @@ function NewProductPage() {
   const [importId, setImportId] = useState<Id<'urlImports'> | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
 
-  // productId from a completed URL import (used to skip createProductRich)
-  const [importedProductId, setImportedProductId] = useState<Id<'products'> | null>(null)
-
   const createUrlImportMutation = useConvexMutation(api.urlImports.createUrlImport)
 
   const importRow = useQuery(
     api.urlImports.getUrlImport,
     importId ? { importId } : 'skip',
-  )
-
-  // Fetch product data once the import is done so we can auto-fill
-  const importedProduct = useQuery(
-    api.products.getProduct,
-    importedProductId ? { productId: importedProductId } : 'skip',
-  )
-
-  // Fetch images for the imported product
-  const importedImages = useQuery(
-    api.productImages.getProductImagesList,
-    importedProductId ? { productId: importedProductId } : 'skip',
   )
 
   const isImporting =
@@ -123,43 +108,32 @@ function NewProductPage() {
   const createProductRichMutation = useConvexMutation(api.products.createProductRich)
   const createProduct = useMutation({ mutationFn: createProductRichMutation })
 
-  // ── React to URL import status ────────────────────────────────────────────
+  // ── React to URL import status + autofill form from distilled fields ──────
   useEffect(() => {
     if (!importRow) return
-
-    if (importRow.status === 'done' && importRow.productId) {
-      setImportedProductId(importRow.productId as Id<'products'>)
-      setImportError(null)
-    }
 
     if (importRow.status === 'failed') {
       setImportError(importRow.error || importRow.currentStep || 'Import failed')
       setImportId(null) // re-enable input
+      return
+    }
+
+    if (importRow.status !== 'done') return
+
+    // Autofill form from distilled fields stored on the import row
+    if (importRow.distilledName) setName(importRow.distilledName)
+    if (importRow.distilledDescription) setDescription(importRow.distilledDescription)
+    if (importRow.distilledCategory) setCategory(importRow.distilledCategory)
+    if (typeof importRow.distilledPrice === 'number') setPrice(importRow.distilledPrice)
+    if (importRow.distilledCurrency) setCurrency(importRow.distilledCurrency)
+    if (Array.isArray(importRow.distilledTags) && importRow.distilledTags.length > 0) {
+      setTags(importRow.distilledTags)
+    }
+    if (importRow.distilledAiNotes) setAiNotes(importRow.distilledAiNotes)
+    if (Array.isArray(importRow.uploadedImageUrls) && importRow.uploadedImageUrls.length > 0) {
+      setImageUrls(importRow.uploadedImageUrls)
     }
   }, [importRow])
-
-  // ── Auto-fill form from imported product ─────────────────────────────────
-  useEffect(() => {
-    if (!importedProduct) return
-
-    if (importedProduct.name) setName(importedProduct.name)
-    if (importedProduct.productDescription) setDescription(importedProduct.productDescription)
-    if (importedProduct.category) setCategory(importedProduct.category)
-    if (typeof importedProduct.price === 'number') setPrice(importedProduct.price)
-    if (importedProduct.currency) setCurrency(importedProduct.currency)
-    if (Array.isArray(importedProduct.tags) && importedProduct.tags.length > 0) {
-      setTags(importedProduct.tags)
-    }
-    if (importedProduct.aiNotes) setAiNotes(importedProduct.aiNotes)
-  }, [importedProduct])
-
-  useEffect(() => {
-    if (!importedImages || importedImages.length === 0) return
-    const originals = importedImages
-      .filter((img) => img.type === 'original')
-      .map((img) => img.imageUrl)
-    if (originals.length > 0) setImageUrls(originals)
-  }, [importedImages])
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   async function handleUrlImport() {
@@ -233,13 +207,6 @@ function NewProductPage() {
   }
 
   async function handleSubmit() {
-    // URL-import path: product already exists — just navigate
-    if (importedProductId) {
-      navigate({ to: '/studio/$productId', params: { productId: importedProductId } })
-      return
-    }
-
-    // Direct-upload path
     if (imageUrls.length === 0 || !name.trim()) return
     setIsSubmitting(true)
     try {
@@ -272,7 +239,7 @@ function NewProductPage() {
     }
   }
 
-  const canSubmit = (name.trim().length > 0 && imageUrls.length > 0) || !!importedProductId
+  const canSubmit = name.trim().length > 0 && imageUrls.length > 0
   const fieldsDisabled = isImporting
 
   return (
@@ -313,7 +280,7 @@ function NewProductPage() {
                 placeholder="https://yoursite.com/products/your-product"
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.currentTarget.value)}
-                disabled={isImporting || !!importedProductId}
+                disabled={isImporting}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleUrlImport()
                 }}
@@ -329,7 +296,7 @@ function NewProductPage() {
                 color="brand"
                 variant="light"
                 onClick={handleUrlImport}
-                disabled={isImporting || !!importedProductId || !importUrl.trim()}
+                disabled={isImporting || !importUrl.trim()}
                 loading={isImporting}
               >
                 Import
@@ -364,9 +331,9 @@ function NewProductPage() {
               </Alert>
             )}
 
-            {importedProductId && (
+            {importRow?.status === 'done' && (
               <Alert color="green" title="Import complete" radius="md">
-                <Text size="sm">Fields filled from the imported product.</Text>
+                <Text size="sm">Fields filled from the imported page — review and click Save.</Text>
               </Alert>
             )}
           </Stack>
@@ -652,6 +619,15 @@ function NewProductPage() {
         {/* Footer */}
         <Group justify="flex-end" pt="md">
           <Button
+            variant="subtle"
+            color="dark"
+            size="md"
+            onClick={() => navigate({ to: '/home' })}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
             color="brand"
             size="md"
             leftSection={<IconUpload size={16} />}
@@ -659,7 +635,7 @@ function NewProductPage() {
             disabled={!canSubmit || isSubmitting || isUploading || isImporting}
             loading={isSubmitting}
           >
-            {importedProductId ? 'Open product' : 'Create product'}
+            Save product
           </Button>
         </Group>
       </Stack>

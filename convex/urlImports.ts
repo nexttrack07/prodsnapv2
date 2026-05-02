@@ -135,6 +135,28 @@ export const patchImportStatus = internalMutation({
   },
 })
 
+// ─── Internal mutation: save distilled results from runUrlImport ──────────
+// Called by the action after scraping + distillation. Stores the distilled
+// fields directly on the import row so the frontend can autofill the form
+// without a product row being created yet.
+export const saveDistilledResults = internalMutation({
+  args: {
+    importId: v.id('urlImports'),
+    distilledName: v.optional(v.string()),
+    distilledDescription: v.optional(v.string()),
+    distilledCategory: v.optional(v.string()),
+    distilledTags: v.optional(v.array(v.string())),
+    distilledAiNotes: v.optional(v.string()),
+    distilledPrice: v.optional(v.number()),
+    distilledCurrency: v.optional(v.string()),
+    distilledReviewSnippets: v.optional(v.array(v.string())),
+    uploadedImageUrls: v.array(v.string()),
+  },
+  handler: async (ctx, { importId, ...patch }) => {
+    await ctx.db.patch(importId, patch)
+  },
+})
+
 // ─── Internal query: used by the orchestration action ────────────────────
 export const getInternal = internalQuery({
   args: { importId: v.id('urlImports') },
