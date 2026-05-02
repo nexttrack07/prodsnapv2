@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { useQuery } from 'convex/react'
-import { useMediaQuery } from '@mantine/hooks'
+import { useMediaQuery, useDisclosure } from '@mantine/hooks'
 import { useAction } from 'convex/react'
 import { useConvexMutation } from '@convex-dev/react-query'
 import { useMutation } from '@tanstack/react-query'
@@ -18,6 +18,7 @@ import {
   Group,
   Image,
   Loader,
+  Modal,
   Paper,
   ScrollArea,
   SimpleGrid,
@@ -26,6 +27,7 @@ import {
   Text,
   ThemeIcon,
   Title,
+  UnstyledButton,
 } from '@mantine/core'
 import {
   IconUpload,
@@ -44,6 +46,7 @@ import { mapBillingError } from '../lib/billing/mapBillingError'
 import { MAX_PRODUCT_IMAGE_SIZE } from '../utils/constants'
 import { capitalizeWords } from '../utils/strings'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
+import { PageHeaderActions } from '../components/layout/PageHeaderActions'
 
 type HomeSearch = { ad?: string }
 
@@ -64,6 +67,7 @@ function HomePage() {
   const templates = useQuery(api.templates.listPublished, {})
   const search = Route.useSearch()
   const navigate = useNavigate()
+  const [createOpen, { open: openCreate, close: closeCreate }] = useDisclosure(false)
 
   const isLoading =
     dashboard === undefined || products === undefined || templates === undefined
@@ -78,8 +82,26 @@ function HomePage() {
     (a) => a._id as Id<'templateGenerations'>,
   )
 
+  // Surface the header CTA only once the user has products. First-time
+  // users hit the giant empty-state hero dropzone; a header button then
+  // would compete with it.
+  const hasProducts = !!products && products.length > 0
+
   return (
     <Container size="lg" py="xl">
+      {hasProducts && (
+        <PageHeaderActions>
+          <Button
+            size="sm"
+            color="brand"
+            leftSection={<IconPlus size={14} />}
+            onClick={openCreate}
+          >
+            New product
+          </Button>
+        </PageHeaderActions>
+      )}
+
       <Stack gap="xl">
         <HeroSection
           dashboard={dashboard ?? null}
@@ -91,8 +113,8 @@ function HomePage() {
           <ThreePathsSection focusProductId={dashboard.focusProduct._id as Id<'products'>} />
         )}
 
-        {!!products && products.length > 0 && (
-          <ProductsRow products={products} isLoading={false} />
+        {hasProducts && (
+          <ProductsRow products={products} isLoading={false} onAddProduct={openCreate} />
         )}
 
         {templates && templates.length > 0 && (
@@ -106,6 +128,8 @@ function HomePage() {
           <LibraryTeaser totalGenerations={dashboard.totalGenerations} />
         )}
       </Stack>
+
+      <CreateProductModal opened={createOpen} onClose={closeCreate} />
 
       <AdDetailPanel
         opened={!!search.ad}
@@ -474,9 +498,11 @@ type ProductRow = NonNullable<ReturnType<typeof useQuery<typeof api.products.lis
 function ProductsRow({
   products,
   isLoading,
+  onAddProduct,
 }: {
   products: ProductRow[]
   isLoading: boolean
+  onAddProduct: () => void
 }) {
   if (isLoading) return null
   return (
@@ -491,12 +517,68 @@ function ProductsRow({
       </Group>
       <ScrollArea offsetScrollbars scrollbarSize={6} type="hover">
         <Group gap="md" wrap="nowrap" pb="xs">
+          <NewProductTile onClick={onAddProduct} />
           {products.map((p) => (
             <ProductTile key={p._id} product={p} />
           ))}
         </Group>
       </ScrollArea>
     </Stack>
+  )
+}
+
+function NewProductTile({ onClick }: { onClick: () => void }) {
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      style={{
+        width: 180,
+        flexShrink: 0,
+      }}
+      aria-label="Add new product"
+    >
+      <Paper
+        radius="lg"
+        withBorder
+        style={{
+          backgroundColor: 'var(--mantine-color-dark-7)',
+          borderColor: 'var(--mantine-color-dark-5)',
+          borderStyle: 'dashed',
+          transition: 'transform 150ms ease, border-color 150ms ease, background-color 150ms ease',
+        }}
+        className="product-card-hover"
+      >
+        <AspectRatio ratio={1}>
+          <Box
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              backgroundColor: 'var(--mantine-color-dark-6)',
+            }}
+          >
+            <ThemeIcon
+              size={44}
+              radius="md"
+              variant="gradient"
+              gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+            >
+              <IconPlus size={22} />
+            </ThemeIcon>
+          </Box>
+        </AspectRatio>
+        <Box p="sm">
+          <Text fw={500} size="sm" c="white" truncate>
+            New product
+          </Text>
+          <Text size="xs" c="dark.2" mt={2}>
+            Upload a photo
+          </Text>
+        </Box>
+      </Paper>
+    </UnstyledButton>
   )
 }
 
@@ -552,6 +634,136 @@ function ProductTile({ product }: { product: ProductRow }) {
         </Box>
       </Paper>
     </Link>
+  )
+}
+
+// ─── Create-product modal ──────────────────────────────────────────────────
+// Reuses the same upload-and-create flow as the empty-state hero, surfaced
+// from the header CTA + the first tile in the "Your products" row so users
+// can add another product without needing to clear out the focus product.
+
+function CreateProductModal({
+  opened,
+  onClose,
+}: {
+  opened: boolean
+  onClose: () => void
+}) {
+  const navigate = useNavigate()
+  const uploadAction = useAction(api.r2.uploadProductImage)
+  const createProduct = useConvexMutation(api.products.createProduct)
+  const createProductMutation = useMutation({ mutationFn: createProduct })
+  const [isUploading, setIsUploading] = useState(false)
+
+  async function handleFileDrop(files: File[]) {
+    const file = files[0]
+    if (!file) return
+    if (file.size > MAX_PRODUCT_IMAGE_SIZE) {
+      notifications.show({
+        title: 'File too large',
+        message: 'Image must be under 10 MB',
+        color: 'red',
+      })
+      return
+    }
+    setIsUploading(true)
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce(
+          (d, b) => d + String.fromCharCode(b),
+          '',
+        ),
+      )
+      const fileName = file.name.replace(/\.[^.]+$/, '')
+      const { url } = await uploadAction({
+        name: file.name,
+        base64,
+        contentType: file.type,
+      })
+      const productId: Id<'products'> = await createProductMutation.mutateAsync(
+        {
+          imageUrl: url,
+          name: fileName.replace(/[-_]/g, ' '),
+        },
+      )
+      notifications.show({
+        title: 'Product created',
+        message: "Let's make some ads.",
+        color: 'green',
+      })
+      onClose()
+      navigate({ to: '/studio/$productId', params: { productId } })
+    } catch (err) {
+      const info = mapBillingError(err)
+      notifications.show({
+        title: info.title === 'Something went wrong' ? 'Upload failed' : info.title,
+        message: info.action ? (
+          <>
+            {info.message}{' '}
+            <Anchor component={Link} to={info.action.href} size="sm" fw={600}>
+              {info.action.label} →
+            </Anchor>
+          </>
+        ) : (
+          info.message
+        ),
+        color: 'red',
+        autoClose: 8000,
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title="Add a product"
+      size="md"
+      centered
+      radius="md"
+    >
+      <Stack gap="md">
+        <Text size="sm" c="dark.2">
+          Drop a product photo. Background gets removed automatically and we'll start
+          analyzing the product.
+        </Text>
+        <Dropzone
+          onDrop={handleFileDrop}
+          accept={IMAGE_MIME_TYPE}
+          maxSize={MAX_PRODUCT_IMAGE_SIZE}
+          multiple={false}
+          disabled={isUploading}
+          style={{
+            border: '2px dashed var(--mantine-color-dark-4)',
+            borderRadius: 'var(--mantine-radius-md)',
+            background: 'var(--mantine-color-dark-7)',
+            padding: 'var(--mantine-spacing-xl)',
+          }}
+        >
+          <Stack align="center" gap="sm" py="md">
+            <ThemeIcon
+              size={56}
+              radius="lg"
+              variant="gradient"
+              gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+            >
+              {isUploading ? <Loader size="sm" color="white" /> : <IconPhoto size={28} />}
+            </ThemeIcon>
+            <Stack gap={2} align="center">
+              <Text size="sm" c="white" fw={500}>
+                {isUploading ? 'Uploading…' : 'Drop a photo or click to browse'}
+              </Text>
+              <Text size="xs" c="dark.2">
+                PNG, JPG, or WebP — up to 10 MB
+              </Text>
+            </Stack>
+          </Stack>
+        </Dropzone>
+      </Stack>
+    </Modal>
   )
 }
 
