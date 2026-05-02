@@ -52,6 +52,7 @@ import {
   IconStarFilled,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
+import { PRODUCT_CATEGORIES } from '../utils/categories'
 import type { Id } from '../../convex/_generated/dataModel'
 import { mapBillingError } from '../lib/billing/mapBillingError'
 import { MAX_PRODUCT_IMAGE_SIZE } from '../utils/constants'
@@ -544,25 +545,16 @@ function NewProductPage() {
             }}
           />
 
-          {/* Category */}
+          {/* Category — restricted to the canonical PRODUCT_CATEGORIES list.
+              The URL-import LLM is instructed to pick one of these values,
+              and any off-list result gets dropped before reaching the form. */}
           <Select
             label="Category"
-            placeholder="e.g. Electronics, Apparel, Beauty"
+            placeholder="Pick a category"
             value={category}
             onChange={setCategory}
             disabled={fieldsDisabled}
-            data={[
-              'Electronics',
-              'Apparel',
-              'Beauty',
-              'Food & Beverage',
-              'Home & Garden',
-              'Sports & Outdoors',
-              'Health & Wellness',
-              'Toys & Games',
-              'Books & Media',
-              'Software',
-            ]}
+            data={[...PRODUCT_CATEGORIES]}
             searchable
             clearable
             allowDeselect

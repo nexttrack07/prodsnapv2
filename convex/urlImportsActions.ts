@@ -619,6 +619,30 @@ async function safeReadText(res: Response): Promise<string> {
 // Best-effort: any failure returns sensible fallbacks (truncated raw
 // values) so we never block product creation on this LLM call.
 
+// Canonical product-category list. Mirrors src/utils/categories.ts —
+// convex 'use node' actions can't import from src/, so the list lives
+// twice. Keep both in sync when adding entries.
+const PRODUCT_CATEGORIES = [
+  'Apparel',
+  'Backpacks & Bags',
+  'Beauty',
+  'Books & Media',
+  'Electronics',
+  'Food & Beverage',
+  'Footwear',
+  'Headphones & Audio',
+  'Health & Wellness',
+  'Home & Garden',
+  'Jewelry & Watches',
+  'Pet Supplies',
+  'Skincare',
+  'Software & Apps',
+  'Sports & Outdoors',
+  'Supplements',
+  'Toys & Games',
+  'Other',
+] as const
+
 type DistilledFields = {
   description?: string
   category?: string
@@ -650,10 +674,13 @@ async function distillImportedProduct(
     `RAW DESCRIPTION (verbose marketing copy from the source page):\n${raw.description}\n\n` +
     `CATEGORY GUESS: ${raw.category ?? '(none)'}\n` +
     `TAG GUESSES: ${(raw.tags ?? []).join(', ') || '(none)'}\n\n` +
+    `ALLOWED CATEGORIES (you MUST pick exactly one of these — match case and spelling):\n` +
+    PRODUCT_CATEGORIES.map((c) => `- ${c}`).join('\n') +
+    `\n\n` +
     `Output STRICT JSON with this exact shape:\n` +
     `{\n` +
     `  "description": "2-3 sentence value-prop, lead with the product's core benefit, then a key differentiator. Max 280 characters. No fluff.",\n` +
-    `  "category": "Single common-noun category like 'backpack', 'skincare', 'headphones'. Lowercase, max 30 chars.",\n` +
+    `  "category": "Pick ONE from the ALLOWED CATEGORIES list above. Use 'Other' only if nothing else fits. Match case and spelling exactly.",\n` +
     `  "tags": ["up to 6 lowercase keyword tags (1-2 words each) describing distinctive features"],\n` +
     `  "aiNotes": "2-3 sentences for downstream AI: target audience, key hooks, anything that should shape ad creative. Max 400 characters."\n` +
     `}\n\n` +
@@ -707,10 +734,18 @@ async function distillImportedProduct(
     typeof obj.description === 'string' && obj.description.trim().length > 0
       ? obj.description.trim().slice(0, 320)
       : raw.description.trim().slice(0, 280)
-  const category =
-    typeof obj.category === 'string' && obj.category.trim().length > 0
-      ? obj.category.trim().toLowerCase().slice(0, 60)
-      : raw.category
+  // Validate the category against the canonical list — case-insensitive
+  // match so we tolerate small casing slips. Any off-list value gets
+  // dropped (form falls back to "Other" via the user manually picking).
+  let category: string | undefined
+  if (typeof obj.category === 'string' && obj.category.trim().length > 0) {
+    const candidate = obj.category.trim()
+    const match = PRODUCT_CATEGORIES.find(
+      (c) => c.toLowerCase() === candidate.toLowerCase(),
+    )
+    category = match // undefined if no match → form stays empty rather than
+                    // showing a value that the Select would silently drop
+  }
   const tagsArr = Array.isArray(obj.tags) ? obj.tags : []
   const tags = tagsArr
     .map((t) => (typeof t === 'string' ? t.trim().toLowerCase() : ''))
