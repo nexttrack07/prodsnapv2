@@ -22,6 +22,7 @@ import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
+import { Route as ProductsIndexRouteImport } from './routes/products.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as StudioProductIdRouteImport } from './routes/studio.$productId'
 import { Route as ProductsNewRouteImport } from './routes/products.new'
@@ -99,6 +100,11 @@ const StudioIndexRoute = StudioIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => StudioRoute,
+} as any)
+const ProductsIndexRoute = ProductsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProductsRoute,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin/': typeof AdminIndexRoute
+  '/products/': typeof ProductsIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
 }
@@ -196,7 +203,6 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/products': typeof ProductsRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
@@ -210,6 +216,7 @@ export interface FileRoutesByTo {
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin': typeof AdminIndexRoute
+  '/products': typeof ProductsIndexRoute
   '/studio': typeof StudioIndexRoute
   '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
 }
@@ -238,6 +245,7 @@ export interface FileRoutesById {
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin/': typeof AdminIndexRoute
+  '/products/': typeof ProductsIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
 }
@@ -267,6 +275,7 @@ export interface FileRouteTypes {
     | '/products/new'
     | '/studio/$productId'
     | '/admin/'
+    | '/products/'
     | '/studio/'
     | '/studio/$productId/strategy'
   fileRoutesByTo: FileRoutesByTo
@@ -278,7 +287,6 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pricing'
     | '/privacy'
-    | '/products'
     | '/templates'
     | '/terms'
     | '/account/billing'
@@ -292,6 +300,7 @@ export interface FileRouteTypes {
     | '/products/new'
     | '/studio/$productId'
     | '/admin'
+    | '/products'
     | '/studio'
     | '/studio/$productId/strategy'
   id:
@@ -319,6 +328,7 @@ export interface FileRouteTypes {
     | '/products/new'
     | '/studio/$productId'
     | '/admin/'
+    | '/products/'
     | '/studio/'
     | '/studio/$productId/strategy'
   fileRoutesById: FileRoutesById
@@ -435,6 +445,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioIndexRouteImport
       parentRoute: typeof StudioRoute
     }
+    '/products/': {
+      id: '/products/'
+      path: '/'
+      fullPath: '/products/'
+      preLoaderRoute: typeof ProductsIndexRouteImport
+      parentRoute: typeof ProductsRoute
+    }
     '/admin/': {
       id: '/admin/'
       path: '/'
@@ -542,10 +559,12 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface ProductsRouteChildren {
   ProductsNewRoute: typeof ProductsNewRoute
+  ProductsIndexRoute: typeof ProductsIndexRoute
 }
 
 const ProductsRouteChildren: ProductsRouteChildren = {
   ProductsNewRoute: ProductsNewRoute,
+  ProductsIndexRoute: ProductsIndexRoute,
 }
 
 const ProductsRouteWithChildren = ProductsRoute._addFileChildren(
