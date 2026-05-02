@@ -150,9 +150,14 @@ export const runUrlImport = internalAction({
           // including product galleries Firecrawl considers "supporting".
           // Disable it so the LLM sees every gallery thumbnail.
           onlyMainContent: false,
-          // Bump the JS-render wait so React/Vue/Wix product pages have
-          // time to hydrate the gallery before scrape runs.
-          waitFor: 3000,
+          // Wait briefly for JS hydration on Shopify/Wix product pages,
+          // but keep this small — Firecrawl's overall budget is the
+          // sum of waitFor + render + LLM extraction. Pages with very
+          // slow client rendering may still need waitForSelector.
+          waitFor: 2000,
+          // Default Firecrawl timeout is 30s for both render + extraction.
+          // LLM extraction with our richer schema needs more headroom.
+          timeout: 60000,
         }),
       })
 
