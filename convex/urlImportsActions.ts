@@ -463,26 +463,43 @@ function extractMarkdownImageUrls(markdown: string): string[] {
 // (data-src, data-srcset) and srcset variants. Markdown conversion
 // drops these because lazy-loaded <img> tags often have an empty
 // or 1×1 placeholder src= and the real URL lives in data-src.
+//
+// For srcset attributes we deliberately pick the LARGEST candidate
+// (highest 'w' or 'x' descriptor) so we don't end up with the
+// thumbnail-sized lazy-load placeholder.
 function extractHtmlImageUrls(html: string): string[] {
   if (!html) return []
   const out: string[] = []
-  // Match every <img ...> tag, then pull every src/data-src/srcset/
-  // data-srcset/data-original attribute we can find on it.
   const imgTagRe = /<img\b[^>]*>/gi
-  const attrRe = /\b(?:data-src|data-original|data-srcset|src|srcset)=["']([^"']+)["']/gi
+  const attrRe = /\b(data-src|data-original|data-srcset|src|srcset)=["']([^"']+)["']/gi
   let imgMatch: RegExpExecArray | null
   while ((imgMatch = imgTagRe.exec(html)) !== null) {
     const tag = imgMatch[0]
     let attrMatch: RegExpExecArray | null
     while ((attrMatch = attrRe.exec(tag)) !== null) {
-      const value = attrMatch[1]
+      const attrName = attrMatch[1].toLowerCase()
+      const value = attrMatch[2]
       if (!value) continue
-      // srcset: "url1 1x, url2 2x" — split on comma + take first token of each
-      if (value.includes(',') && /\s\d+(?:\.\d+)?[wx]/i.test(value)) {
+      const isSrcset = attrName.endsWith('srcset')
+      if (isSrcset) {
+        // srcset format: "url1 100w, url2 800w, url3 2048w" or "url1 1x, url2 2x"
+        // Pick the URL with the largest descriptor.
+        let bestUrl: string | undefined
+        let bestSize = -Infinity
         for (const part of value.split(',')) {
-          const url = part.trim().split(/\s+/)[0]
-          if (url) out.push(url)
+          const tokens = part.trim().split(/\s+/)
+          const url = tokens[0]
+          const desc = tokens[1] ?? ''
+          if (!url) continue
+          const m = desc.match(/(\d+(?:\.\d+)?)([wx])/i)
+          // Treat plain "1x" as the baseline, "w" descriptors as actual width.
+          const size = m ? parseFloat(m[1]) : 0
+          if (size > bestSize) {
+            bestSize = size
+            bestUrl = url
+          }
         }
+        if (bestUrl) out.push(bestUrl)
       } else {
         out.push(value)
       }
@@ -491,6 +508,49 @@ function extractHtmlImageUrls(html: string): string[] {
     attrRe.lastIndex = 0
   }
   return out
+}
+
+// Many image CDNs serve the same image at multiple sizes via path
+// tokens (Shopify "_100x100", "_320x"), query params (?width=100),
+// or path segments (.../w_120/...). Lazy-loaded galleries often
+// reference the small preview by default. Rewrite obvious
+// thumbnail patterns to a high-resolution variant.
+function upgradeToHighResImageUrl(rawUrl: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL(rawUrl)
+  } catch {
+    return rawUrl
+  }
+
+  // Shopify CDN: ".../t-shirt_100x100.jpg" → strip the size token so we get
+  // the original. The CDN serves the original when no size suffix is present.
+  // Match _NxN, _Nx, _xN where N is digits, just before the extension.
+  parsed.pathname = parsed.pathname.replace(
+    /(_\d+x\d*|_x\d+)(?=\.[a-z]{2,5}$)/i,
+    '',
+  )
+
+  // Cloudinary: ".../w_120,h_120,c_fill/.../image.jpg" — drop common small
+  // transformations so the original is served. We're conservative: only
+  // strip transformations that look like resize-only segments.
+  parsed.pathname = parsed.pathname.replace(
+    /\/(w_\d+|h_\d+|c_(?:fill|fit|scale)|q_auto|f_auto)(?:,(?:w_\d+|h_\d+|c_(?:fill|fit|scale)|q_auto|f_auto))*\//gi,
+    '/',
+  )
+
+  // Generic resize query params: width, w, height, h. Strip when small
+  // (<400) so the CDN falls back to its default size.
+  const stripParams = ['width', 'w', 'height', 'h']
+  for (const p of stripParams) {
+    const v = parsed.searchParams.get(p)
+    if (v != null) {
+      const n = parseInt(v, 10)
+      if (Number.isFinite(n) && n < 400) parsed.searchParams.delete(p)
+    }
+  }
+
+  return parsed.toString()
 }
 
 function looksLikeImageUrl(u: string): boolean {
@@ -515,9 +575,13 @@ function uniqueValidImages(urls: string[]): string[] {
     if (!u || typeof u !== 'string') continue
     if (!/^https?:\/\//i.test(u)) continue
     if (!looksLikeImageUrl(u)) continue
-    if (seen.has(u)) continue
-    seen.add(u)
-    out.push(u)
+    // Upgrade thumbnail/lazy-load preview URLs to their high-res variants
+    // BEFORE deduping, so two URLs that point at the same image at
+    // different resolutions collapse to one.
+    const upgraded = upgradeToHighResImageUrl(u)
+    if (seen.has(upgraded)) continue
+    seen.add(upgraded)
+    out.push(upgraded)
   }
   return out
 }
