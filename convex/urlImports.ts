@@ -151,9 +151,36 @@ export const saveDistilledResults = internalMutation({
     distilledCurrency: v.optional(v.string()),
     distilledReviewSnippets: v.optional(v.array(v.string())),
     uploadedImageUrls: v.array(v.string()),
+    uploadedImageKeys: v.optional(v.array(v.string())),
   },
   handler: async (ctx, { importId, ...patch }) => {
     await ctx.db.patch(importId, patch)
+  },
+})
+
+// ─── Public mutation: discard a URL import (Cancel from /products/new) ────
+// Cleans up the import row + its uploaded R2 objects. The brand kit
+// (if upserted during import) stays — that's user-level data, not tied
+// to a single import attempt. Called when the user clicks Cancel after
+// importing but before saving a product.
+export const discardUrlImport = mutation({
+  args: { importId: v.id('urlImports') },
+  handler: async (ctx, { importId }) => {
+    const userId = await requireAuth(ctx)
+    const row = await ctx.db.get(importId)
+    if (!row) return // already gone
+    if (row.userId !== userId) throw new Error('Not authorized to discard this import')
+
+    const keys = row.uploadedImageKeys ?? []
+    if (keys.length > 0) {
+      // Schedule R2 deletion via the node-runtime action (we can't call
+      // S3Client from a V8 mutation). Best-effort — never blocks discard.
+      await ctx.scheduler.runAfter(0, internal.urlImportsActions.deleteImportR2Objects, {
+        keys,
+      })
+    }
+
+    await ctx.db.delete(importId)
   },
 })
 

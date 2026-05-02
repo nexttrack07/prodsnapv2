@@ -433,6 +433,10 @@ const schema = defineSchema({
     distilledCurrency: v.optional(v.string()),
     distilledReviewSnippets: v.optional(v.array(v.string())),
     uploadedImageUrls: v.optional(v.array(v.string())), // R2 URLs after upload
+    // R2 storage keys for everything we uploaded under this import. Used by
+    // discardUrlImport to clean up R2 objects when the user cancels without
+    // saving. Includes both product images and the optional brand logo.
+    uploadedImageKeys: v.optional(v.array(v.string())),
   })
     .index('by_userId', ['userId'])
     .index('by_status', ['status'])

@@ -81,6 +81,7 @@ function NewProductPage() {
   const [importError, setImportError] = useState<string | null>(null)
 
   const createUrlImportMutation = useConvexMutation(api.urlImports.createUrlImport)
+  const discardUrlImportMutation = useConvexMutation(api.urlImports.discardUrlImport)
 
   const importRow = useQuery(
     api.urlImports.getUrlImport,
@@ -622,7 +623,20 @@ function NewProductPage() {
             variant="subtle"
             color="dark"
             size="md"
-            onClick={() => navigate({ to: '/home' })}
+            onClick={async () => {
+              // If a URL import populated the form but the user hasn't
+              // saved, clean up the import row + its R2 objects before
+              // leaving. Best-effort: errors are silent so cancel never
+              // blocks navigation.
+              if (importId) {
+                try {
+                  await discardUrlImportMutation({ importId })
+                } catch {
+                  /* user is leaving; don't block on cleanup failure */
+                }
+              }
+              navigate({ to: '/home' })
+            }}
             disabled={isSubmitting}
           >
             Cancel

@@ -7,7 +7,7 @@
 import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import { internal } from './_generated/api'
-import { uploadFromUrl } from './r2'
+import { uploadFromUrl, deleteFromR2 } from './r2'
 import { nanoid } from 'nanoid'
 
 type FirecrawlExtractedJson = {
@@ -254,6 +254,7 @@ export const runUrlImport = internalAction({
         })
 
         const uploadedUrls: string[] = []
+        const uploadedKeys: string[] = []
         const uploadErrors: string[] = []
         for (let i = 0; i < candidateImages.length; i++) {
           const sourceUrl = candidateImages[i]
@@ -262,6 +263,7 @@ export const runUrlImport = internalAction({
           try {
             const url = await uploadFromUrl(sourceUrl, key)
             uploadedUrls.push(url)
+            uploadedKeys.push(key)
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             uploadErrors.push(message)
@@ -334,6 +336,7 @@ export const runUrlImport = internalAction({
           importId,
           distilledName: productName,
           uploadedImageUrls: uploadedUrls,
+          uploadedImageKeys: uploadedKeys,
           ...(productReviewSnippets ? { distilledReviewSnippets: productReviewSnippets } : {}),
           ...(distilled.description ? { distilledDescription: distilled.description } : {}),
           ...(cleanPrice != null ? { distilledPrice: cleanPrice } : {}),
@@ -766,3 +769,27 @@ async function distillImportedProduct(
     aiNotes,
   }
 }
+
+// ─── R2 cleanup for discarded imports ─────────────────────────────────────
+// Called by discardUrlImport when the user clicks Cancel on /products/new
+// after running a URL import. Deletes every R2 object that was uploaded as
+// part of that import so we don't leak storage on cancellation. Best
+// effort: per-key failures are logged and skipped, never thrown.
+export const deleteImportR2Objects = internalAction({
+  args: { keys: v.array(v.string()) },
+  handler: async (_ctx, { keys }) => {
+    if (keys.length === 0) return
+    let deleted = 0
+    for (const key of keys) {
+      try {
+        await deleteFromR2(key)
+        deleted++
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[deleteImportR2Objects] Failed to delete ${key}:`, err)
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[deleteImportR2Objects] deleted ${deleted}/${keys.length} R2 objects`)
+  },
+})
