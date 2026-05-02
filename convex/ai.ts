@@ -241,13 +241,24 @@ const marketingAngleSchema = z.object({
 // category, an extra angle, a too-long description) doesn't fail the
 // entire analysis. Values get normalised + clipped in the handler before
 // they hit the DB. The user can edit anything in the UI anyway.
+//
+// stringOrArray: LLMs sometimes return list-shaped fields as a JSON
+// array even when the prompt asks for a comma-separated string.
+// Accept both shapes; the handler joins arrays with ', '.
+const stringOrArray = z.union([z.string(), z.array(z.string())])
+
 const productAnalysisSchema = z.object({
   category: z.string().min(1),
-  productDescription: z.string().min(1),
-  targetAudience: z.string().min(1),
-  valueProposition: z.string().min(1),
+  productDescription: stringOrArray,
+  targetAudience: stringOrArray,
+  valueProposition: stringOrArray,
   marketingAngles: z.array(marketingAngleSchema).min(1).max(10),
 })
+
+// Coerce a string-or-array into a single string (joins arrays with ', ').
+function joinIfArray(v: string | string[]): string {
+  return Array.isArray(v) ? v.filter(Boolean).join(', ') : v
+}
 
 // Normalize a free-form category string from the LLM into one of the
 // canonical lowercase enum values. Falls back to 'other' rather than
@@ -331,9 +342,9 @@ Return ONLY the JSON object, no other text.`,
     const angleTypeSet = new Set<string>(ANGLE_TYPES)
     return {
       category: normalizeCategory(analysis.category, AD_CATEGORIES),
-      productDescription: clipString(analysis.productDescription, 300),
-      targetAudience: clipString(analysis.targetAudience, 300),
-      valueProposition: clipString(analysis.valueProposition, 280),
+      productDescription: clipString(joinIfArray(analysis.productDescription), 300),
+      targetAudience: clipString(joinIfArray(analysis.targetAudience), 300),
+      valueProposition: clipString(joinIfArray(analysis.valueProposition), 280),
       marketingAngles: analysis.marketingAngles.slice(0, 5).map((a) => ({
         title: clipString(a.title, 80),
         description: clipString(a.description, 280),
