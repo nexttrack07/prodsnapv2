@@ -15,6 +15,10 @@ type FirecrawlExtractedJson = {
   productName?: string
   productDescription?: string
   productImageUrls?: string[]
+  productPrice?: number
+  productCurrency?: string
+  productCategory?: string
+  productTags?: string[]
   brandLogoUrl?: string
   brandPrimaryColor?: string
   brandSecondaryColor?: string
@@ -46,13 +50,35 @@ const FIRECRAWL_EXTRACTION_SCHEMA = {
     productName: { type: 'string', description: 'The product name as shown on the page' },
     productDescription: {
       type: 'string',
-      description: '1-2 sentence product description for marketing use',
+      description:
+        'The FULL marketing-grade product description. Include every paragraph of marketing copy, every bullet of features, every spec/material/dimension/use-case mentioned. Up to 1500 characters. Concatenate sections separated by double-newlines. Do NOT summarize — copy the actual text from the page.',
     },
     productImageUrls: {
       type: 'array',
       items: { type: 'string' },
       description:
-        'Up to 5 DIRECT IMAGE FILE URLs (must end in .jpg, .jpeg, .png, .webp, .gif, or .avif, OR be hosted on a recognized image CDN). DO NOT return product page URLs, variant URLs, or links — only URLs that point at actual image files. Look in <img src="...">, srcset, og:image, JSON-LD product images, and structured data. If no direct image URLs are visible, return an empty array.',
+        'Up to 8 DIRECT IMAGE FILE URLs (must end in .jpg, .jpeg, .png, .webp, .gif, or .avif, OR be hosted on a recognized image CDN like cdn.shopify.com, cloudinary, wixstatic, etc). Include EVERY product gallery image, every angle, every variant — not just the hero. Look in <img src>, srcset, the product gallery component, og:image, JSON-LD images. DO NOT return product page URLs, variant URLs, navigation links — only URLs that point at actual image files.',
+    },
+    productPrice: {
+      type: 'number',
+      description:
+        'The numeric current price of the product (no currency symbol, no thousands separator). If a sale price exists, use the sale price. If pricing is "from X" or has multiple variants, use the lowest. Omit if no clear price is on the page.',
+    },
+    productCurrency: {
+      type: 'string',
+      description:
+        'The ISO 4217 currency code (USD, EUR, GBP, CAD, AUD, JPY, etc) inferred from the price symbol or page. Three uppercase letters.',
+    },
+    productCategory: {
+      type: 'string',
+      description:
+        'A single short product category like "backpack", "skincare", "supplements", "footwear", "headphones". Use the most specific common-noun category — not a brand or collection name.',
+    },
+    productTags: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'Up to 8 short keyword tags describing the product (lowercase, single words or 2-word phrases). Examples: "weatherproof", "vegan", "noise-cancelling". Empty array if nothing distinctive.',
     },
     brandLogoUrl: {
       type: 'string',
@@ -80,7 +106,7 @@ const FIRECRAWL_EXTRACTION_SCHEMA = {
 }
 
 const FIRECRAWL_PROMPT =
-  'Extract the primary product on this page along with brand identity hints. Skip blog posts, listicles, and lifestyle content — only respond if this is a product page.'
+  'Extract the primary product on this page along with brand identity hints. Be EXHAUSTIVE on description (full marketing copy, full feature list), images (every gallery angle), price, currency, and category. Skip blog posts, listicles, and lifestyle content — only respond if this is a product page.'
 
 export const runUrlImport = internalAction({
   args: { importId: v.id('urlImports') },
@@ -120,8 +146,13 @@ export const runUrlImport = internalAction({
             schema: FIRECRAWL_EXTRACTION_SCHEMA,
             prompt: FIRECRAWL_PROMPT,
           },
-          onlyMainContent: true,
-          waitFor: 1500,
+          // onlyMainContent strips image carousels, sidebars, and nav —
+          // including product galleries Firecrawl considers "supporting".
+          // Disable it so the LLM sees every gallery thumbnail.
+          onlyMainContent: false,
+          // Bump the JS-render wait so React/Vue/Wix product pages have
+          // time to hydrate the gallery before scrape runs.
+          waitFor: 3000,
         }),
       })
 
@@ -232,16 +263,44 @@ export const runUrlImport = internalAction({
           fallbackTitle ||
           'Imported product'
         ).slice(0, 80)
-        const productDescription = (extracted.productDescription || fallbackDescription || '').slice(0, 600)
+        const productDescription = (extracted.productDescription || fallbackDescription || '').slice(0, 1500)
         const productReviewSnippets = Array.isArray(extracted.reviewSnippets) && extracted.reviewSnippets.length > 0
           ? extracted.reviewSnippets
           : undefined
+        // Sanity-check structured fields the LLM returned. Bad values get
+        // dropped silently; the user can edit on the form.
+        const cleanPrice =
+          typeof extracted.productPrice === 'number' &&
+          extracted.productPrice > 0 &&
+          extracted.productPrice < 1_000_000
+            ? extracted.productPrice
+            : undefined
+        const cleanCurrency =
+          typeof extracted.productCurrency === 'string' &&
+          /^[A-Z]{3}$/.test(extracted.productCurrency.trim())
+            ? extracted.productCurrency.trim().toUpperCase()
+            : undefined
+        const cleanCategory =
+          typeof extracted.productCategory === 'string'
+            ? extracted.productCategory.trim().slice(0, 60).toLowerCase() || undefined
+            : undefined
+        const cleanTags =
+          Array.isArray(extracted.productTags) && extracted.productTags.length > 0
+            ? extracted.productTags
+                .map((t) => (typeof t === 'string' ? t.trim().toLowerCase() : ''))
+                .filter((t) => t.length > 0 && t.length <= 40)
+                .slice(0, 8)
+            : undefined
         productId = await ctx.runMutation(internal.products.createProductFromImport, {
           userId: importRow.userId,
           name: productName,
           imageUrls: uploadedUrls,
           customerLanguage: productReviewSnippets,
           ...(productDescription ? { description: productDescription } : {}),
+          ...(cleanPrice != null ? { price: cleanPrice } : {}),
+          ...(cleanCurrency ? { currency: cleanCurrency } : {}),
+          ...(cleanCategory ? { category: cleanCategory } : {}),
+          ...(cleanTags && cleanTags.length > 0 ? { tags: cleanTags } : {}),
         })
       } else {
         await ctx.runMutation(internal.urlImports.patchImportStatus, {

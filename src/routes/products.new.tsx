@@ -144,6 +144,11 @@ function NewProductPage() {
     if (importedProduct.name) setName(importedProduct.name)
     if (importedProduct.productDescription) setDescription(importedProduct.productDescription)
     if (importedProduct.category) setCategory(importedProduct.category)
+    if (typeof importedProduct.price === 'number') setPrice(importedProduct.price)
+    if (importedProduct.currency) setCurrency(importedProduct.currency)
+    if (Array.isArray(importedProduct.tags) && importedProduct.tags.length > 0) {
+      setTags(importedProduct.tags)
+    }
   }, [importedProduct])
 
   useEffect(() => {

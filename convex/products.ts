@@ -259,8 +259,15 @@ export const createProductFromImport = internalMutation({
     imageUrls: v.array(v.string()),
     customerLanguage: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
+    price: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    category: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, { userId, name, imageUrls, customerLanguage, description }) => {
+  handler: async (
+    ctx,
+    { userId, name, imageUrls, customerLanguage, description, price, currency, category, tags },
+  ) => {
     if (imageUrls.length === 0) {
       throw new Error('At least one product image is required')
     }
@@ -272,7 +279,11 @@ export const createProductFromImport = internalMutation({
       .filter((s) => s.length > 0)
       .map((s) => s.slice(0, 500))
       .slice(0, 50)
-    const cleanedDescription = description?.trim().slice(0, 1000)
+    const cleanedDescription = description?.trim().slice(0, 1500)
+    const cleanedTags = tags
+      ?.map((t) => t.trim())
+      .filter((t) => t.length > 0)
+      .slice(0, 20)
     const productId = await ctx.db.insert('products', {
       name,
       imageUrl: primaryImageUrl, // back-compat
@@ -280,6 +291,10 @@ export const createProductFromImport = internalMutation({
       userId,
       ...(cleanedLanguage && cleanedLanguage.length > 0 ? { customerLanguage: cleanedLanguage } : {}),
       ...(cleanedDescription ? { productDescription: cleanedDescription } : {}),
+      ...(price != null ? { price } : {}),
+      ...(currency ? { currency } : {}),
+      ...(category ? { category } : {}),
+      ...(cleanedTags && cleanedTags.length > 0 ? { tags: cleanedTags } : {}),
     })
     const imageIds: Id<'productImages'>[] = []
     for (const url of imageUrls) {
