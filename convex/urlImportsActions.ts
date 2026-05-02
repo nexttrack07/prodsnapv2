@@ -52,7 +52,7 @@ const FIRECRAWL_EXTRACTION_SCHEMA = {
       type: 'array',
       items: { type: 'string' },
       description:
-        'Up to 5 product photo URLs from the page (PNG/JPG/WebP). Prefer high-resolution gallery images, skip thumbnails and lifestyle banners.',
+        'Up to 5 DIRECT IMAGE FILE URLs (must end in .jpg, .jpeg, .png, .webp, .gif, or .avif, OR be hosted on a recognized image CDN). DO NOT return product page URLs, variant URLs, or links — only URLs that point at actual image files. Look in <img src="...">, srcset, og:image, JSON-LD product images, and structured data. If no direct image URLs are visible, return an empty array.',
     },
     brandLogoUrl: {
       type: 'string',
@@ -163,13 +163,26 @@ export const runUrlImport = internalAction({
           currentStep: 'Reading product details',
         })
 
-        const candidateImages = uniqueValidImages([
+        const rawImageUrls = [
           ...(extracted.productImageUrls ?? []),
           ...(fallbackImage ? [fallbackImage] : []),
-        ]).slice(0, 3)
+        ]
+        const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 3)
+        console.log(
+          `[urlImport ${importId}] image urls: raw=${rawImageUrls.length} ` +
+            `valid=${candidateImages.length} ` +
+            `rejected=${rawImageUrls.length - candidateImages.length}`,
+        )
 
         if (candidateImages.length === 0) {
-          throw new Error('No product images could be extracted from this page')
+          // Surface the raw URLs we got so the user knows whether Firecrawl
+          // returned page links instead of image links.
+          const sample = rawImageUrls.slice(0, 3).join(' | ')
+          throw new Error(
+            rawImageUrls.length > 0
+              ? `No image URLs extracted — got page links instead of image files: ${sample}`
+              : 'No product images could be extracted from this page',
+          )
         }
 
         await ctx.runMutation(internal.urlImports.patchImportStatus, {
@@ -300,12 +313,49 @@ export const runUrlImport = internalAction({
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+// Hostnames that serve images even when the URL has no file extension.
+// Most product-image CDNs encode dimensions or version IDs in the path
+// instead of an .ext suffix.
+const IMAGE_CDN_HOSTS = [
+  'cdn.shopify.com',
+  'images.ctfassets.net',
+  'res.cloudinary.com',
+  'images.prismic.io',
+  'cdn.bigcommerce.com',
+  'static.wixstatic.com',
+  'images.unsplash.com',
+  'i.imgur.com',
+  'cdn.squarespace.com',
+  'images.squarespace-cdn.com',
+  'shop.app',
+  'cdn.shopifycdn.net',
+  'd2v9y0dukr6mq2.cloudfront.net',
+  'media-amazon.com',
+  'm.media-amazon.com',
+]
+
+function looksLikeImageUrl(u: string): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(u)
+  } catch {
+    return false
+  }
+  // Direct image file extension wins outright.
+  if (/\.(png|jpe?g|webp|gif|avif|svg)(?:$|\?)/i.test(parsed.pathname)) return true
+  // Allowlisted image CDNs serve images at extensionless paths.
+  const host = parsed.hostname.toLowerCase()
+  if (IMAGE_CDN_HOSTS.some((cdn) => host === cdn || host.endsWith(`.${cdn}`))) return true
+  return false
+}
+
 function uniqueValidImages(urls: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const u of urls) {
     if (!u || typeof u !== 'string') continue
     if (!/^https?:\/\//i.test(u)) continue
+    if (!looksLikeImageUrl(u)) continue
     if (seen.has(u)) continue
     seen.add(u)
     out.push(u)
