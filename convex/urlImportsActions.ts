@@ -282,7 +282,7 @@ export const runUrlImport = internalAction({
           fallbackTitle ||
           'Imported product'
         ).slice(0, 80)
-        const productDescription = (extracted.productDescription || fallbackDescription || '').slice(0, 1500)
+        const rawDescription = (extracted.productDescription || fallbackDescription || '').slice(0, 4000)
         const productReviewSnippets = Array.isArray(extracted.reviewSnippets) && extracted.reviewSnippets.length > 0
           ? extracted.reviewSnippets
           : undefined
@@ -299,27 +299,44 @@ export const runUrlImport = internalAction({
           /^[A-Z]{3}$/.test(extracted.productCurrency.trim())
             ? extracted.productCurrency.trim().toUpperCase()
             : undefined
-        const cleanCategory =
+        const rawCategory =
           typeof extracted.productCategory === 'string'
             ? extracted.productCategory.trim().slice(0, 60).toLowerCase() || undefined
             : undefined
-        const cleanTags =
+        const rawTags =
           Array.isArray(extracted.productTags) && extracted.productTags.length > 0
             ? extracted.productTags
                 .map((t) => (typeof t === 'string' ? t.trim().toLowerCase() : ''))
                 .filter((t) => t.length > 0 && t.length <= 40)
                 .slice(0, 8)
             : undefined
+
+        // Distill verbose Firecrawl output into tight, AI-ready fields.
+        // Best-effort: if the LLM call or JSON parse fails, fall back to
+        // the raw scrape data (truncated). Never block product creation.
+        await ctx.runMutation(internal.urlImports.patchImportStatus, {
+          importId,
+          status: 'extracting',
+          currentStep: 'Distilling product details',
+        })
+        const distilled = await distillImportedProduct(ctx, {
+          name: productName,
+          description: rawDescription,
+          category: rawCategory,
+          tags: rawTags,
+        })
+
         productId = await ctx.runMutation(internal.products.createProductFromImport, {
           userId: importRow.userId,
           name: productName,
           imageUrls: uploadedUrls,
           customerLanguage: productReviewSnippets,
-          ...(productDescription ? { description: productDescription } : {}),
+          ...(distilled.description ? { description: distilled.description } : {}),
           ...(cleanPrice != null ? { price: cleanPrice } : {}),
           ...(cleanCurrency ? { currency: cleanCurrency } : {}),
-          ...(cleanCategory ? { category: cleanCategory } : {}),
-          ...(cleanTags && cleanTags.length > 0 ? { tags: cleanTags } : {}),
+          ...(distilled.category ? { category: distilled.category } : {}),
+          ...(distilled.tags && distilled.tags.length > 0 ? { tags: distilled.tags } : {}),
+          ...(distilled.aiNotes ? { aiNotes: distilled.aiNotes } : {}),
         })
       } else {
         await ctx.runMutation(internal.urlImports.patchImportStatus, {
@@ -521,5 +538,129 @@ async function safeReadText(res: Response): Promise<string> {
     return await res.text()
   } catch {
     return ''
+  }
+}
+
+// ─── LLM distillation ─────────────────────────────────────────────────────
+// Firecrawl returns up to 1500 chars of raw marketing copy plus a noisy
+// category guess plus 8 LLM-suggested tags. That's good for archival but
+// too verbose for downstream prompts (ad copy generation, angle extraction)
+// and won't fit our productDescription preview spaces. Distill into:
+//   - description: 2-3 sentence value-prop, ≤280 chars
+//   - category:   single common-noun, lowercase, ≤30 chars
+//   - tags:       up to 6 lowercase keyword tags
+//   - aiNotes:    2-3 sentence designer-facing note: audience, hooks,
+//                 quirks worth knowing for ad creative
+//
+// Best-effort: any failure returns sensible fallbacks (truncated raw
+// values) so we never block product creation on this LLM call.
+
+type DistilledFields = {
+  description?: string
+  category?: string
+  tags?: string[]
+  aiNotes?: string
+}
+
+async function distillImportedProduct(
+  ctx: { runAction: (ref: typeof internal.ai.callTextInternal, args: { prompt: string; systemPrompt?: string }) => Promise<string> },
+  raw: { name: string; description: string; category?: string; tags?: string[] },
+): Promise<DistilledFields> {
+  // If there's nothing meaningful to distill, return the raw values as-is.
+  if (!raw.description || raw.description.length < 40) {
+    return {
+      description: raw.description?.trim().slice(0, 280) || undefined,
+      category: raw.category,
+      tags: raw.tags,
+    }
+  }
+
+  const systemPrompt =
+    'You are a meticulous product-data distiller for an AI ad-generation system. ' +
+    'You output STRICT JSON only — no preamble, no markdown fences, no commentary. ' +
+    'Be terse and concrete; avoid marketing fluff and adjectives without substance.'
+
+  const userPrompt =
+    `Distill this raw product data into structured fields for downstream AI use.\n\n` +
+    `PRODUCT NAME: ${raw.name}\n\n` +
+    `RAW DESCRIPTION (verbose marketing copy from the source page):\n${raw.description}\n\n` +
+    `CATEGORY GUESS: ${raw.category ?? '(none)'}\n` +
+    `TAG GUESSES: ${(raw.tags ?? []).join(', ') || '(none)'}\n\n` +
+    `Output STRICT JSON with this exact shape:\n` +
+    `{\n` +
+    `  "description": "2-3 sentence value-prop, lead with the product's core benefit, then a key differentiator. Max 280 characters. No fluff.",\n` +
+    `  "category": "Single common-noun category like 'backpack', 'skincare', 'headphones'. Lowercase, max 30 chars.",\n` +
+    `  "tags": ["up to 6 lowercase keyword tags (1-2 words each) describing distinctive features"],\n` +
+    `  "aiNotes": "2-3 sentences for downstream AI: target audience, key hooks, anything that should shape ad creative. Max 400 characters."\n` +
+    `}\n\n` +
+    `Return ONLY the JSON.`
+
+  let raw_text: string
+  try {
+    raw_text = await ctx.runAction(internal.ai.callTextInternal, {
+      prompt: userPrompt,
+      systemPrompt,
+    })
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[distillImportedProduct] LLM call failed:`, err)
+    return {
+      description: raw.description.trim().slice(0, 280),
+      category: raw.category,
+      tags: raw.tags,
+    }
+  }
+
+  // Strip code fences if the model added them despite the system prompt.
+  const cleaned = raw_text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(cleaned)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[distillImportedProduct] JSON parse failed: ${err instanceof Error ? err.message : String(err)} preview=${cleaned.slice(0, 120)}`)
+    return {
+      description: raw.description.trim().slice(0, 280),
+      category: raw.category,
+      tags: raw.tags,
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return {
+      description: raw.description.trim().slice(0, 280),
+      category: raw.category,
+      tags: raw.tags,
+    }
+  }
+
+  const obj = parsed as Record<string, unknown>
+  const description =
+    typeof obj.description === 'string' && obj.description.trim().length > 0
+      ? obj.description.trim().slice(0, 320)
+      : raw.description.trim().slice(0, 280)
+  const category =
+    typeof obj.category === 'string' && obj.category.trim().length > 0
+      ? obj.category.trim().toLowerCase().slice(0, 60)
+      : raw.category
+  const tagsArr = Array.isArray(obj.tags) ? obj.tags : []
+  const tags = tagsArr
+    .map((t) => (typeof t === 'string' ? t.trim().toLowerCase() : ''))
+    .filter((t) => t.length > 0 && t.length <= 40)
+    .slice(0, 8)
+  const aiNotes =
+    typeof obj.aiNotes === 'string' && obj.aiNotes.trim().length > 0
+      ? obj.aiNotes.trim().slice(0, 500)
+      : undefined
+
+  return {
+    description,
+    category,
+    tags: tags.length > 0 ? tags : raw.tags,
+    aiNotes,
   }
 }

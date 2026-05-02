@@ -149,6 +149,7 @@ function NewProductPage() {
     if (Array.isArray(importedProduct.tags) && importedProduct.tags.length > 0) {
       setTags(importedProduct.tags)
     }
+    if (importedProduct.aiNotes) setAiNotes(importedProduct.aiNotes)
   }, [importedProduct])
 
   useEffect(() => {
