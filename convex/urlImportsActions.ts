@@ -51,7 +51,7 @@ const FIRECRAWL_EXTRACTION_SCHEMA = {
     productDescription: {
       type: 'string',
       description:
-        'The FULL marketing-grade product description. Include every paragraph of marketing copy, every bullet of features, every spec/material/dimension/use-case mentioned. Up to 1500 characters. Concatenate sections separated by double-newlines. Do NOT summarize — copy the actual text from the page.',
+        'A condensed product description: up to 600 characters of the most important marketing copy + 2-4 key feature bullets. Skip generic boilerplate. Our downstream distill step will tighten this further; you do NOT need to copy every paragraph.',
     },
     productImageUrls: {
       type: 'array',
@@ -153,20 +153,19 @@ export const runUrlImport = internalAction({
           // Disable it so the LLM sees every gallery thumbnail.
           onlyMainContent: false,
           // Trigger lazy-loaded gallery images by scrolling before snapshot.
-          // Most product galleries use IntersectionObserver to load images
-          // only when scrolled into view; without this the gallery never
-          // hydrates beyond the hero.
+          // Most product galleries hydrate after the first scroll; one
+          // scroll plus a short settle keeps action time tight so the
+          // budget mostly goes to LLM extraction.
           actions: [
-            { type: 'wait', milliseconds: 1500 },
-            { type: 'scroll', direction: 'down' },
-            { type: 'wait', milliseconds: 800 },
+            { type: 'wait', milliseconds: 1000 },
             { type: 'scroll', direction: 'down' },
             { type: 'wait', milliseconds: 800 },
           ],
-          // Default Firecrawl timeout is 30s for both render + extraction.
-          // LLM extraction with our richer schema + scroll actions needs
-          // more headroom.
-          timeout: 60000,
+          // Default Firecrawl timeout is 30s for render + extraction.
+          // Even with a slimmer schema, LLM extraction of 10 fields plus
+          // page render + scroll on JS-heavy stores benefits from a
+          // generous budget.
+          timeout: 90000,
         }),
       })
 
