@@ -110,10 +110,35 @@ export async function uploadFromUrl(
   key: string,
   fallbackContentType = 'image/jpeg',
 ): Promise<string> {
-  const res = await fetch(sourceUrl)
-  if (!res.ok) throw new Error(`fetch ${sourceUrl} failed: ${res.status}`)
+  // Some e-commerce CDNs (Shopify, Wix, certain image hosts) block fetches
+  // that don't look like a real browser — no User-Agent → 403. Send a
+  // browser-shaped header set so we look benign. Also send a referer
+  // matching the image origin to satisfy hotlink protection.
+  let referer: string | undefined
+  try {
+    referer = new URL(sourceUrl).origin
+  } catch {
+    /* malformed URL — let fetch fail with a clearer error below */
+  }
+  const res = await fetch(sourceUrl, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      ...(referer ? { Referer: referer } : {}),
+    },
+    redirect: 'follow',
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`fetch ${sourceUrl} failed: ${res.status} ${detail.slice(0, 120)}`)
+  }
   const ct = res.headers.get('content-type') ?? fallbackContentType
   const buf = Buffer.from(await res.arrayBuffer())
+  if (buf.length === 0) {
+    throw new Error(`fetch ${sourceUrl} returned empty body`)
+  }
   return uploadToR2(buf, key, ct)
 }
 

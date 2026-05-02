@@ -157,6 +157,7 @@ export const runUrlImport = internalAction({
         })
 
         const uploadedUrls: string[] = []
+        const uploadErrors: string[] = []
         for (let i = 0; i < candidateImages.length; i++) {
           const sourceUrl = candidateImages[i]
           const ext = guessExtension(sourceUrl)
@@ -165,12 +166,19 @@ export const runUrlImport = internalAction({
             const url = await uploadFromUrl(sourceUrl, key)
             uploadedUrls.push(url)
           } catch (err) {
+            const message = err instanceof Error ? err.message : String(err)
+            uploadErrors.push(message)
             // eslint-disable-next-line no-console
-            console.warn(`Failed to upload ${sourceUrl}:`, err)
+            console.warn(`[urlImport ${importId}] Failed to upload candidate ${i}: ${message}`)
           }
         }
         if (uploadedUrls.length === 0) {
-          throw new Error('All extracted images failed to upload')
+          // Surface the actual per-image errors so the user can see whether
+          // it's hotlink protection (403), missing files (404), bad URLs, etc.
+          const summary = uploadErrors.slice(0, 3).join(' | ')
+          throw new Error(
+            `All extracted images failed to upload (${uploadErrors.length} attempted). First errors: ${summary || 'no detail captured'}`,
+          )
         }
 
         const productName = (
