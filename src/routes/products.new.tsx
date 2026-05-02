@@ -31,6 +31,7 @@ import {
   Group,
   Image,
   Loader,
+  Modal,
   NumberInput,
   Paper,
   Select,
@@ -105,6 +106,8 @@ function NewProductPage() {
   const [aiNotes, setAiNotes] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // URL of the image being shown in the lightbox; null = closed.
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const createProductRichMutation = useConvexMutation(api.products.createProductRich)
   const createProduct = useMutation({ mutationFn: createProductRichMutation })
@@ -390,6 +393,8 @@ function NewProductPage() {
                     w={120}
                     h={120}
                     fit="cover"
+                    onClick={() => setLightboxUrl(url)}
+                    style={{ cursor: 'zoom-in' }}
                   />
                   {/* Primary star badge */}
                   <Box
@@ -653,6 +658,40 @@ function NewProductPage() {
           </Button>
         </Group>
       </Stack>
+
+      {/* Image lightbox — click any product image thumbnail to open. */}
+      <Modal
+        opened={lightboxUrl !== null}
+        onClose={() => setLightboxUrl(null)}
+        size="auto"
+        centered
+        withCloseButton
+        padding={0}
+        styles={{
+          content: { backgroundColor: 'transparent' },
+          body: { padding: 0 },
+          close: {
+            color: 'white',
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            zIndex: 2,
+          },
+        }}
+        overlayProps={{ backgroundOpacity: 0.85, blur: 6 }}
+      >
+        {lightboxUrl && (
+          <Image
+            src={lightboxUrl}
+            alt="Product image preview"
+            fit="contain"
+            mah="85vh"
+            maw="90vw"
+            radius="md"
+          />
+        )}
+      </Modal>
     </Container>
   )
 }
