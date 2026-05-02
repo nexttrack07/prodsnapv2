@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { useMediaQuery, useDisclosure } from '@mantine/hooks'
 import { useAction } from 'convex/react'
@@ -8,6 +8,7 @@ import { useMutation } from '@tanstack/react-query'
 import { notifications } from '@mantine/notifications'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
+  Alert,
   Anchor,
   AspectRatio,
   Badge,
@@ -24,7 +25,9 @@ import {
   SimpleGrid,
   Skeleton,
   Stack,
+  Tabs,
   Text,
+  TextInput,
   ThemeIcon,
   Title,
   UnstyledButton,
@@ -32,6 +35,7 @@ import {
 import {
   IconUpload,
   IconPhoto,
+  IconLink,
   IconArrowRight,
   IconPlus,
   IconSparkles,
@@ -655,6 +659,61 @@ function CreateProductModal({
   const createProductMutation = useMutation({ mutationFn: createProduct })
   const [isUploading, setIsUploading] = useState(false)
 
+  // URL import state
+  const [url, setUrl] = useState('')
+  const [importId, setImportId] = useState<Id<'urlImports'> | null>(null)
+  const createUrlImport = useConvexMutation(api.urlImports.createUrlImport)
+
+  const importRow = useQuery(
+    api.urlImports.getUrlImport,
+    importId ? { importId } : 'skip',
+  )
+
+  // Reset URL tab state when modal closes
+  useEffect(() => {
+    if (!opened) {
+      setUrl('')
+      setImportId(null)
+    }
+  }, [opened])
+
+  // React to import status changes
+  useEffect(() => {
+    if (!importRow) return
+    if (importRow.status === 'done' && importRow.productId) {
+      notifications.show({
+        title: 'Product imported',
+        message: 'Your product is ready — opening the studio now.',
+        color: 'green',
+      })
+      onClose()
+      navigate({ to: '/studio/$productId', params: { productId: importRow.productId } })
+    }
+    if (importRow.status === 'failed') {
+      // Clear importId to re-enable the input; keep url so user can retry
+      setImportId(null)
+    }
+  }, [importRow, onClose, navigate])
+
+  const inFlightStatuses = new Set(['pending', 'scraping', 'extracting', 'uploading'])
+  const isImporting = importId !== null && importRow !== undefined && importRow !== null && inFlightStatuses.has(importRow.status)
+
+  async function handleUrlSubmit() {
+    const trimmed = url.trim()
+    if (!trimmed) return
+    try {
+      const id = await createUrlImport({ url: trimmed, mode: 'product-and-brand' })
+      setImportId(id)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Something went wrong'
+      notifications.show({
+        title: 'Import failed',
+        message,
+        color: 'red',
+      })
+    }
+  }
+
   async function handleFileDrop(files: File[]) {
     const file = files[0]
     if (!file) return
@@ -676,14 +735,14 @@ function CreateProductModal({
         ),
       )
       const fileName = file.name.replace(/\.[^.]+$/, '')
-      const { url } = await uploadAction({
+      const { url: uploadedUrl } = await uploadAction({
         name: file.name,
         base64,
         contentType: file.type,
       })
       const productId: Id<'products'> = await createProductMutation.mutateAsync(
         {
-          imageUrl: url,
+          imageUrl: uploadedUrl,
           name: fileName.replace(/[-_]/g, ' '),
         },
       )
@@ -725,44 +784,105 @@ function CreateProductModal({
       centered
       radius="md"
     >
-      <Stack gap="md">
-        <Text size="sm" c="dark.2">
-          Drop a product photo. Background gets removed automatically and we'll start
-          analyzing the product.
-        </Text>
-        <Dropzone
-          onDrop={handleFileDrop}
-          accept={IMAGE_MIME_TYPE}
-          maxSize={MAX_PRODUCT_IMAGE_SIZE}
-          multiple={false}
-          disabled={isUploading}
-          style={{
-            border: '2px dashed var(--mantine-color-dark-4)',
-            borderRadius: 'var(--mantine-radius-md)',
-            background: 'var(--mantine-color-dark-7)',
-            padding: 'var(--mantine-spacing-xl)',
-          }}
-        >
-          <Stack align="center" gap="sm" py="md">
-            <ThemeIcon
-              size={56}
-              radius="lg"
-              variant="gradient"
-              gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+      <Tabs defaultValue="upload">
+        <Tabs.List mb="md">
+          <Tabs.Tab value="upload" leftSection={<IconPhoto size={14} />}>
+            Upload photo
+          </Tabs.Tab>
+          <Tabs.Tab value="url" leftSection={<IconLink size={14} />}>
+            Paste URL
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="upload">
+          <Stack gap="md">
+            <Text size="sm" c="dark.2">
+              Drop a product photo. Background gets removed automatically and we'll start
+              analyzing the product.
+            </Text>
+            <Dropzone
+              onDrop={handleFileDrop}
+              accept={IMAGE_MIME_TYPE}
+              maxSize={MAX_PRODUCT_IMAGE_SIZE}
+              multiple={false}
+              disabled={isUploading}
+              style={{
+                border: '2px dashed var(--mantine-color-dark-4)',
+                borderRadius: 'var(--mantine-radius-md)',
+                background: 'var(--mantine-color-dark-7)',
+                padding: 'var(--mantine-spacing-xl)',
+              }}
             >
-              {isUploading ? <Loader size="sm" color="white" /> : <IconPhoto size={28} />}
-            </ThemeIcon>
-            <Stack gap={2} align="center">
-              <Text size="sm" c="white" fw={500}>
-                {isUploading ? 'Uploading…' : 'Drop a photo or click to browse'}
-              </Text>
-              <Text size="xs" c="dark.2">
-                PNG, JPG, or WebP — up to 10 MB
-              </Text>
-            </Stack>
+              <Stack align="center" gap="sm" py="md">
+                <ThemeIcon
+                  size={56}
+                  radius="lg"
+                  variant="gradient"
+                  gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+                >
+                  {isUploading ? <Loader size="sm" color="white" /> : <IconPhoto size={28} />}
+                </ThemeIcon>
+                <Stack gap={2} align="center">
+                  <Text size="sm" c="white" fw={500}>
+                    {isUploading ? 'Uploading…' : 'Drop a photo or click to browse'}
+                  </Text>
+                  <Text size="xs" c="dark.2">
+                    PNG, JPG, or WebP — up to 10 MB
+                  </Text>
+                </Stack>
+              </Stack>
+            </Dropzone>
           </Stack>
-        </Dropzone>
-      </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="url">
+          <Stack gap="md">
+            <Text size="sm" c="dark.2">
+              Paste a product page URL. We'll scrape the page, extract product details,
+              and set up your product automatically.
+            </Text>
+            <TextInput
+              placeholder="https://yoursite.com/products/your-product"
+              value={url}
+              onChange={(e) => setUrl(e.currentTarget.value)}
+              disabled={isImporting}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleUrlSubmit()
+              }}
+            />
+            {isImporting && importRow && (
+              <Group gap="xs">
+                <Loader size="xs" />
+                <Text size="sm" c="dark.2">
+                  {importRow.currentStep || 'Starting…'}
+                </Text>
+              </Group>
+            )}
+            {importRow && importRow.status === 'failed' && (
+              <Alert color="red" title="Import failed">
+                {importRow.error || importRow.currentStep || 'Import failed'}
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="subtle"
+                  mt="xs"
+                  onClick={handleUrlSubmit}
+                >
+                  Try again
+                </Button>
+              </Alert>
+            )}
+            <Button
+              color="brand"
+              onClick={handleUrlSubmit}
+              disabled={isImporting || !url.trim()}
+              loading={isImporting}
+            >
+              Import product
+            </Button>
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
     </Modal>
   )
 }
