@@ -163,13 +163,24 @@ export const runUrlImport = internalAction({
           currentStep: 'Reading product details',
         })
 
+        // Pull candidate images from three sources, in order of trust:
+        // 1) Firecrawl's LLM extraction (high precision, low recall)
+        // 2) og:image meta tag (high precision, single image)
+        // 3) <img src> URLs scraped from the page's markdown (high recall,
+        //    needs filtering — looksLikeImageUrl rejects logos/icons/page
+        //    URLs that sneak in)
+        const markdownImages = extractMarkdownImageUrls(scrapePayload.data.markdown ?? '')
         const rawImageUrls = [
           ...(extracted.productImageUrls ?? []),
           ...(fallbackImage ? [fallbackImage] : []),
+          ...markdownImages,
         ]
-        const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 3)
+        const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 5)
         console.log(
           `[urlImport ${importId}] image urls: raw=${rawImageUrls.length} ` +
+            `(llm=${(extracted.productImageUrls ?? []).length} ` +
+            `og=${fallbackImage ? 1 : 0} ` +
+            `markdown=${markdownImages.length}) ` +
             `valid=${candidateImages.length} ` +
             `rejected=${rawImageUrls.length - candidateImages.length}`,
         )
@@ -333,6 +344,25 @@ const IMAGE_CDN_HOSTS = [
   'media-amazon.com',
   'm.media-amazon.com',
 ]
+
+// Pulls every URL out of markdown image syntax: ![alt text](url).
+// Firecrawl's markdown output converts the page's <img> tags into this
+// shape, so this gives us a high-recall pool of every image that
+// rendered on the page (gallery shots, lifestyle, swatches, etc.).
+// Pair with looksLikeImageUrl() to filter out tracking pixels and
+// logos that share the same syntax.
+function extractMarkdownImageUrls(markdown: string): string[] {
+  if (!markdown) return []
+  const out: string[] = []
+  // ![alt](url "optional title") — capture the URL up to the first
+  // whitespace or closing paren.
+  const re = /!\[[^\]]*\]\(([^)\s]+)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(markdown)) !== null) {
+    if (m[1]) out.push(m[1])
+  }
+  return out
+}
 
 function looksLikeImageUrl(u: string): boolean {
   let parsed: URL
