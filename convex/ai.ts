@@ -203,9 +203,18 @@ function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
     const parsed = JSON.parse(jsonStr)
     return schema.parse(parsed)
   } catch (err) {
-    const preview = response.slice(0, 200)
+    const detail = err instanceof Error ? err.message : String(err)
+    // Log the FULL response (not just 200 chars) and the parsed object so
+    // we can see exactly which field failed Zod validation. Truncating
+    // the response was hiding the real failure during product analysis.
+    console.warn(
+      `[parseJsonFromResponse] validation failed: ${detail}\n` +
+        `--- raw response (first 2000 chars) ---\n${response.slice(0, 2000)}\n` +
+        `--- end ---`,
+    )
+    const preview = response.slice(0, 600)
     throw new Error(
-      `Failed to parse LLM response as JSON: ${err instanceof Error ? err.message : String(err)}\nResponse preview: ${preview}`,
+      `Failed to parse LLM response as JSON: ${detail}\nResponse preview: ${preview}`,
     )
   }
 }
@@ -214,26 +223,55 @@ function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
 const ANGLE_TYPES = ['comparison', 'curiosity-narrative', 'social-proof', 'problem-callout'] as const
 
 const marketingAngleSchema = z.object({
-  title: z.string().min(3).max(80),
-  description: z.string().min(15).max(280),
-  hook: z.string().min(5).max(200),
-  suggestedAdStyle: z.string().min(3).max(80),
-  angleType: z.enum(ANGLE_TYPES).optional(),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  hook: z.string().min(1),
+  suggestedAdStyle: z.string().min(1),
+  angleType: z.string().optional(),
   tags: z.object({
-    productCategory: z.enum(PRODUCT_CATEGORIES).optional(),
-    imageStyle: z.enum(IMAGE_STYLES).optional(),
-    setting: z.enum(SETTINGS).optional(),
-    primaryColor: z.enum(PRIMARY_COLORS).optional(),
+    productCategory: z.string().optional(),
+    imageStyle: z.string().optional(),
+    setting: z.string().optional(),
+    primaryColor: z.string().optional(),
   }).optional(),
 })
 
+// Schema is intentionally lenient — z.string() instead of z.enum(...) and
+// soft array bounds — so a slightly-off LLM response (wrong casing on a
+// category, an extra angle, a too-long description) doesn't fail the
+// entire analysis. Values get normalised + clipped in the handler before
+// they hit the DB. The user can edit anything in the UI anyway.
 const productAnalysisSchema = z.object({
-  category: z.enum(AD_CATEGORIES),
-  productDescription: z.string().min(10).max(300),
-  targetAudience: z.string().min(10).max(300),
-  valueProposition: z.string().min(15).max(280),
-  marketingAngles: z.array(marketingAngleSchema).min(3).max(5),
+  category: z.string().min(1),
+  productDescription: z.string().min(1),
+  targetAudience: z.string().min(1),
+  valueProposition: z.string().min(1),
+  marketingAngles: z.array(marketingAngleSchema).min(1).max(10),
 })
+
+// Normalize a free-form category string from the LLM into one of the
+// canonical lowercase enum values. Falls back to 'other' rather than
+// throwing so analysis never blocks on a single misaligned value.
+function normalizeCategory<T extends readonly string[]>(
+  raw: string,
+  allowed: T,
+): T[number] {
+  const normalized = raw.trim().toLowerCase().replace(/[\s_]+/g, '-')
+  const arr = allowed as readonly string[]
+  if (arr.includes(normalized)) return normalized as T[number]
+  // Partial match — first allowed value that contains or is contained by
+  // the LLM output (e.g. "tech" → "electronics" if listed; "skin care" →
+  // "skincare").
+  const partial = arr.find((a) => normalized.includes(a) || a.includes(normalized))
+  return ((partial ?? 'other') as T[number])
+}
+
+// Defensively clip a string to a max length, preserving an optional min
+// signal (returns empty if shorter than min — but min is mostly enforced
+// at schema level via .min(1) already).
+function clipString(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max).trimEnd() : s
+}
 
 export const analyzeProduct = internalAction({
   args: {
@@ -287,12 +325,40 @@ Return ONLY the JSON object, no other text.`,
 
     const analysis = parseJsonFromResponse(analysisText, productAnalysisSchema)
 
+    // Normalize against the canonical enums + clip strings so the saved
+    // record always conforms to downstream consumers' expectations,
+    // regardless of small LLM deviations.
+    const angleTypeSet = new Set<string>(ANGLE_TYPES)
     return {
-      category: analysis.category,
-      productDescription: analysis.productDescription,
-      targetAudience: analysis.targetAudience,
-      valueProposition: analysis.valueProposition,
-      marketingAngles: analysis.marketingAngles,
+      category: normalizeCategory(analysis.category, AD_CATEGORIES),
+      productDescription: clipString(analysis.productDescription, 300),
+      targetAudience: clipString(analysis.targetAudience, 300),
+      valueProposition: clipString(analysis.valueProposition, 280),
+      marketingAngles: analysis.marketingAngles.slice(0, 5).map((a) => ({
+        title: clipString(a.title, 80),
+        description: clipString(a.description, 280),
+        hook: clipString(a.hook, 200),
+        suggestedAdStyle: clipString(a.suggestedAdStyle, 80),
+        angleType: a.angleType && angleTypeSet.has(a.angleType)
+          ? (a.angleType as (typeof ANGLE_TYPES)[number])
+          : undefined,
+        tags: a.tags
+          ? {
+              productCategory: a.tags.productCategory
+                ? normalizeCategory(a.tags.productCategory, PRODUCT_CATEGORIES)
+                : undefined,
+              imageStyle: a.tags.imageStyle && (IMAGE_STYLES as readonly string[]).includes(a.tags.imageStyle)
+                ? (a.tags.imageStyle as (typeof IMAGE_STYLES)[number])
+                : undefined,
+              setting: a.tags.setting && (SETTINGS as readonly string[]).includes(a.tags.setting)
+                ? (a.tags.setting as (typeof SETTINGS)[number])
+                : undefined,
+              primaryColor: a.tags.primaryColor && (PRIMARY_COLORS as readonly string[]).includes(a.tags.primaryColor)
+                ? (a.tags.primaryColor as (typeof PRIMARY_COLORS)[number])
+                : undefined,
+            }
+          : undefined,
+      })),
     }
   },
 })
