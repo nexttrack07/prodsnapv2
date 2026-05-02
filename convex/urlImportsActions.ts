@@ -27,7 +27,15 @@ type FirecrawlScrapeResponse = {
   data?: {
     markdown?: string
     json?: FirecrawlExtractedJson
-    metadata?: { title?: string; ogImage?: string }
+    metadata?: {
+      title?: string
+      ogImage?: string
+      description?: string
+      ogDescription?: string
+      'og:description'?: string
+      ogTitle?: string
+      'og:title'?: string
+    }
   }
   error?: string
 }
@@ -126,8 +134,22 @@ export const runUrlImport = internalAction({
         throw new Error(scrapePayload.error ?? 'Firecrawl response was unsuccessful')
       }
       const extracted = scrapePayload.data.json ?? {}
-      const fallbackTitle = scrapePayload.data.metadata?.title
-      const fallbackImage = scrapePayload.data.metadata?.ogImage
+      const meta = scrapePayload.data.metadata ?? {}
+      const fallbackTitle = meta.title || meta.ogTitle || meta['og:title']
+      const fallbackImage = meta.ogImage
+      const fallbackDescription =
+        meta.description || meta.ogDescription || meta['og:description']
+
+      console.log(
+        `[urlImport ${importId}] firecrawl extracted: ` +
+          `name=${JSON.stringify((extracted.productName ?? '').slice(0, 60))} ` +
+          `descLen=${extracted.productDescription?.length ?? 0} ` +
+          `images=${(extracted.productImageUrls ?? []).length} ` +
+          `metaTitle=${JSON.stringify(fallbackTitle?.slice(0, 60) ?? '')} ` +
+          `metaDescLen=${fallbackDescription?.length ?? 0} ` +
+          `metaOgImage=${fallbackImage ? 'yes' : 'no'} ` +
+          `markdownLen=${scrapePayload.data.markdown?.length ?? 0}`,
+      )
 
       const isBrandOnly = importRow.mode === 'brand-only'
 
@@ -186,6 +208,7 @@ export const runUrlImport = internalAction({
           fallbackTitle ||
           'Imported product'
         ).slice(0, 80)
+        const productDescription = (extracted.productDescription || fallbackDescription || '').slice(0, 600)
         const productReviewSnippets = Array.isArray(extracted.reviewSnippets) && extracted.reviewSnippets.length > 0
           ? extracted.reviewSnippets
           : undefined
@@ -194,6 +217,7 @@ export const runUrlImport = internalAction({
           name: productName,
           imageUrls: uploadedUrls,
           customerLanguage: productReviewSnippets,
+          ...(productDescription ? { description: productDescription } : {}),
         })
       } else {
         await ctx.runMutation(internal.urlImports.patchImportStatus, {

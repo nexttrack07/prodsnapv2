@@ -135,6 +135,14 @@ export async function uploadFromUrl(
     throw new Error(`fetch ${sourceUrl} failed: ${res.status} ${detail.slice(0, 120)}`)
   }
   const ct = res.headers.get('content-type') ?? fallbackContentType
+  // Some hotlink-protected hosts return 200 OK with an HTML challenge page
+  // instead of the actual image. Without this guard we upload garbage into
+  // R2 and the browser later renders nothing but alt text.
+  if (!ct.toLowerCase().startsWith('image/')) {
+    throw new Error(
+      `fetch ${sourceUrl} returned non-image content-type "${ct}" (likely a hotlink block or anti-bot page)`,
+    )
+  }
   const buf = Buffer.from(await res.arrayBuffer())
   if (buf.length === 0) {
     throw new Error(`fetch ${sourceUrl} returned empty body`)
