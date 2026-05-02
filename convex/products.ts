@@ -297,6 +297,57 @@ export const createProductFromImport = internalMutation({
   },
 })
 
+/**
+ * Creates a new product with full rich metadata from the /products/new route.
+ * Supports multiple images (all uploaded to R2 beforehand).
+ */
+export const createProductRich = mutation({
+  args: {
+    name: v.string(),
+    imageUrls: v.array(v.string()),
+    productDescription: v.optional(v.string()),
+    category: v.optional(v.string()),
+    price: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    aiNotes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx)
+    if (args.imageUrls.length === 0) throw new Error('At least one image is required')
+    if (args.name.trim().length === 0) throw new Error('Name is required')
+    await requireProductLimitForUser(ctx, userId, 'createProductRich')
+
+    const productId = await ctx.db.insert('products', {
+      name: args.name.trim(),
+      status: 'analyzing',
+      userId,
+      imageUrl: args.imageUrls[0],
+      ...(args.productDescription ? { productDescription: args.productDescription.trim() } : {}),
+      ...(args.category ? { category: args.category.trim() } : {}),
+      ...(args.price != null ? { price: args.price } : {}),
+      ...(args.currency ? { currency: args.currency } : {}),
+      ...(args.tags && args.tags.length > 0 ? { tags: args.tags.map((t) => t.trim()).filter(Boolean).slice(0, 20) } : {}),
+      ...(args.aiNotes ? { aiNotes: args.aiNotes.trim() } : {}),
+    })
+
+    const imageIds: Id<'productImages'>[] = []
+    for (const url of args.imageUrls) {
+      const id = await ctx.db.insert('productImages', {
+        productId,
+        userId,
+        imageUrl: url,
+        type: 'original',
+        status: 'ready',
+      })
+      imageIds.push(id)
+    }
+    await ctx.db.patch(productId, { primaryImageId: imageIds[0] })
+    await ctx.scheduler.runAfter(0, internal.products.runProductAnalysis, { productId })
+    return productId
+  },
+})
+
 // ─── Product queries ──────────────────────────────────────────────────────
 
 export const getProduct = query({

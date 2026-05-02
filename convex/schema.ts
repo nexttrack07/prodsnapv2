@@ -136,6 +136,11 @@ const schema = defineSchema({
     // Metadata
     // Voice of customer: authentic review snippets / phrases per product
     customerLanguage: v.optional(v.array(v.string())),
+    // User-provided rich metadata (optional; used by analysis + angle generation)
+    price: v.optional(v.number()),
+    currency: v.optional(v.string()), // ISO 4217, e.g. 'USD'
+    tags: v.optional(v.array(v.string())),
+    aiNotes: v.optional(v.string()), // Free-form notes for the AI: "this product is..."
     error: v.optional(v.string()),
     archivedAt: v.optional(v.number()), // soft delete timestamp
     // ─── Legacy fields (kept for migration, will be removed) ─────────────

@@ -1,14 +1,8 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from 'convex/react'
-import { useMediaQuery, useDisclosure } from '@mantine/hooks'
-import { useAction } from 'convex/react'
-import { useConvexMutation } from '@convex-dev/react-query'
-import { useMutation } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
-import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
+import { useMediaQuery } from '@mantine/hooks'
 import {
-  Alert,
   Anchor,
   AspectRatio,
   Badge,
@@ -19,23 +13,18 @@ import {
   Group,
   Image,
   Loader,
-  Modal,
   Paper,
   ScrollArea,
   SimpleGrid,
   Skeleton,
   Stack,
-  Tabs,
   Text,
-  TextInput,
   ThemeIcon,
   Title,
   UnstyledButton,
 } from '@mantine/core'
 import {
-  IconUpload,
   IconPhoto,
-  IconLink,
   IconArrowRight,
   IconPlus,
   IconSparkles,
@@ -46,8 +35,6 @@ import {
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import { mapBillingError } from '../lib/billing/mapBillingError'
-import { MAX_PRODUCT_IMAGE_SIZE } from '../utils/constants'
 import { capitalizeWords } from '../utils/strings'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 import { PageHeaderActions } from '../components/layout/PageHeaderActions'
@@ -71,7 +58,6 @@ function HomePage() {
   const templates = useQuery(api.templates.listPublished, {})
   const search = Route.useSearch()
   const navigate = useNavigate()
-  const [createOpen, { open: openCreate, close: closeCreate }] = useDisclosure(false)
 
   const isLoading =
     dashboard === undefined || products === undefined || templates === undefined
@@ -87,9 +73,10 @@ function HomePage() {
   )
 
   // Surface the header CTA only once the user has products. First-time
-  // users hit the giant empty-state hero dropzone; a header button then
-  // would compete with it.
+  // users hit the giant empty-state hero; a header button then would compete.
   const hasProducts = !!products && products.length > 0
+
+  const goToNewProduct = () => navigate({ to: '/products/new' })
 
   return (
     <Container size="lg" py="xl">
@@ -99,7 +86,7 @@ function HomePage() {
             size="sm"
             color="brand"
             leftSection={<IconPlus size={14} />}
-            onClick={openCreate}
+            onClick={goToNewProduct}
           >
             New product
           </Button>
@@ -118,7 +105,7 @@ function HomePage() {
         )}
 
         {hasProducts && (
-          <ProductsRow products={products} isLoading={false} onAddProduct={openCreate} />
+          <ProductsRow products={products} isLoading={false} onAddProduct={goToNewProduct} />
         )}
 
         {templates && templates.length > 0 && (
@@ -132,8 +119,6 @@ function HomePage() {
           <LibraryTeaser totalGenerations={dashboard.totalGenerations} />
         )}
       </Stack>
-
-      <CreateProductModal opened={createOpen} onClose={closeCreate} />
 
       <AdDetailPanel
         opened={!!search.ad}
@@ -371,70 +356,6 @@ function HeroSkeleton() {
 
 function EmptyHero({ isMobile }: { isMobile: boolean }) {
   const navigate = useNavigate()
-  const uploadAction = useAction(api.r2.uploadProductImage)
-  const createProduct = useConvexMutation(api.products.createProduct)
-  const createProductMutation = useMutation({ mutationFn: createProduct })
-  const [isUploading, setIsUploading] = useState(false)
-
-  async function handleFileDrop(files: File[]) {
-    const file = files[0]
-    if (!file) return
-    if (file.size > MAX_PRODUCT_IMAGE_SIZE) {
-      notifications.show({
-        title: 'File too large',
-        message: 'Image must be under 10 MB',
-        color: 'red',
-      })
-      return
-    }
-    setIsUploading(true)
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce(
-          (d, b) => d + String.fromCharCode(b),
-          '',
-        ),
-      )
-      const fileName = file.name.replace(/\.[^.]+$/, '')
-      const { url } = await uploadAction({
-        name: file.name,
-        base64,
-        contentType: file.type,
-      })
-      const productId: Id<'products'> = await createProductMutation.mutateAsync(
-        {
-          imageUrl: url,
-          name: fileName.replace(/[-_]/g, ' '),
-        },
-      )
-      notifications.show({
-        title: 'Product created',
-        message: "Let's make some ads.",
-        color: 'green',
-      })
-      navigate({ to: '/studio/$productId', params: { productId } })
-    } catch (err) {
-      const info = mapBillingError(err)
-      notifications.show({
-        title: info.title === 'Something went wrong' ? 'Upload failed' : info.title,
-        message: info.action ? (
-          <>
-            {info.message}{' '}
-            <Anchor component={Link} to={info.action.href} size="sm" fw={600}>
-              {info.action.label} →
-            </Anchor>
-          </>
-        ) : (
-          info.message
-        ),
-        color: 'red',
-        autoClose: 8000,
-      })
-    } finally {
-      setIsUploading(false)
-    }
-  }
 
   return (
     <Paper
@@ -448,49 +369,34 @@ function EmptyHero({ isMobile }: { isMobile: boolean }) {
         borderColor: 'var(--mantine-color-dark-5)',
       }}
     >
-      <Dropzone
-        onDrop={handleFileDrop}
-        accept={IMAGE_MIME_TYPE}
-        maxSize={MAX_PRODUCT_IMAGE_SIZE}
-        multiple={false}
-        disabled={isUploading}
-        style={{
-          border: 'none',
-          background: 'none',
-          padding: 0,
-          minHeight: 'auto',
-        }}
-      >
-        <Stack align="center" gap="md" py="lg">
-          <ThemeIcon
-            size={72}
-            radius="lg"
-            variant="gradient"
-            gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
-            style={{ boxShadow: '0 8px 32px rgba(84, 116, 180, 0.30)' }}
-          >
-            {isUploading ? <Loader size="md" color="white" /> : <IconPhoto size={36} />}
-          </ThemeIcon>
-          <Stack gap={4} align="center">
-            <Title order={2} fz={28} fw={700} c="white" ta="center">
-              Let's make your first ad
-            </Title>
-            <Text c="dark.2" size="sm" maw={460} ta="center">
-              Add a product — paste a URL or upload a photo. ProdSnap will
-              turn it into ad creatives in about a minute.
-            </Text>
-          </Stack>
-          <Button
-            leftSection={<IconUpload size={18} />}
-            color="brand"
-            size="md"
-            loading={isUploading}
-            style={{ pointerEvents: 'none' }}
-          >
-            Create your first product
-          </Button>
+      <Stack align="center" gap="md" py="lg">
+        <ThemeIcon
+          size={72}
+          radius="lg"
+          variant="gradient"
+          gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
+          style={{ boxShadow: '0 8px 32px rgba(84, 116, 180, 0.30)' }}
+        >
+          <IconPhoto size={36} />
+        </ThemeIcon>
+        <Stack gap={4} align="center">
+          <Title order={2} fz={28} fw={700} c="white" ta="center">
+            Let's make your first ad
+          </Title>
+          <Text c="dark.2" size="sm" maw={460} ta="center">
+            Add a product — paste a URL or upload a photo. ProdSnap will
+            turn it into ad creatives in about a minute.
+          </Text>
         </Stack>
-      </Dropzone>
+        <Button
+          leftSection={<IconPlus size={18} />}
+          color="brand"
+          size="md"
+          onClick={() => navigate({ to: '/products/new' })}
+        >
+          Create your first product
+        </Button>
+      </Stack>
     </Paper>
   )
 }
@@ -638,252 +544,6 @@ function ProductTile({ product }: { product: ProductRow }) {
         </Box>
       </Paper>
     </Link>
-  )
-}
-
-// ─── Create-product modal ──────────────────────────────────────────────────
-// Reuses the same upload-and-create flow as the empty-state hero, surfaced
-// from the header CTA + the first tile in the "Your products" row so users
-// can add another product without needing to clear out the focus product.
-
-function CreateProductModal({
-  opened,
-  onClose,
-}: {
-  opened: boolean
-  onClose: () => void
-}) {
-  const navigate = useNavigate()
-  const uploadAction = useAction(api.r2.uploadProductImage)
-  const createProduct = useConvexMutation(api.products.createProduct)
-  const createProductMutation = useMutation({ mutationFn: createProduct })
-  const [isUploading, setIsUploading] = useState(false)
-
-  // URL import state
-  const [url, setUrl] = useState('')
-  const [importId, setImportId] = useState<Id<'urlImports'> | null>(null)
-  const createUrlImport = useConvexMutation(api.urlImports.createUrlImport)
-
-  const importRow = useQuery(
-    api.urlImports.getUrlImport,
-    importId ? { importId } : 'skip',
-  )
-
-  // Reset URL tab state when modal closes
-  useEffect(() => {
-    if (!opened) {
-      setUrl('')
-      setImportId(null)
-    }
-  }, [opened])
-
-  // React to import status changes
-  useEffect(() => {
-    if (!importRow) return
-    if (importRow.status === 'done' && importRow.productId) {
-      notifications.show({
-        title: 'Product imported',
-        message: 'Your product is ready — opening the studio now.',
-        color: 'green',
-      })
-      onClose()
-      navigate({ to: '/studio/$productId', params: { productId: importRow.productId } })
-    }
-    if (importRow.status === 'failed') {
-      // Clear importId to re-enable the input; keep url so user can retry
-      setImportId(null)
-    }
-  }, [importRow, onClose, navigate])
-
-  const inFlightStatuses = new Set(['pending', 'scraping', 'extracting', 'uploading'])
-  const isImporting = importId !== null && importRow !== undefined && importRow !== null && inFlightStatuses.has(importRow.status)
-
-  async function handleUrlSubmit() {
-    const trimmed = url.trim()
-    if (!trimmed) return
-    try {
-      const id = await createUrlImport({ url: trimmed, mode: 'product-and-brand' })
-      setImportId(id)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong'
-      notifications.show({
-        title: 'Import failed',
-        message,
-        color: 'red',
-      })
-    }
-  }
-
-  async function handleFileDrop(files: File[]) {
-    const file = files[0]
-    if (!file) return
-    if (file.size > MAX_PRODUCT_IMAGE_SIZE) {
-      notifications.show({
-        title: 'File too large',
-        message: 'Image must be under 10 MB',
-        color: 'red',
-      })
-      return
-    }
-    setIsUploading(true)
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce(
-          (d, b) => d + String.fromCharCode(b),
-          '',
-        ),
-      )
-      const fileName = file.name.replace(/\.[^.]+$/, '')
-      const { url: uploadedUrl } = await uploadAction({
-        name: file.name,
-        base64,
-        contentType: file.type,
-      })
-      const productId: Id<'products'> = await createProductMutation.mutateAsync(
-        {
-          imageUrl: uploadedUrl,
-          name: fileName.replace(/[-_]/g, ' '),
-        },
-      )
-      notifications.show({
-        title: 'Product created',
-        message: "Let's make some ads.",
-        color: 'green',
-      })
-      onClose()
-      navigate({ to: '/studio/$productId', params: { productId } })
-    } catch (err) {
-      const info = mapBillingError(err)
-      notifications.show({
-        title: info.title === 'Something went wrong' ? 'Upload failed' : info.title,
-        message: info.action ? (
-          <>
-            {info.message}{' '}
-            <Anchor component={Link} to={info.action.href} size="sm" fw={600}>
-              {info.action.label} →
-            </Anchor>
-          </>
-        ) : (
-          info.message
-        ),
-        color: 'red',
-        autoClose: 8000,
-      })
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title="Add a product"
-      size="md"
-      centered
-      radius="md"
-    >
-      <Tabs defaultValue="upload">
-        <Tabs.List mb="md">
-          <Tabs.Tab value="upload" leftSection={<IconPhoto size={14} />}>
-            Upload photo
-          </Tabs.Tab>
-          <Tabs.Tab value="url" leftSection={<IconLink size={14} />}>
-            Paste URL
-          </Tabs.Tab>
-        </Tabs.List>
-
-        <Tabs.Panel value="upload">
-          <Stack gap="md">
-            <Text size="sm" c="dark.2">
-              Drop a product photo. Background gets removed automatically and we'll start
-              analyzing the product.
-            </Text>
-            <Dropzone
-              onDrop={handleFileDrop}
-              accept={IMAGE_MIME_TYPE}
-              maxSize={MAX_PRODUCT_IMAGE_SIZE}
-              multiple={false}
-              disabled={isUploading}
-              style={{
-                border: '2px dashed var(--mantine-color-dark-4)',
-                borderRadius: 'var(--mantine-radius-md)',
-                background: 'var(--mantine-color-dark-7)',
-                padding: 'var(--mantine-spacing-xl)',
-              }}
-            >
-              <Stack align="center" gap="sm" py="md">
-                <ThemeIcon
-                  size={56}
-                  radius="lg"
-                  variant="gradient"
-                  gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
-                >
-                  {isUploading ? <Loader size="sm" color="white" /> : <IconPhoto size={28} />}
-                </ThemeIcon>
-                <Stack gap={2} align="center">
-                  <Text size="sm" c="white" fw={500}>
-                    {isUploading ? 'Uploading…' : 'Drop a photo or click to browse'}
-                  </Text>
-                  <Text size="xs" c="dark.2">
-                    PNG, JPG, or WebP — up to 10 MB
-                  </Text>
-                </Stack>
-              </Stack>
-            </Dropzone>
-          </Stack>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="url">
-          <Stack gap="md">
-            <Text size="sm" c="dark.2">
-              Paste a product page URL. We'll scrape the page, extract product details,
-              and set up your product automatically.
-            </Text>
-            <TextInput
-              placeholder="https://yoursite.com/products/your-product"
-              value={url}
-              onChange={(e) => setUrl(e.currentTarget.value)}
-              disabled={isImporting}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleUrlSubmit()
-              }}
-            />
-            {isImporting && importRow && (
-              <Group gap="xs">
-                <Loader size="xs" />
-                <Text size="sm" c="dark.2">
-                  {importRow.currentStep || 'Starting…'}
-                </Text>
-              </Group>
-            )}
-            {importRow && importRow.status === 'failed' && (
-              <Alert color="red" title="Import failed">
-                {importRow.error || importRow.currentStep || 'Import failed'}
-                <Button
-                  size="xs"
-                  color="red"
-                  variant="subtle"
-                  mt="xs"
-                  onClick={handleUrlSubmit}
-                >
-                  Try again
-                </Button>
-              </Alert>
-            )}
-            <Button
-              color="brand"
-              onClick={handleUrlSubmit}
-              disabled={isImporting || !url.trim()}
-              loading={isImporting}
-            >
-              Import product
-            </Button>
-          </Stack>
-        </Tabs.Panel>
-      </Tabs>
-    </Modal>
   )
 }
 

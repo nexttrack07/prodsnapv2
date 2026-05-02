@@ -103,7 +103,7 @@ function ProductsPage() {
           </Box>
           <Button
             component={Link}
-            to="/home"
+            to="/products/new"
             color="brand"
             leftSection={<IconPlus size={16} />}
           >
@@ -355,7 +355,7 @@ function EmptyState() {
         Upload your first product photo, then come back here to browse all your
         products in one place.
       </Text>
-      <Button component={Link} to="/home" color="brand" size="md">
+      <Button component={Link} to="/products/new" color="brand" size="md">
         Create your first product
       </Button>
     </Paper>

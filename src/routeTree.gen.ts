@@ -24,6 +24,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as StudioProductIdRouteImport } from './routes/studio.$productId'
+import { Route as ProductsNewRouteImport } from './routes/products.new'
 import { Route as BoardsBoardIdRouteImport } from './routes/boards.$boardId'
 import { Route as AdsAdIdRouteImport } from './routes/ads.$adId'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
@@ -109,6 +110,11 @@ const StudioProductIdRoute = StudioProductIdRouteImport.update({
   path: '/$productId',
   getParentRoute: () => StudioRoute,
 } as any)
+const ProductsNewRoute = ProductsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => ProductsRoute,
+} as any)
 const BoardsBoardIdRoute = BoardsBoardIdRouteImport.update({
   id: '/boards/$boardId',
   path: '/boards/$boardId',
@@ -164,7 +170,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/products': typeof ProductsRoute
+  '/products': typeof ProductsRouteWithChildren
   '/studio': typeof StudioRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
@@ -176,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
+  '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin/': typeof AdminIndexRoute
   '/studio/': typeof StudioIndexRoute
@@ -189,7 +196,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/products': typeof ProductsRoute
+  '/products': typeof ProductsRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
@@ -200,6 +207,7 @@ export interface FileRoutesByTo {
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
+  '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin': typeof AdminIndexRoute
   '/studio': typeof StudioIndexRoute
@@ -215,7 +223,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/products': typeof ProductsRoute
+  '/products': typeof ProductsRouteWithChildren
   '/studio': typeof StudioRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
@@ -227,6 +235,7 @@ export interface FileRoutesById {
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
   '/boards/$boardId': typeof BoardsBoardIdRoute
+  '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/admin/': typeof AdminIndexRoute
   '/studio/': typeof StudioIndexRoute
@@ -255,6 +264,7 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/ads/$adId'
     | '/boards/$boardId'
+    | '/products/new'
     | '/studio/$productId'
     | '/admin/'
     | '/studio/'
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/ads/$adId'
     | '/boards/$boardId'
+    | '/products/new'
     | '/studio/$productId'
     | '/admin'
     | '/studio'
@@ -305,6 +316,7 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/ads/$adId'
     | '/boards/$boardId'
+    | '/products/new'
     | '/studio/$productId'
     | '/admin/'
     | '/studio/'
@@ -320,7 +332,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
-  ProductsRoute: typeof ProductsRoute
+  ProductsRoute: typeof ProductsRouteWithChildren
   StudioRoute: typeof StudioRouteWithChildren
   TemplatesRoute: typeof TemplatesRoute
   TermsRoute: typeof TermsRoute
@@ -437,6 +449,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioProductIdRouteImport
       parentRoute: typeof StudioRoute
     }
+    '/products/new': {
+      id: '/products/new'
+      path: '/new'
+      fullPath: '/products/new'
+      preLoaderRoute: typeof ProductsNewRouteImport
+      parentRoute: typeof ProductsRoute
+    }
     '/boards/$boardId': {
       id: '/boards/$boardId'
       path: '/boards/$boardId'
@@ -521,6 +540,18 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface ProductsRouteChildren {
+  ProductsNewRoute: typeof ProductsNewRoute
+}
+
+const ProductsRouteChildren: ProductsRouteChildren = {
+  ProductsNewRoute: ProductsNewRoute,
+}
+
+const ProductsRouteWithChildren = ProductsRoute._addFileChildren(
+  ProductsRouteChildren,
+)
+
 interface StudioProductIdRouteChildren {
   StudioProductIdStrategyRoute: typeof StudioProductIdStrategyRoute
 }
@@ -555,7 +586,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
-  ProductsRoute: ProductsRoute,
+  ProductsRoute: ProductsRouteWithChildren,
   StudioRoute: StudioRouteWithChildren,
   TemplatesRoute: TemplatesRoute,
   TermsRoute: TermsRoute,
