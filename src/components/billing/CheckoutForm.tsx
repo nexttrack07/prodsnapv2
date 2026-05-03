@@ -60,10 +60,27 @@ function CheckoutBody({ from }: { from?: 'onboarding' }) {
   const [startError, setStartError] = useState<string | null>(null)
   const [stuck, setStuck] = useState(false)
 
+  // Diagnostic — log every checkout state change so we can see what's
+  // happening when the user is "stuck". Status, fetchStatus, errors,
+  // plan presence, and any totals are the most useful signals.
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[CheckoutForm] state:', {
+      status: checkout.status,
+      fetchStatus,
+      hasPlan: !!checkout.plan,
+      planId: checkout.plan?.id,
+      planName: checkout.plan?.name,
+      errors,
+    })
+  }, [checkout.status, fetchStatus, checkout.plan, errors])
+
   // Auto-initialize the checkout session on mount. Surface any error
   // (bad plan id, billing not enabled, network) instead of swallowing.
   useEffect(() => {
     if (checkout.status === 'needs_initialization' && fetchStatus !== 'fetching') {
+      // eslint-disable-next-line no-console
+      console.log('[CheckoutForm] calling checkout.start()...')
       checkout.start().catch((err: unknown) => {
         const msg =
           err instanceof Error
@@ -114,6 +131,7 @@ function CheckoutBody({ from }: { from?: 'onboarding' }) {
   }
 
   if (checkout.status === 'needs_initialization' || fetchStatus === 'fetching') {
+    const globalErrors = errors?.global ?? []
     return (
       <CheckoutShell>
         <Stack align="center" py="xl">
@@ -121,6 +139,19 @@ function CheckoutBody({ from }: { from?: 'onboarding' }) {
           <Text c="dark.2" size="sm">
             Preparing checkout…
           </Text>
+          {/* Surface Clerk's own errors while we're still loading — they
+              often arrive before status transitions. */}
+          {globalErrors.length > 0 && (
+            <Alert color="red" variant="light" mt="md" w="100%">
+              <Stack gap={4}>
+                {globalErrors.map((e, i) => (
+                  <Text key={i} size="sm">
+                    {e.longMessage || e.message}
+                  </Text>
+                ))}
+              </Stack>
+            </Alert>
+          )}
           {stuck && (
             <Stack align="center" gap={4} mt="sm">
               <Text c="dark.3" size="xs">
