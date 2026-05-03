@@ -688,7 +688,9 @@ async function callImageEditModel({
     } else {
       // nano-banana-2 (default)
       result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
-        input: { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, output_format: 'png', resolution: '1K' },
+        // Cast to satisfy the SDK's strict aspect_ratio union; we only
+        // pass values from our own canonical AspectRatio set.
+        input: { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio as '1:1' | '4:5' | '9:16', output_format: 'png', resolution: '1K' },
       })
     }
   } catch (err) {
@@ -731,7 +733,7 @@ async function callImageGenModel({
     } else {
       // nano-banana-2 text-to-image (no /edit suffix)
       result = await fal.subscribe('fal-ai/nano-banana-2', {
-        input: { prompt, aspect_ratio: aspectRatio, output_format: 'png', resolution: '1K' },
+        input: { prompt, aspect_ratio: aspectRatio as '1:1' | '4:5' | '9:16', output_format: 'png', resolution: '1K' },
       })
     }
   } catch (err) {
