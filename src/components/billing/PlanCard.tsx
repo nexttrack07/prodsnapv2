@@ -27,6 +27,7 @@ import {
 } from '@mantine/core'
 import { IconCheck } from '@tabler/icons-react'
 import { useQuery } from 'convex/react'
+import { useClerk } from '@clerk/react'
 import { api } from '../../../convex/_generated/api'
 import { PLAN_CONFIG } from '../../../convex/lib/billing/planConfig'
 import type { BillingPlanSummary } from './types'
@@ -40,6 +41,7 @@ export type PlanCardProps = {
 export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
   const limits = PLAN_CONFIG[plan.slug]
   const billingStatus = useQuery(api.billing.syncPlan.getBillingStatus)
+  const { openUserProfile } = useClerk()
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const priceAmount =
@@ -50,6 +52,18 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
   const trialDays = plan.freeTrialEnabled ? plan.freeTrialDays : null
 
   const checkoutHref = `/checkout?planId=${encodeURIComponent(plan.id)}&period=${period}`
+
+  // Has the user already subscribed to ANY paid plan? Our custom
+  // /checkout flow uses useCheckout() which is for first-time
+  // subscriptions only — Clerk's experimental billing API rejects
+  // plan changes through that hook with "Please choose a different
+  // plan or billing interval". For existing subscribers, route to
+  // Clerk's hosted UserProfile billing UI which natively supports
+  // upgrades/downgrades.
+  const hasActiveSubscription =
+    !!billingStatus?.signedIn &&
+    !!billingStatus.plan &&
+    billingStatus.plan !== 'free'
 
   // Determine if this is a downgrade that would leave the user over-limit
   const isProductOverLimit =
@@ -68,6 +82,12 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
   const needsDowngradeWarning = isProductOverLimit || isCreditsDowngrade
 
   function handleSubscribeClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    // Plan change for existing subscribers → open Clerk's hosted UI.
+    if (hasActiveSubscription && !isCurrent) {
+      e.preventDefault()
+      openUserProfile()
+      return
+    }
     if (needsDowngradeWarning) {
       e.preventDefault()
       setConfirmOpen(true)
@@ -76,7 +96,11 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
 
   function handleConfirm() {
     setConfirmOpen(false)
-    window.location.href = checkoutHref
+    if (hasActiveSubscription) {
+      openUserProfile()
+    } else {
+      window.location.href = checkoutHref
+    }
   }
 
   return (
@@ -170,7 +194,11 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
             disabled={isCurrent}
             onClick={handleSubscribeClick}
           >
-            {isCurrent ? 'Current plan' : `Subscribe — ${plan.name}`}
+            {isCurrent
+              ? 'Current plan'
+              : hasActiveSubscription
+                ? `Switch to ${plan.name}`
+                : `Subscribe — ${plan.name}`}
           </Button>
         </Stack>
       </Card>
