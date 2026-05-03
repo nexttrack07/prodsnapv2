@@ -57,14 +57,61 @@ export function CheckoutForm({ planId, period, from }: CheckoutFormProps) {
 
 function CheckoutBody({ from }: { from?: 'onboarding' }) {
   const { checkout, errors, fetchStatus } = useCheckout()
+  const [startError, setStartError] = useState<string | null>(null)
+  const [stuck, setStuck] = useState(false)
 
-  // Auto-initialize the checkout session on mount. Avoids a "click to start"
-  // extra step in the flow.
+  // Auto-initialize the checkout session on mount. Surface any error
+  // (bad plan id, billing not enabled, network) instead of swallowing.
   useEffect(() => {
     if (checkout.status === 'needs_initialization' && fetchStatus !== 'fetching') {
-      void checkout.start()
+      checkout.start().catch((err: unknown) => {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'string'
+              ? err
+              : 'Failed to initialize checkout'
+        // eslint-disable-next-line no-console
+        console.error('[CheckoutForm] checkout.start() failed:', err)
+        setStartError(msg)
+      })
     }
   }, [checkout, fetchStatus])
+
+  // If we're still in needs_initialization 12s after mount, show a "stuck"
+  // hint — Clerk usually transitions in <2s. Most common cause: invalid
+  // planId from the URL or Clerk billing not configured for the dev key.
+  useEffect(() => {
+    if (checkout.status !== 'needs_initialization') return
+    const t = setTimeout(() => setStuck(true), 12_000)
+    return () => clearTimeout(t)
+  }, [checkout.status])
+
+  if (startError) {
+    return (
+      <CheckoutShell>
+        <Alert color="red" variant="light" title="Couldn't start checkout">
+          <Stack gap="sm">
+            <Text size="sm">{startError}</Text>
+            <Text size="xs" c="dark.2">
+              Likely causes: the plan ID in the URL is invalid, Clerk billing
+              isn't enabled on this environment, or your Stripe connection
+              isn't configured.
+            </Text>
+            <Button
+              size="xs"
+              color="gray"
+              variant="light"
+              component="a"
+              href="/pricing"
+            >
+              Back to plans
+            </Button>
+          </Stack>
+        </Alert>
+      </CheckoutShell>
+    )
+  }
 
   if (checkout.status === 'needs_initialization' || fetchStatus === 'fetching') {
     return (
@@ -74,6 +121,16 @@ function CheckoutBody({ from }: { from?: 'onboarding' }) {
           <Text c="dark.2" size="sm">
             Preparing checkout…
           </Text>
+          {stuck && (
+            <Stack align="center" gap={4} mt="sm">
+              <Text c="dark.3" size="xs">
+                This is taking longer than usual.
+              </Text>
+              <Button size="xs" variant="subtle" color="gray" component="a" href="/pricing">
+                Back to plans
+              </Button>
+            </Stack>
+          )}
         </Stack>
       </CheckoutShell>
     )

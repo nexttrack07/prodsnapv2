@@ -11,12 +11,18 @@ type CheckoutSearch = {
 
 export const Route = createFileRoute('/checkout')({
   validateSearch: (search: Record<string, unknown>): CheckoutSearch => {
-    const planId = typeof search.planId === 'string' ? search.planId : ''
+    // Accept either ?planId=... (our internal pricing-page links) or
+    // ?plan=... (the shape Clerk uses when it redirects back from its
+    // billing flow). Fall back through both before treating as missing.
+    const rawPlan =
+      (typeof search.planId === 'string' && search.planId) ||
+      (typeof search.plan === 'string' && search.plan) ||
+      ''
     const periodRaw = typeof search.period === 'string' ? search.period : 'month'
     const period: 'month' | 'annual' =
       periodRaw === 'annual' ? 'annual' : 'month'
     const from = search.from === 'onboarding' ? 'onboarding' : undefined
-    return { planId, period, from }
+    return { planId: rawPlan, period, from }
   },
   component: CheckoutRoute,
 })
