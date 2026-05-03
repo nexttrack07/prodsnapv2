@@ -13,7 +13,7 @@
  * ALL @clerk/react/experimental imports live in this file + its siblings
  * in src/components/billing/** per the CI fence.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useMutation } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
@@ -59,6 +59,11 @@ function CheckoutBody({ from }: { from?: 'onboarding' }) {
   const { checkout, errors, fetchStatus } = useCheckout()
   const [startError, setStartError] = useState<string | null>(null)
   const [stuck, setStuck] = useState(false)
+  // Guard against the runaway loop where start() returns without
+  // transitioning status out of 'needs_initialization' and the effect
+  // re-fires because fetchStatus toggles. Call start() at most once
+  // per mount.
+  const startedRef = useRef(false)
 
   // Diagnostic — log every checkout state change so we can see what's
   // happening when the user is "stuck". Status, fetchStatus, errors,
@@ -77,11 +82,32 @@ function CheckoutBody({ from }: { from?: 'onboarding' }) {
 
   // Auto-initialize the checkout session on mount. Surface any error
   // (bad plan id, billing not enabled, network) instead of swallowing.
+  // Use a ref guard so start() only fires ONCE per mount — when Clerk
+  // billing isn't configured, start() resolves without transitioning
+  // status, fetchStatus toggles idle→fetching→idle, and without this
+  // guard the effect would re-fire forever.
   useEffect(() => {
-    if (checkout.status === 'needs_initialization' && fetchStatus !== 'fetching') {
-      // eslint-disable-next-line no-console
-      console.log('[CheckoutForm] calling checkout.start()...')
-      checkout.start().catch((err: unknown) => {
+    if (startedRef.current) return
+    if (checkout.status !== 'needs_initialization') return
+    if (fetchStatus === 'fetching') return
+    startedRef.current = true
+    // eslint-disable-next-line no-console
+    console.log('[CheckoutForm] calling checkout.start()...')
+    checkout
+      .start()
+      .then(() => {
+        // After start resolves, if we're STILL in needs_initialization
+        // it means Clerk silently failed (no plan resolved, billing not
+        // enabled, etc). Surface that as a real error.
+        setTimeout(() => {
+          if (checkout.status === 'needs_initialization' && !checkout.plan) {
+            setStartError(
+              'Checkout could not be initialized. The plan ID in the URL may be invalid, or Clerk billing isn\'t enabled on this environment.',
+            )
+          }
+        }, 1500)
+      })
+      .catch((err: unknown) => {
         const msg =
           err instanceof Error
             ? err.message
@@ -92,8 +118,9 @@ function CheckoutBody({ from }: { from?: 'onboarding' }) {
         console.error('[CheckoutForm] checkout.start() failed:', err)
         setStartError(msg)
       })
-    }
-  }, [checkout, fetchStatus])
+    // intentionally only run on mount — guard handles the rest
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // If we're still in needs_initialization 12s after mount, show a "stuck"
   // hint — Clerk usually transitions in <2s. Most common cause: invalid
