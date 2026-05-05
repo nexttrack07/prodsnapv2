@@ -6,6 +6,7 @@
 import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, type ActionCtx } from './_generated/server'
 import { api, internal } from './_generated/api'
+import { billingError } from './lib/billing/errors'
 
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX_CALLS = 10
@@ -70,7 +71,10 @@ export const suggestPromptIdeas = action({
     const recentCount: number = await ctx.runQuery(internal.promptSuggestions.checkSuggestRateLimit, { userId })
     if (recentCount >= RATE_LIMIT_MAX_CALLS) {
       await ctx.runMutation(internal.promptSuggestions.recordSuggestRateLimited, { userId })
-      throw new Error('Too many requests — please wait a moment before generating suggestions again.')
+      throw billingError(
+        'RATE_LIMIT',
+        'Too many requests — please wait a moment before generating suggestions again.',
+      )
     }
 
     const product = await ctx.runQuery(api.products.getProduct, { productId })

@@ -62,62 +62,27 @@ function CheckoutBody({ from }: { from?: 'onboarding' }) {
   // Guard against the runaway loop where start() returns without
   // transitioning status out of 'needs_initialization' and the effect
   // re-fires because fetchStatus toggles. Call start() at most once
-  // per mount.
+  // per mount; the cleanup resets the guard so React 18 StrictMode's
+  // dev-only double-mount still initializes on the real second mount.
   const startedRef = useRef(false)
 
-  // Diagnostic — log every checkout state change so we can see what's
-  // happening when the user is "stuck". Status, fetchStatus, errors,
-  // plan presence, and any totals are the most useful signals.
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[CheckoutForm] state:', {
-      status: checkout.status,
-      fetchStatus,
-      hasPlan: !!checkout.plan,
-      planId: checkout.plan?.id,
-      planName: checkout.plan?.name,
-      errors,
-    })
-  }, [checkout.status, fetchStatus, checkout.plan, errors])
-
-  // Auto-initialize the checkout session on mount. Surface any error
-  // (bad plan id, billing not enabled, network) instead of swallowing.
-  // Use a ref guard so start() only fires ONCE per mount — when Clerk
-  // billing isn't configured, start() resolves without transitioning
-  // status, fetchStatus toggles idle→fetching→idle, and without this
-  // guard the effect would re-fire forever.
   useEffect(() => {
     if (startedRef.current) return
     if (checkout.status !== 'needs_initialization') return
     if (fetchStatus === 'fetching') return
     startedRef.current = true
-    // eslint-disable-next-line no-console
-    console.log('[CheckoutForm] calling checkout.start()...')
-    checkout
-      .start()
-      .then(() => {
-        // After start resolves, if we're STILL in needs_initialization
-        // it means Clerk silently failed (no plan resolved, billing not
-        // enabled, etc). Surface that as a real error.
-        setTimeout(() => {
-          if (checkout.status === 'needs_initialization' && !checkout.plan) {
-            setStartError(
-              'Checkout could not be initialized. The plan ID in the URL may be invalid, or Clerk billing isn\'t enabled on this environment.',
-            )
-          }
-        }, 1500)
-      })
-      .catch((err: unknown) => {
-        const msg =
-          err instanceof Error
-            ? err.message
-            : typeof err === 'string'
-              ? err
-              : 'Failed to initialize checkout'
-        // eslint-disable-next-line no-console
-        console.error('[CheckoutForm] checkout.start() failed:', err)
-        setStartError(msg)
-      })
+    checkout.start().catch((err: unknown) => {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : 'Failed to initialize checkout'
+      setStartError(msg)
+    })
+    return () => {
+      startedRef.current = false
+    }
     // intentionally only run on mount — guard handles the rest
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

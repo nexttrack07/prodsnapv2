@@ -20,6 +20,7 @@ import {
   requireProductLimit,
   requireProductLimitForUser,
 } from './lib/billing'
+import { billingError } from './lib/billing/errors'
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -90,7 +91,10 @@ export async function enforceGenerationRateLimit(
       timestamp: Date.now(),
       context: 'rate-limited',
     })
-    throw new Error('Too many requests — please wait a moment before generating again.')
+    throw billingError(
+      'RATE_LIMIT',
+      'Too many requests — please wait a moment before generating again.',
+    )
   }
 }
 

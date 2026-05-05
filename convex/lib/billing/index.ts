@@ -21,6 +21,7 @@ import { PLAN_CONFIG } from './planConfig'
 import { ClerkBillingProvider } from './provider.clerk'
 import type { BillingContext, BillingProvider } from './provider'
 import { internal } from '../../_generated/api'
+import { billingError } from './errors'
 
 // ─── Provider instance (swap here to change providers) ────────────────────
 export const billingProvider: BillingProvider = new ClerkBillingProvider()
@@ -82,12 +83,16 @@ export async function requireCapability(
     // BILLING_TRUST_CACHE: allow access when cache is fresh enough during outage.
     if (isCacheTrusted(billing.syncedAt)) return billing
     await recordDenial(ctx, billing, mutationName, capability, billing.plan)
-    throw new Error('No active subscription — choose a plan at /pricing')
+    throw billingError(
+      'NO_SUBSCRIPTION',
+      'No active subscription — choose a plan at /pricing',
+    )
   }
 
   if (!billing.hasCapability(capability)) {
     await recordDenial(ctx, billing, mutationName, capability, billing.plan)
-    throw new Error(
+    throw billingError(
+      'MISSING_CAPABILITY',
       `This feature requires an upgrade. Missing capability: ${capability}`,
     )
   }
@@ -114,7 +119,10 @@ export async function requireProductLimit(
     // BILLING_TRUST_CACHE: allow access when cache is fresh enough during outage.
     if (isCacheTrusted(billing.syncedAt)) return billing
     await recordDenial(ctx, billing, mutationName, 'product-limit', billing.plan)
-    throw new Error('No active subscription — choose a plan at /pricing')
+    throw billingError(
+      'NO_SUBSCRIPTION',
+      'No active subscription — choose a plan at /pricing',
+    )
   }
 
   const plan = PLAN_CONFIG[billing.plan]
@@ -131,7 +139,8 @@ export async function requireProductLimit(
 
   if (existing.length >= limit) {
     await recordDenial(ctx, billing, mutationName, 'product-limit', billing.plan)
-    throw new Error(
+    throw billingError(
+      'PRODUCT_LIMIT',
       `You have ${existing.length} products but your plan allows ${limit}. ` +
         `Archive products or upgrade.`,
     )
@@ -167,7 +176,10 @@ export async function requireProductLimitForUser(
       timestamp: Date.now(),
       context: 'enforcement',
     })
-    throw new Error('No active subscription — choose a plan at /pricing')
+    throw billingError(
+      'NO_SUBSCRIPTION',
+      'No active subscription — choose a plan at /pricing',
+    )
   }
 
   const plan = PLAN_CONFIG[row.plan]
@@ -195,7 +207,8 @@ export async function requireProductLimitForUser(
       timestamp: Date.now(),
       context: 'enforcement',
     })
-    throw new Error(
+    throw billingError(
+      'PRODUCT_LIMIT',
       `You have ${existing.length} products but your plan allows ${limit}. ` +
         `Archive products or upgrade.`,
     )
@@ -241,7 +254,10 @@ export async function requireCredit(
     // BILLING_TRUST_CACHE: allow access when cache is fresh enough during outage.
     if (isCacheTrusted(billing.syncedAt)) return billing
     await recordDenial(ctx, billing, mutationName, 'monthly-credits', billing.plan)
-    throw new Error('No active subscription — choose a plan at /pricing')
+    throw billingError(
+      'NO_SUBSCRIPTION',
+      'No active subscription — choose a plan at /pricing',
+    )
   }
 
   // Layer 3: stale-period fallback — fire-and-forget sync if period has expired.
@@ -289,12 +305,14 @@ export async function requireCredit(
       ? ' If you just renewed, please retry in a few seconds.'
       : ''
     if (remaining <= 0) {
-      throw new Error(
+      throw billingError(
+        'CREDITS_EXHAUSTED',
         `You've used all ${plan.monthlyCredits} credits for this billing period. ` +
           `Credits reset on ${resetDate}.${retrySuffix}`,
       )
     }
-    throw new Error(
+    throw billingError(
+      'CREDITS_INSUFFICIENT',
       `Not enough credits. This request needs ${count} but you have ${remaining} remaining. ` +
         `Upgrade or reduce the request size.`,
     )

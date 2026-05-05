@@ -17,6 +17,9 @@ import {
 import { IconCheck } from '@tabler/icons-react'
 import { useNavigate } from '@tanstack/react-router'
 import { usePlans } from '@clerk/react/experimental'
+import { useClerk } from '@clerk/react'
+import { useQuery } from 'convex/react'
+import { api } from '../../../convex/_generated/api'
 import type { BillingPlanSummary } from '../billing/types'
 
 type Period = 'month' | 'annual'
@@ -25,8 +28,23 @@ export function StepPlan({ onBack }: { onBack: () => void }) {
   const [period, setPeriod] = useState<Period>('month')
   const { data: plans, isLoading } = usePlans({ for: 'user' })
   const navigate = useNavigate()
+  const { openUserProfile } = useClerk()
+  const billingStatus = useQuery(api.billing.syncPlan.getBillingStatus)
+
+  // OnboardingGuard normally keeps subscribed users out of /onboarding,
+  // but if one slips through (direct URL, browser back), useCheckout()
+  // would reject the plan change. Mirror PlanCard: route them through
+  // Clerk's hosted UserProfile UI which handles plan changes natively.
+  const hasActiveSubscription =
+    !!billingStatus?.signedIn &&
+    !!billingStatus.plan &&
+    billingStatus.plan !== 'free'
 
   const handleSelect = (planId: string) => {
+    if (hasActiveSubscription) {
+      openUserProfile()
+      return
+    }
     navigate({
       to: '/checkout',
       search: { planId, period, from: 'onboarding' },

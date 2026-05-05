@@ -7,6 +7,7 @@
 import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, type ActionCtx } from './_generated/server'
 import { api, internal } from './_generated/api'
+import { billingError } from './lib/billing/errors'
 
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX_CALLS = 20
@@ -82,7 +83,10 @@ export const generateAdCopy = action({
     const recentCount = await ctx.runQuery(internal.adCopy.checkAdCopyRateLimit, { userId })
     if (recentCount >= RATE_LIMIT_MAX_CALLS) {
       await ctx.runMutation(internal.adCopy.recordAdCopyRateLimited, { userId })
-      throw new Error('Too many requests — please wait a moment before generating again.')
+      throw billingError(
+        'RATE_LIMIT',
+        'Too many requests — please wait a moment before generating again.',
+      )
     }
 
     const product = await ctx.runQuery(api.products.getProduct, { productId })
@@ -154,7 +158,10 @@ export const generateAdCopyForGeneration = action({
     const recentCount = await ctx.runQuery(internal.adCopy.checkAdCopyRateLimit, { userId })
     if (recentCount >= RATE_LIMIT_MAX_CALLS) {
       await ctx.runMutation(internal.adCopy.recordAdCopyRateLimited, { userId })
-      throw new Error('Too many requests — please wait a moment before generating again.')
+      throw billingError(
+        'RATE_LIMIT',
+        'Too many requests — please wait a moment before generating again.',
+      )
     }
 
     // Ownership check via the parent generation row.
