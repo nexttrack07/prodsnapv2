@@ -24,6 +24,7 @@ import type * as invariant from "../invariant.js";
 import type * as lib_admin_requireAdmin from "../lib/admin/requireAdmin.js";
 import type * as lib_billing_capabilities from "../lib/billing/capabilities.js";
 import type * as lib_billing_claims from "../lib/billing/claims.js";
+import type * as lib_billing_errors from "../lib/billing/errors.js";
 import type * as lib_billing_index from "../lib/billing/index.js";
 import type * as lib_billing_planConfig from "../lib/billing/planConfig.js";
 import type * as lib_billing_provider from "../lib/billing/provider.js";
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   "lib/admin/requireAdmin": typeof lib_admin_requireAdmin;
   "lib/billing/capabilities": typeof lib_billing_capabilities;
   "lib/billing/claims": typeof lib_billing_claims;
+  "lib/billing/errors": typeof lib_billing_errors;
   "lib/billing/index": typeof lib_billing_index;
   "lib/billing/planConfig": typeof lib_billing_planConfig;
   "lib/billing/provider": typeof lib_billing_provider;

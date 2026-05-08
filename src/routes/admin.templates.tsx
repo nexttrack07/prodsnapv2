@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { useAction } from 'convex/react'
+import { useAction, usePaginatedQuery } from 'convex/react'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useState, useRef, useEffect } from 'react'
 import { notifications } from '@mantine/notifications'
@@ -21,11 +21,10 @@ import {
   AspectRatio,
   Checkbox,
   Tooltip,
-  Chip,
   Modal,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconUpload, IconRefresh, IconTrash, IconChecks, IconX, IconLoader2, IconCheck, IconAlertTriangle, IconClock } from '@tabler/icons-react'
+import { IconUpload, IconRefresh, IconTrash, IconX, IconLoader2, IconCheck, IconAlertTriangle, IconClock } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { MAX_TEMPLATE_IMAGE_SIZE, getAspectRatioValue } from '../utils/constants'
@@ -33,6 +32,11 @@ import { MAX_TEMPLATE_IMAGE_SIZE, getAspectRatioValue } from '../utils/constants
 // Batch upload settings
 const UPLOAD_BATCH_SIZE = 3
 const BATCH_DELAY_MS = 2000
+// Initial page size for the admin grid; pagination loads more on demand.
+const PAGE_SIZE = 24
+// Max edge of the client-generated thumbnail (px). Smaller wins more on the
+// admin grid + user-facing template picker; larger preserves quality.
+const THUMBNAIL_MAX_EDGE = 512
 
 export const Route = createFileRoute('/admin/templates')({
   component: AdminTemplatesPage,
@@ -73,17 +77,21 @@ const TAG_COLORS: Record<string, string> = {
 }
 
 function AdminTemplatesPage() {
-  const { data: templates } = useQuery(
-    convexQuery(api.templates.listAll, {}),
-  ) as { data: TemplateRow[] | undefined }
-
-  const rows = templates ?? []
-  const counts = {
-    total: rows.length,
-    published: rows.filter((r) => r.status === 'published').length,
-    pending: rows.filter((r) => r.status === 'pending' || r.status === 'ingesting').length,
-    failed: rows.filter((r) => r.status === 'failed').length,
+  const {
+    results: rows,
+    status: pageStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.templates.listPaginated,
+    {},
+    { initialNumItems: PAGE_SIZE },
+  ) as {
+    results: TemplateRow[]
+    status: 'CanLoadMore' | 'LoadingFirstPage' | 'LoadingMore' | 'Exhausted'
+    loadMore: (n: number) => void
   }
+
+  const { data: counts } = useQuery(convexQuery(api.templates.getCounts, {}))
 
   return (
     <Container size="lg" py={40}>
@@ -112,17 +120,21 @@ function AdminTemplatesPage() {
             </Text>
           </Box>
           <Group gap="xs">
-            <StatPill label="Total" value={counts.total} />
-            <StatPill label="Published" value={counts.published} color="teal" />
-            <StatPill label="Ingesting" value={counts.pending} color="brand" />
-            <StatPill label="Failed" value={counts.failed} color="red" />
+            <StatPill label="Total" value={counts?.total ?? 0} />
+            <StatPill label="Published" value={counts?.published ?? 0} color="teal" />
+            <StatPill label="Ingesting" value={counts?.pending ?? 0} color="brand" />
+            <StatPill label="Failed" value={counts?.failed ?? 0} color="red" />
           </Group>
         </Group>
       </Paper>
 
       <UploadArea />
 
-      <TemplatesTable rows={rows} />
+      <TemplatesTable
+        rows={rows}
+        pageStatus={pageStatus}
+        loadMore={() => loadMore(PAGE_SIZE)}
+      />
     </Container>
   )
 }
@@ -223,16 +235,21 @@ function UploadArea() {
             if (file.size > MAX_TEMPLATE_IMAGE_SIZE) throw new Error('Over 20 MB')
             const { width, height } = await measureImage(file)
             const base64 = await fileToBase64(file)
+            const thumb = await generateThumbnail(file, width, height)
             const upload = await uploadTemplate({
               name: file.name,
               contentType: file.type,
               base64,
               width,
               height,
+              thumbnailBase64: thumb?.base64,
+              thumbnailContentType: thumb?.contentType,
             })
             await createTemplate({
               imageUrl: upload.imageUrl,
               thumbnailUrl: upload.thumbnailUrl,
+              imageStorageKey: upload.imageStorageKey,
+              thumbnailStorageKey: upload.thumbnailStorageKey,
               aspectRatio: upload.aspectRatio,
               width: upload.width,
               height: upload.height,
@@ -356,7 +373,7 @@ function UploadArea() {
             )}
       </Text>
       <Text size="sm" c="dark.2" mt={8}>
-        Multiple images OK. 1:1, 4:5, 9:16, or 16:9 (±5%). Up to 20 MB each.
+        Multiple images OK. 1:1, 4:5, 9:16, or 16:9 (±12%). Up to 20 MB each.
       </Text>
     </Paper>
   )
@@ -387,6 +404,58 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
+/**
+ * Generate a max-512px-edge webp thumbnail in the browser via canvas. Returns
+ * null when the source is already small enough or generation fails — caller
+ * falls back to using the full image as the thumbnail.
+ */
+async function generateThumbnail(
+  file: File,
+  width: number,
+  height: number,
+): Promise<{ base64: string; contentType: string } | null> {
+  const scale = Math.min(1, THUMBNAIL_MAX_EDGE / Math.max(width, height))
+  if (scale === 1) return null
+  const w = Math.max(1, Math.round(width * scale))
+  const h = Math.max(1, Math.round(height * scale))
+
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new window.Image()
+      i.onload = () => resolve(i)
+      i.onerror = () => reject(new Error('Image decode failed'))
+      i.src = url
+    })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(img, 0, 0, w, h)
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/webp', 0.82),
+    )
+    if (!blob) return null
+
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () =>
+        resolve((reader.result as string).split(',')[1] ?? '')
+      reader.onerror = () => reject(new Error('Thumbnail read failed'))
+      reader.readAsDataURL(blob)
+    })
+    return { base64, contentType: blob.type || 'image/webp' }
+  } catch (err) {
+    console.warn('Thumbnail generation skipped:', err)
+    return null
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
 /** Compute SHA-256 hash of file contents for duplicate detection */
 async function computeFileHash(file: File): Promise<string> {
   const buffer = await file.arrayBuffer()
@@ -395,14 +464,25 @@ async function computeFileHash(file: File): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
+function TemplatesTable({
+  rows,
+  pageStatus,
+  loadMore,
+}: {
+  rows: TemplateRow[]
+  pageStatus: 'CanLoadMore' | 'LoadingFirstPage' | 'LoadingMore' | 'Exhausted'
+  loadMore: () => void
+}) {
   const [selectedIds, setSelectedIds] = useState<Set<Id<'adTemplates'>>>(new Set())
   const [isRetagging, setIsRetagging] = useState(false)
   const [bulkDeleteModalOpened, { open: openBulkDeleteModal, close: closeBulkDeleteModal }] = useDisclosure(false)
   const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false)
   const [templateToDelete, setTemplateToDelete] = useState<Id<'adTemplates'> | null>(null)
 
-  // Track templates being retagged for progress notification
+  // Track templates being retagged for progress notification.
+  // With pagination, only templates currently in the loaded pages will be
+  // tracked through processing. Templates that scroll off the loaded set
+  // mid-retag will time out of the progress notifier — acceptable for now.
   const [retaggingIds, setRetaggingIds] = useState<Set<Id<'adTemplates'>>>(new Set())
   const retagNotifIdRef = useRef<string | null>(null)
   const retagTotalRef = useRef<number>(0)
@@ -414,7 +494,8 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
   const retryBatchMutation = useMutation({ mutationFn: useConvexMutation(api.templates.retryTemplatesBatch) })
   const deleteMutation = useMutation({ mutationFn: useConvexMutation(api.templates.deleteTemplate) })
 
-  const sortedRows = rows.slice().sort((a, b) => b._creationTime - a._creationTime)
+  // Server already returns rows newest-first via `.order('desc')`.
+  const sortedRows = rows
   const failedCount = rows.filter((r) => r.status === 'failed').length
 
   // Track retagging progress and update notification
@@ -609,6 +690,14 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
     }
   }
 
+  if (pageStatus === 'LoadingFirstPage') {
+    return (
+      <Group justify="center" py={48}>
+        <Loader size="md" color="brand" />
+      </Group>
+    )
+  }
+
   if (rows.length === 0) {
     return (
       <Paper
@@ -740,7 +829,7 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
           alignItems: 'start',
         }}
       >
-        {sortedRows.map((t) => {
+        {sortedRows.map((t: TemplateRow) => {
           const isSelected = selectedIds.has(t._id)
           return (
             <Paper
@@ -892,6 +981,19 @@ function TemplatesTable({ rows }: { rows: TemplateRow[] }) {
           )
         })}
       </Box>
+      {pageStatus !== 'Exhausted' && (
+        <Group justify="center" mt="lg">
+          <Button
+            variant="light"
+            color="brand"
+            onClick={loadMore}
+            loading={pageStatus === 'LoadingMore'}
+            disabled={pageStatus === 'LoadingFirstPage'}
+          >
+            Load more
+          </Button>
+        </Group>
+      )}
     </Box>
     </>
   )

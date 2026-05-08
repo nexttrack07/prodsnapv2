@@ -1,27 +1,14 @@
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import {
   internalMutation,
   mutation,
   query,
-  type MutationCtx,
 } from './_generated/server'
-import { api, components, internal } from './_generated/api'
+import { components, internal } from './_generated/api'
 import { WorkflowManager } from '@convex-dev/workflow'
 import { Workpool } from '@convex-dev/workpool'
-
-// ─── Auth helpers ──────────────────────────────────────────────────────────
-
-/**
- * Gets the authenticated user's ID from Clerk JWT.
- * Throws if user is not authenticated.
- */
-async function requireAuth(ctx: MutationCtx): Promise<string> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity) {
-    throw new Error('Not authenticated')
-  }
-  return identity.tokenIdentifier
-}
+import { requireAdminIdentity } from './lib/admin/requireAdmin'
 
 export const workflow = new WorkflowManager(components.workflow)
 export const ingestPool = new Workpool(components.ingestPool, {
@@ -128,7 +115,7 @@ export const ingestTemplateWorkflow = workflow.define({
 
 /**
  * Adds a single template to the library and kicks off ingestion (embed + tag).
- * For the POC this is the admin path; in production, guard with auth.
+ * Admin-only: gated by requireAdminIdentity (CLERK_ADMIN_USER_IDS env list).
  */
 export const createTemplate = mutation({
   args: {
@@ -142,10 +129,12 @@ export const createTemplate = mutation({
     ),
     width: v.number(),
     height: v.number(),
-    contentHash: v.optional(v.string()),  // SHA-256 hash for duplicate detection
+    contentHash: v.optional(v.string()),
+    imageStorageKey: v.optional(v.string()),
+    thumbnailStorageKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx) // Admin action - require authentication
+    await requireAdminIdentity(ctx)
     const id = await ctx.db.insert('adTemplates', { ...args, status: 'pending' })
     await workflow.start(ctx, internal.templates.ingestTemplateWorkflow, {
       templateId: id,
@@ -163,7 +152,7 @@ export const createTemplate = mutation({
 export const seedSampleTemplates = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireAuth(ctx) // Admin action - require authentication
+    await requireAdminIdentity(ctx)
     const existing = await ctx.db.query('adTemplates').take(1)
     if (existing.length > 0) return { skipped: true, inserted: 0 }
 
@@ -200,10 +189,55 @@ export const listPublished = query({
   },
 })
 
-export const listAll = query({
+/**
+ * Paginated list of templates for the admin grid (newest first).
+ * Replaces the old non-paginated `listAll`. Admin-only.
+ */
+export const listPaginated = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    await requireAdminIdentity(ctx)
+    return await ctx.db
+      .query('adTemplates')
+      .order('desc')
+      .paginate(paginationOpts)
+  },
+})
+
+/**
+ * Aggregated status counts for the admin stats pills. Uses the by_status
+ * index to avoid a full table scan in the hot path. Past ~10k rows this
+ * should move to the Convex Aggregate component for O(1) reads.
+ */
+export const getCounts = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query('adTemplates').collect()
+    await requireAdminIdentity(ctx)
+    const [published, ingesting, pending, failed] = await Promise.all([
+      ctx.db
+        .query('adTemplates')
+        .withIndex('by_status', (q) => q.eq('status', 'published'))
+        .collect(),
+      ctx.db
+        .query('adTemplates')
+        .withIndex('by_status', (q) => q.eq('status', 'ingesting'))
+        .collect(),
+      ctx.db
+        .query('adTemplates')
+        .withIndex('by_status', (q) => q.eq('status', 'pending'))
+        .collect(),
+      ctx.db
+        .query('adTemplates')
+        .withIndex('by_status', (q) => q.eq('status', 'failed'))
+        .collect(),
+    ])
+    return {
+      total:
+        published.length + ingesting.length + pending.length + failed.length,
+      published: published.length,
+      pending: pending.length + ingesting.length,
+      failed: failed.length,
+    }
   },
 })
 
@@ -214,8 +248,8 @@ export const listAll = query({
 export const getExistingHashes = query({
   args: {},
   handler: async (ctx) => {
+    await requireAdminIdentity(ctx)
     const templates = await ctx.db.query('adTemplates').collect()
-    // Return only non-null hashes as a Set-friendly array
     return templates
       .map((t) => t.contentHash)
       .filter((h): h is string => h != null)
@@ -228,36 +262,13 @@ export const getById = query({
 })
 
 /**
- * Retries ingestion for every template stuck in `failed` or `pending`.
- * Safe to call repeatedly.
- */
-export const retryFailedIngestions = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireAuth(ctx) // Admin action - require authentication
-    const all = await ctx.db.query('adTemplates').collect()
-    const candidates = all.filter(
-      (t) => t.status === 'failed' || t.status === 'pending',
-    )
-    for (const t of candidates) {
-      await ctx.db.patch(t._id, { status: 'pending', ingestError: undefined })
-      await workflow.start(ctx, internal.templates.ingestTemplateWorkflow, {
-        templateId: t._id,
-        imageUrl: t.imageUrl,
-      })
-    }
-    return { retried: candidates.length }
-  },
-})
-
-/**
  * Retries ingestion for a single template (failed or published).  Useful
  * when tags need a refresh.
  */
 export const retryTemplateIngest = mutation({
   args: { id: v.id('adTemplates') },
   handler: async (ctx, { id }) => {
-    await requireAuth(ctx) // Admin action - require authentication
+    await requireAdminIdentity(ctx)
     const t = await ctx.db.get(id)
     if (!t) throw new Error('Template not found')
     await ctx.db.patch(id, { status: 'pending', ingestError: undefined })
@@ -275,7 +286,7 @@ export const retryTemplateIngest = mutation({
 export const retryTemplatesBatch = mutation({
   args: { ids: v.array(v.id('adTemplates')) },
   handler: async (ctx, { ids }) => {
-    await requireAuth(ctx) // Admin action - require authentication
+    await requireAdminIdentity(ctx)
     let queued = 0
     for (const id of ids) {
       const t = await ctx.db.get(id)
@@ -292,14 +303,30 @@ export const retryTemplatesBatch = mutation({
 })
 
 /**
- * Deletes a template row.  Does NOT delete the R2 object — leave cleanup
- * for an offline sweep.
+ * Deletes a template row + best-effort cleanup of the R2 objects backing
+ * its image and thumbnail. Legacy rows uploaded before storage keys were
+ * tracked have no key and leak (will need an offline sweep).
  */
 export const deleteTemplate = mutation({
   args: { id: v.id('adTemplates') },
   handler: async (ctx, { id }) => {
-    await requireAuth(ctx) // Admin action - require authentication
+    await requireAdminIdentity(ctx)
+    const row = await ctx.db.get(id)
+    if (!row) return
     await ctx.db.delete(id)
+    if (row.imageStorageKey) {
+      await ctx.scheduler.runAfter(0, internal.r2.clearTemplateStorage, {
+        key: row.imageStorageKey,
+      })
+    }
+    if (
+      row.thumbnailStorageKey &&
+      row.thumbnailStorageKey !== row.imageStorageKey
+    ) {
+      await ctx.scheduler.runAfter(0, internal.r2.clearTemplateStorage, {
+        key: row.thumbnailStorageKey,
+      })
+    }
   },
 })
 

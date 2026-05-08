@@ -180,6 +180,10 @@ const schema = defineSchema({
   adTemplates: defineTable({
     imageUrl: v.string(),
     thumbnailUrl: v.string(),
+    // R2 keys for cleanup on delete. Optional — legacy rows uploaded before
+    // we tracked keys leak their R2 objects until an offline sweep runs.
+    imageStorageKey: v.optional(v.string()),
+    thumbnailStorageKey: v.optional(v.string()),
     aspectRatio,
     width: v.number(),
     height: v.number(),

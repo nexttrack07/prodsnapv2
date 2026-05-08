@@ -5,6 +5,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { nanoid } from 'nanoid'
 import { v } from 'convex/values'
 import { action, internalAction } from './_generated/server'
+import { requireAdmin } from './lib/admin/requireAdmin'
 
 // ─── Security: Allowed image MIME types ──────────────────────────────────────
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -229,7 +230,13 @@ export const getUploadUrl = action({
  * classifies the aspect ratio, uploads to R2, and returns everything
  * `templates.createTemplate` needs.
  *
- * Security: Validates content-type against allowlist and verifies magic bytes.
+ * Optionally accepts a pre-resized thumbnail (generated client-side via
+ * canvas) to avoid loading the full-resolution image in admin/library
+ * grids. Falls back to reusing the full image URL when no thumbnail is
+ * provided so existing callers keep working.
+ *
+ * Security: admin-only via requireAdmin (Clerk Backend API role check).
+ * Validates content-type against allowlist and verifies magic bytes.
  */
 export const uploadTemplateImage = action({
   args: {
@@ -238,33 +245,66 @@ export const uploadTemplateImage = action({
     base64: v.string(),
     width: v.number(),
     height: v.number(),
+    thumbnailBase64: v.optional(v.string()),
+    thumbnailContentType: v.optional(v.string()),
   },
-  handler: async (_ctx, { name, contentType, base64, width, height }) => {
-    // Security: Validate content-type is an allowed image type
+  handler: async (
+    ctx,
+    {
+      name,
+      contentType,
+      base64,
+      width,
+      height,
+      thumbnailBase64,
+      thumbnailContentType,
+    },
+  ) => {
+    await requireAdmin(ctx)
+
     validateContentType(contentType)
 
     const buf = Buffer.from(base64, 'base64')
     if (buf.length === 0) throw new Error('Empty upload')
     if (buf.length > 20 * 1024 * 1024) throw new Error('Template exceeds 20 MB')
 
-    // Security: Verify magic bytes match claimed content-type
     validateMagicBytes(buf, contentType)
 
     const aspectRatio = classifyAspectRatio(width, height)
     if (aspectRatio === 'other') {
       throw new Error(
-        `Unsupported aspect ratio ${width}x${height}. Use 1:1, 4:5, 9:16, or 16:9 (±5%).`,
+        `Unsupported aspect ratio ${width}x${height}. Use 1:1, 4:5, 9:16, or 16:9 (±12%).`,
       )
     }
 
     const safeName = name.replace(/[^\w.\-]/g, '_').slice(0, 80)
-    const key = `templates/${nanoid()}-${safeName}`
-    const url = await uploadToR2(buf, key, contentType)
-    // POC: reuse the original URL as the thumbnail.  Upgrade to a proper
-    // resize step later (sharp or a Cloudflare Image transform).
+    const id = nanoid()
+    const imageKey = `templates/${id}-${safeName}`
+    const imageUrl = await uploadToR2(buf, imageKey, contentType)
+
+    let thumbnailUrl = imageUrl
+    let thumbnailKey: string | undefined
+
+    if (thumbnailBase64 && thumbnailContentType) {
+      validateContentType(thumbnailContentType)
+      const thumbBuf = Buffer.from(thumbnailBase64, 'base64')
+      if (thumbBuf.length > 0 && thumbBuf.length <= 2 * 1024 * 1024) {
+        validateMagicBytes(thumbBuf, thumbnailContentType)
+        const ext = thumbnailContentType === 'image/webp' ? 'webp' : 'jpg'
+        thumbnailKey = `templates/thumbs/${id}.${ext}`
+        thumbnailUrl = await uploadToR2(
+          thumbBuf,
+          thumbnailKey,
+          thumbnailContentType,
+        )
+      }
+    }
+
     return {
-      imageUrl: url,
-      thumbnailUrl: url,
+      imageUrl,
+      thumbnailUrl,
+      imageStorageKey: imageKey,
+      thumbnailStorageKey: thumbnailKey,
       aspectRatio: aspectRatio as '1:1' | '4:5' | '9:16' | '16:9',
       width,
       height,
@@ -285,6 +325,17 @@ export const clearBrandLogoStorage = internalAction({
     } catch (err) {
       // best-effort; log and continue
       console.warn(`clearBrandLogoStorage: failed to delete R2 key ${key}:`, err)
+    }
+  },
+})
+
+export const clearTemplateStorage = internalAction({
+  args: { key: v.string() },
+  handler: async (_ctx, { key }) => {
+    try {
+      await deleteFromR2(key)
+    } catch (err) {
+      console.warn(`clearTemplateStorage: failed to delete R2 key ${key}:`, err)
     }
   },
 })
