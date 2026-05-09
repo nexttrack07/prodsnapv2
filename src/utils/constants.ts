@@ -1,4 +1,7 @@
-// File size limits
+// File size limits.
+// IMPORTANT: keep MAX_TEMPLATE_IMAGE_SIZE in sync with the server-side cap
+// in convex/r2.ts (uploadTemplateImage). The server enforces independently
+// to defend against bypassed clients; if you change one, change both.
 export const MAX_PRODUCT_IMAGE_SIZE = 10 * 1024 * 1024 // 10 MB
 export const MAX_TEMPLATE_IMAGE_SIZE = 20 * 1024 * 1024 // 20 MB
 

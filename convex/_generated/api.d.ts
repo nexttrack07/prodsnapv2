@@ -125,5 +125,4 @@ export declare const internal: FilterApi<
 export declare const components: {
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   imageGenPool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"imageGenPool">;
-  ingestPool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"ingestPool">;
 };

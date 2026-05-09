@@ -15,15 +15,21 @@ const ALLOWED_IMAGE_TYPES = new Set([
   'image/gif',
 ])
 
-// Magic bytes signatures for image file types
-const MAGIC_BYTES: Record<string, number[][]> = {
+// Magic bytes signatures for image file types.
+// `null` in a signature is a wildcard — useful for WebP whose middle bytes
+// (4-7) are the file-size field that varies per file.
+const MAGIC_BYTES: Record<string, Array<Array<number | null>>> = {
   'image/jpeg': [[0xff, 0xd8, 0xff]],
   'image/png': [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
   'image/gif': [
     [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], // GIF87a
     [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], // GIF89a
   ],
-  'image/webp': [[0x52, 0x49, 0x46, 0x46]], // RIFF (WebP starts with RIFF)
+  // WebP: RIFF (bytes 0-3), 4-byte size (skip), WEBP (bytes 8-11).
+  // RIFF alone is also AVI/WAV — the WEBP suffix is what makes it WebP.
+  'image/webp': [
+    [0x52, 0x49, 0x46, 0x46, null, null, null, null, 0x57, 0x45, 0x42, 0x50],
+  ],
 }
 
 /**
@@ -52,7 +58,7 @@ function validateMagicBytes(buffer: Buffer, contentType: string): void {
 
   const matches = signatures.some((signature) => {
     if (buffer.length < signature.length) return false
-    return signature.every((byte, i) => buffer[i] === byte)
+    return signature.every((byte, i) => byte === null || buffer[i] === byte)
   })
 
   if (!matches) {
@@ -101,6 +107,9 @@ export async function uploadToR2(
       Key: key,
       Body: buffer,
       ContentType: contentType,
+      // Object keys are content-addressable (nanoid prefix), so the bytes
+      // never change for a given URL — cache aggressively.
+      CacheControl: 'public, max-age=31536000, immutable',
     }),
   )
   return `${publicUrl}/${key}`
@@ -266,6 +275,7 @@ export const uploadTemplateImage = action({
 
     const buf = Buffer.from(base64, 'base64')
     if (buf.length === 0) throw new Error('Empty upload')
+    // KEEP IN SYNC with src/utils/constants.ts MAX_TEMPLATE_IMAGE_SIZE.
     if (buf.length > 20 * 1024 * 1024) throw new Error('Template exceeds 20 MB')
 
     validateMagicBytes(buf, contentType)
@@ -358,6 +368,6 @@ function classifyAspectRatio(
     const dist = Math.abs(ratio - c.value) / c.value
     if (best === null || dist < best.dist) best = { label: c.label, dist }
   }
-  if (best && best.dist < 0.12) return best.label
+  if (best && best.dist <= 0.12) return best.label
   return 'other'
 }

@@ -5,6 +5,5 @@ import workpool from '@convex-dev/workpool/convex.config.js'
 const app = defineApp()
 app.use(workflow)
 app.use(workpool, { name: 'imageGenPool' })
-app.use(workpool, { name: 'ingestPool' })
 
 export default app

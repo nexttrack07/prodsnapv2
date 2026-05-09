@@ -142,60 +142,81 @@ function AdminTemplatesPage() {
 function UploadArea() {
   const uploadTemplate = useAction(api.r2.uploadTemplateImage)
   const createTemplate = useConvexMutation(api.templates.createTemplate)
+  const cleanupOrphan = useConvexMutation(api.templates.cleanupOrphanedUpload)
   const { data: existingHashes } = useQuery(convexQuery(api.templates.getExistingHashes, {}))
   const [inFlight, setInFlight] = useState(0)
   const [dragging, setDragging] = useState(false)
-  const notificationIdRef = useRef<string | null>(null)
 
   async function handleFiles(files: FileList | File[] | null) {
     if (!files) return
     const list = Array.from(files)
     if (list.length === 0) return
 
-    const notifId = `upload-progress-${Date.now()}`
-    notificationIdRef.current = notifId
+    const notifId = `upload-progress-${crypto.randomUUID()}`
 
-    // Show initial notification while computing hashes
     notifications.show({
       id: notifId,
-      title: 'Checking for duplicates',
-      message: `Analyzing ${list.length} file${list.length === 1 ? '' : 's'}...`,
+      title: 'Checking files',
+      message: `Validating ${list.length} file${list.length === 1 ? '' : 's'}...`,
       loading: true,
       autoClose: false,
       withCloseButton: false,
     })
 
-    // Compute hashes for all files and filter duplicates
+    // Preflight: validate type + size BEFORE the expensive hash compute, then
+    // dedup. Failures here are recorded but don't bring down the batch.
     const existingHashSet = new Set(existingHashes ?? [])
     const filesToUpload: { file: File; hash: string }[] = []
     const duplicates: string[] = []
+    const failedFiles: { name: string; error: string }[] = []
 
     for (const file of list) {
+      if (!file.type.startsWith('image/')) {
+        failedFiles.push({ name: file.name, error: 'Not an image' })
+        continue
+      }
+      if (file.size > MAX_TEMPLATE_IMAGE_SIZE) {
+        failedFiles.push({ name: file.name, error: 'Over 20 MB' })
+        continue
+      }
+      let hash: string
       try {
-        const hash = await computeFileHash(file)
-        if (existingHashSet.has(hash)) {
-          duplicates.push(file.name)
-        } else {
-          filesToUpload.push({ file, hash })
-          // Add to set to catch duplicates within the same upload batch
-          existingHashSet.add(hash)
-        }
+        hash = await computeFileHash(file)
       } catch (err) {
         console.error(`Failed to hash ${file.name}:`, err)
-        // Still try to upload if hashing fails
-        filesToUpload.push({ file, hash: '' })
+        failedFiles.push({ name: file.name, error: 'Hash compute failed' })
+        continue
       }
+      if (existingHashSet.has(hash)) {
+        duplicates.push(file.name)
+        continue
+      }
+      filesToUpload.push({ file, hash })
+      existingHashSet.add(hash)
     }
 
-    // If all files are duplicates, show notification and return
+    // Nothing to upload — surface preflight failures + duplicates in the
+    // final notification and return.
     if (filesToUpload.length === 0) {
+      const parts: string[] = []
+      if (duplicates.length > 0) {
+        parts.push(`${duplicates.length} duplicate${duplicates.length === 1 ? '' : 's'} skipped`)
+      }
+      if (failedFiles.length > 0) {
+        parts.push(`${failedFiles.length} failed preflight`)
+      }
+      const detail = formatFailureSummary(failedFiles)
       notifications.update({
         id: notifId,
-        title: 'No new templates',
-        message: `All ${duplicates.length} file${duplicates.length === 1 ? '' : 's'} already exist in the library`,
-        color: 'yellow',
+        title: failedFiles.length > 0 ? 'No uploads' : 'No new templates',
+        message: (
+          <Box style={{ whiteSpace: 'pre-line' }}>
+            {`${parts.join(', ')}.${detail}`}
+          </Box>
+        ),
+        color: failedFiles.length > 0 ? 'red' : 'yellow',
         loading: false,
-        autoClose: 5000,
+        autoClose: failedFiles.length > 0 ? 12000 : 5000,
         withCloseButton: true,
       })
       return
@@ -204,6 +225,9 @@ function UploadArea() {
     const total = filesToUpload.length
     let completed = 0
     let ok = 0
+    // `failed` counts BATCH failures only, for the progress display.
+    // Preflight failures are already in failedFiles; final notification uses
+    // failedFiles.length so they're not lost.
     let failed = 0
 
     setInFlight(total)
@@ -227,12 +251,11 @@ function UploadArea() {
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex]
 
-      // Process batch in parallel
+      // Process batch in parallel. Type + size + hash already checked in
+      // the preflight pass, so this loop only does the heavy work.
       await Promise.all(
         batch.map(async ({ file, hash }) => {
           try {
-            if (!file.type.startsWith('image/')) throw new Error('Not an image')
-            if (file.size > MAX_TEMPLATE_IMAGE_SIZE) throw new Error('Over 20 MB')
             const { width, height } = await measureImage(file)
             const base64 = await fileToBase64(file)
             const thumb = await generateThumbnail(file, width, height)
@@ -245,19 +268,39 @@ function UploadArea() {
               thumbnailBase64: thumb?.base64,
               thumbnailContentType: thumb?.contentType,
             })
-            await createTemplate({
-              imageUrl: upload.imageUrl,
-              thumbnailUrl: upload.thumbnailUrl,
-              imageStorageKey: upload.imageStorageKey,
-              thumbnailStorageKey: upload.thumbnailStorageKey,
-              aspectRatio: upload.aspectRatio,
-              width: upload.width,
-              height: upload.height,
-              contentHash: hash || undefined,
-            })
-            ok++
+            try {
+              await createTemplate({
+                imageUrl: upload.imageUrl,
+                thumbnailUrl: upload.thumbnailUrl,
+                imageStorageKey: upload.imageStorageKey,
+                thumbnailStorageKey: upload.thumbnailStorageKey,
+                aspectRatio: upload.aspectRatio,
+                width: upload.width,
+                height: upload.height,
+                contentHash: hash || undefined,
+              })
+              ok++
+            } catch (err) {
+              // R2 upload landed but the row insert failed. Roll back the R2
+              // bytes so we don't leave an orphan that has no template row
+              // (and therefore no admin recovery path).
+              try {
+                await cleanupOrphan({
+                  imageStorageKey: upload.imageStorageKey,
+                  thumbnailStorageKey: upload.thumbnailStorageKey,
+                })
+              } catch (cleanupErr) {
+                console.error(
+                  `Orphan cleanup failed for ${file.name}:`,
+                  cleanupErr,
+                )
+              }
+              throw err
+            }
           } catch (err) {
             failed++
+            const message = err instanceof Error ? err.message : String(err)
+            failedFiles.push({ name: file.name, error: message })
             console.error(`Upload failed for ${file.name}:`, err)
           } finally {
             completed++
@@ -280,9 +323,11 @@ function UploadArea() {
       }
     }
 
-    // Show final notification
+    // Show final notification. failedFiles includes both preflight failures
+    // and batch failures, so use its length for the overall failure count.
+    const totalFailed = failedFiles.length
     const skipMessage = duplicates.length > 0 ? ` ${duplicates.length} duplicate${duplicates.length === 1 ? '' : 's'} skipped.` : ''
-    if (failed === 0 && ok > 0) {
+    if (totalFailed === 0 && ok > 0) {
       notifications.update({
         id: notifId,
         title: 'Upload complete',
@@ -292,29 +337,37 @@ function UploadArea() {
         autoClose: 5000,
         withCloseButton: true,
       })
-    } else if (ok > 0 && failed > 0) {
+    } else if (ok > 0 && totalFailed > 0) {
+      const detail = formatFailureSummary(failedFiles)
       notifications.update({
         id: notifId,
         title: 'Upload partially complete',
-        message: `Uploaded ${ok} template${ok === 1 ? '' : 's'}, ${failed} failed.${skipMessage} Tagging in progress...`,
+        message: (
+          <Box style={{ whiteSpace: 'pre-line' }}>
+            {`Uploaded ${ok} template${ok === 1 ? '' : 's'}, ${totalFailed} failed.${skipMessage}${detail}\n\nTagging in progress...`}
+          </Box>
+        ),
         color: 'yellow',
         loading: false,
-        autoClose: 5000,
+        autoClose: 12000,
         withCloseButton: true,
       })
     } else {
+      const detail = formatFailureSummary(failedFiles)
       notifications.update({
         id: notifId,
         title: 'Upload failed',
-        message: `All ${total} uploads failed`,
+        message: (
+          <Box style={{ whiteSpace: 'pre-line' }}>
+            {`All ${totalFailed} upload${totalFailed === 1 ? '' : 's'} failed.${detail}`}
+          </Box>
+        ),
         color: 'red',
         loading: false,
-        autoClose: 5000,
+        autoClose: 12000,
         withCloseButton: true,
       })
     }
-
-    notificationIdRef.current = null
   }
 
   return (
@@ -379,7 +432,23 @@ function UploadArea() {
   )
 }
 
-function measureImage(file: File): Promise<{ width: number; height: number }> {
+async function measureImage(file: File): Promise<{ width: number; height: number }> {
+  // createImageBitmap with imageOrientation: 'from-image' honors EXIF
+  // rotation, so phone-camera JPEGs report post-rotation dimensions and the
+  // aspect-ratio classifier doesn't misfire on orientation tag 6/8 images.
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, {
+        imageOrientation: 'from-image',
+      })
+      const result = { width: bitmap.width, height: bitmap.height }
+      bitmap.close()
+      return result
+    } catch {
+      // Fall through to legacy path on browser quirks (Safari/Firefox have
+      // historically had spotty createImageBitmap support for some formats).
+    }
+  }
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const img = new window.Image()
@@ -454,6 +523,23 @@ async function generateThumbnail(
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+/**
+ * Build a human-readable summary of which files failed and why for the
+ * final upload notification. Caps to 5 lines so a 50-file batch with many
+ * failures stays readable.
+ */
+function formatFailureSummary(
+  files: Array<{ name: string; error: string }>,
+): string {
+  if (files.length === 0) return ''
+  const shown = files.slice(0, 5)
+  const lines = shown.map((f) => `• ${f.name} — ${f.error}`)
+  if (files.length > 5) {
+    lines.push(`…and ${files.length - 5} more`)
+  }
+  return '\n\n' + lines.join('\n')
 }
 
 /** Compute SHA-256 hash of file contents for duplicate detection */
@@ -654,7 +740,7 @@ function TemplatesTable({
     setIsRetagging(true)
 
     const idsToRetag = Array.from(selectedIds)
-    const notifId = `retag-progress-${Date.now()}`
+    const notifId = `retag-progress-${crypto.randomUUID()}`
 
     // Start tracking immediately before the mutation
     setRetaggingIds(new Set(idsToRetag))
@@ -672,8 +758,16 @@ function TemplatesTable({
     })
 
     try {
-      await retryBatchMutation.mutateAsync({ ids: idsToRetag })
-
+      const result = await retryBatchMutation.mutateAsync({ ids: idsToRetag })
+      if (result.alreadyRunning > 0) {
+        notifications.update({
+          id: notifId,
+          title: `Tagging: 0/${idsToRetag.length} done`,
+          message: `${result.queued} queued, ${result.alreadyRunning} already in-flight…`,
+          loading: true,
+          autoClose: false,
+        })
+      }
       setSelectedIds(new Set())
     } catch (err) {
       notifications.update({
@@ -957,7 +1051,24 @@ function TemplatesTable({
                     variant="light"
                     color="gray"
                     leftSection={<IconRefresh size={14} />}
-                    onClick={() => retryMutation.mutate({ id: t._id })}
+                    onClick={() =>
+                      retryMutation.mutate(
+                        { id: t._id },
+                        {
+                          onSuccess: (result) => {
+                            if (result?.skipped) {
+                              notifications.show({
+                                title: 'Already running',
+                                message:
+                                  'This template is already being analyzed — re-tag skipped.',
+                                color: 'yellow',
+                                autoClose: 3000,
+                              })
+                            }
+                          },
+                        },
+                      )
+                    }
                     loading={retryMutation.isPending}
                   >
                     Re-tag
@@ -988,7 +1099,6 @@ function TemplatesTable({
             color="brand"
             onClick={loadMore}
             loading={pageStatus === 'LoadingMore'}
-            disabled={pageStatus === 'LoadingFirstPage'}
           >
             Load more
           </Button>

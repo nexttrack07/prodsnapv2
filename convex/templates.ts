@@ -7,41 +7,15 @@ import {
 } from './_generated/server'
 import { components, internal } from './_generated/api'
 import { WorkflowManager } from '@convex-dev/workflow'
-import { Workpool } from '@convex-dev/workpool'
-import { requireAdminIdentity } from './lib/admin/requireAdmin'
+import { logAdminAction, requireAdminIdentity } from './lib/admin/requireAdmin'
 
 export const workflow = new WorkflowManager(components.workflow)
-export const ingestPool = new Workpool(components.ingestPool, {
-  maxParallelism: 3,
-  retryActionsByDefault: true,
-  defaultRetryBehavior: { maxAttempts: 2, initialBackoffMs: 2000, base: 2 },
-})
 
-// ─── Writes used by the ingestion workflow / seed ─────────────────────────
-export const insertPendingTemplate = internalMutation({
-  args: {
-    imageUrl: v.string(),
-    thumbnailUrl: v.string(),
-    aspectRatio: v.union(
-      v.literal('1:1'),
-      v.literal('4:5'),
-      v.literal('9:16'),
-      v.literal('16:9'),
-    ),
-    width: v.number(),
-    height: v.number(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert('adTemplates', {
-      ...args,
-      status: 'pending',
-    })
-  },
-})
-
+// ─── Writes used by the ingestion workflow ────────────────────────────────
 export const markIngesting = internalMutation({
   args: { templateId: v.id('adTemplates') },
   handler: async (ctx, { templateId }) => {
+    if (!(await ctx.db.get(templateId))) return
     await ctx.db.patch(templateId, { status: 'ingesting', ingestError: undefined })
   },
 })
@@ -58,11 +32,15 @@ export const saveTemplateAnalysis = internalMutation({
     textAmount: v.string(),
     subcategory: v.optional(v.string()),
     sceneDescription: v.string(),
+    // Playbook angle type — psychological lever this template fits best.
+    // Optional because the AI is allowed to omit it when no clear match.
+    angleType: v.optional(v.string()),
     // Legacy fields for backward compatibility
     moods: v.array(v.string()),
     aiTagsRaw: v.any(),
   },
   handler: async (ctx, { templateId, productCategory, ...rest }) => {
+    if (!(await ctx.db.get(templateId))) return
     await ctx.db.patch(templateId, {
       ...rest,
       productCategory,
@@ -76,6 +54,7 @@ export const saveTemplateAnalysis = internalMutation({
 export const markIngestFailed = internalMutation({
   args: { templateId: v.id('adTemplates'), error: v.string() },
   handler: async (ctx, { templateId, error }) => {
+    if (!(await ctx.db.get(templateId))) return
     await ctx.db.patch(templateId, { status: 'failed', ingestError: error })
   },
 })
@@ -98,6 +77,7 @@ export const ingestTemplateWorkflow = workflow.define({
         textAmount: tags.textAmount,
         subcategory: tags.subcategory ?? undefined,
         sceneDescription: tags.sceneDescription,
+        angleType: tags.angleType ?? undefined,
         // Legacy fields
         moods: [...tags.moods],
         aiTagsRaw: tags,
@@ -134,39 +114,49 @@ export const createTemplate = mutation({
     thumbnailStorageKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAdminIdentity(ctx)
+    const adminUserId = await requireAdminIdentity(ctx)
+    // Server-side dedup: if a row already exists with this content hash,
+    // return its id instead of inserting a duplicate. The client also dedups
+    // before upload, but this closes the multi-tab / hash-failure race.
+    //
+    // IMPORTANT: when we hit dedup, the bytes the client JUST uploaded to R2
+    // are redundant — the existing row already points to its own R2 keys.
+    // We must schedule cleanup of the new keys here, otherwise they leak.
+    // The client cannot do this cleanup itself because, from its perspective,
+    // createTemplate succeeded (returned an id without throwing).
+    const hash = args.contentHash
+    if (hash) {
+      const existing = await ctx.db
+        .query('adTemplates')
+        .withIndex('by_content_hash', (q) => q.eq('contentHash', hash))
+        .first()
+      if (existing) {
+        if (args.imageStorageKey) {
+          await ctx.scheduler.runAfter(0, internal.r2.clearTemplateStorage, {
+            key: args.imageStorageKey,
+          })
+        }
+        if (
+          args.thumbnailStorageKey &&
+          args.thumbnailStorageKey !== args.imageStorageKey
+        ) {
+          await ctx.scheduler.runAfter(0, internal.r2.clearTemplateStorage, {
+            key: args.thumbnailStorageKey,
+          })
+        }
+        return existing._id
+      }
+    }
     const id = await ctx.db.insert('adTemplates', { ...args, status: 'pending' })
     await workflow.start(ctx, internal.templates.ingestTemplateWorkflow, {
       templateId: id,
       imageUrl: args.imageUrl,
     })
+    await logAdminAction(ctx, adminUserId, {
+      action: 'template.create',
+      targetId: id,
+    })
     return id
-  },
-})
-
-/**
- * Seeds the library with a handful of public Facebook-ad-style stock photos
- * so the wizard has something to match against.  Safe to re-run; only inserts
- * if `adTemplates` is empty.
- */
-export const seedSampleTemplates = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdminIdentity(ctx)
-    const existing = await ctx.db.query('adTemplates').take(1)
-    if (existing.length > 0) return { skipped: true, inserted: 0 }
-
-    const samples = getSampleTemplates()
-    let inserted = 0
-    for (const s of samples) {
-      const id = await ctx.db.insert('adTemplates', { ...s, status: 'pending' })
-      await workflow.start(ctx, internal.templates.ingestTemplateWorkflow, {
-        templateId: id,
-        imageUrl: s.imageUrl,
-      })
-      inserted++
-    }
-    return { skipped: false, inserted }
   },
 })
 
@@ -174,7 +164,12 @@ export const seedSampleTemplates = mutation({
 export const listPublished = query({
   args: {
     aspectRatio: v.optional(
-      v.union(v.literal('1:1'), v.literal('4:5'), v.literal('9:16')),
+      v.union(
+        v.literal('1:1'),
+        v.literal('4:5'),
+        v.literal('9:16'),
+        v.literal('16:9'),
+      ),
     ),
   },
   handler: async (ctx, { aspectRatio }) => {
@@ -205,38 +200,30 @@ export const listPaginated = query({
 })
 
 /**
- * Aggregated status counts for the admin stats pills. Uses the by_status
- * index to avoid a full table scan in the hot path. Past ~10k rows this
- * should move to the Convex Aggregate component for O(1) reads.
+ * Aggregated status counts for the admin stats pills. Single full collect +
+ * local reduce — at <500 rows this is cheaper than 4 indexed scans because
+ * each scan also materializes the matching rows, so the cumulative read cost
+ * is the same as one full collect. Past ~10k rows move to the Convex
+ * Aggregate component for O(1) reads.
  */
 export const getCounts = query({
   args: {},
   handler: async (ctx) => {
     await requireAdminIdentity(ctx)
-    const [published, ingesting, pending, failed] = await Promise.all([
-      ctx.db
-        .query('adTemplates')
-        .withIndex('by_status', (q) => q.eq('status', 'published'))
-        .collect(),
-      ctx.db
-        .query('adTemplates')
-        .withIndex('by_status', (q) => q.eq('status', 'ingesting'))
-        .collect(),
-      ctx.db
-        .query('adTemplates')
-        .withIndex('by_status', (q) => q.eq('status', 'pending'))
-        .collect(),
-      ctx.db
-        .query('adTemplates')
-        .withIndex('by_status', (q) => q.eq('status', 'failed'))
-        .collect(),
-    ])
+    const all = await ctx.db.query('adTemplates').collect()
+    let published = 0
+    let pending = 0
+    let failed = 0
+    for (const row of all) {
+      if (row.status === 'published') published++
+      else if (row.status === 'failed') failed++
+      else pending++ // 'pending' or 'ingesting'
+    }
     return {
-      total:
-        published.length + ingesting.length + pending.length + failed.length,
-      published: published.length,
-      pending: pending.length + ingesting.length,
-      failed: failed.length,
+      total: all.length,
+      published,
+      pending,
+      failed,
     }
   },
 })
@@ -256,26 +243,33 @@ export const getExistingHashes = query({
   },
 })
 
-export const getById = query({
-  args: { id: v.id('adTemplates') },
-  handler: async (ctx, { id }) => ctx.db.get(id),
-})
-
 /**
  * Retries ingestion for a single template (failed or published).  Useful
- * when tags need a refresh.
+ * when tags need a refresh. Skips templates already in pending/ingesting
+ * state so a double-click doesn't fire two paid AI calls for the same row.
  */
 export const retryTemplateIngest = mutation({
   args: { id: v.id('adTemplates') },
   handler: async (ctx, { id }) => {
-    await requireAdminIdentity(ctx)
+    const adminUserId = await requireAdminIdentity(ctx)
     const t = await ctx.db.get(id)
     if (!t) throw new Error('Template not found')
+    // Already-running guard: don't fire a second workflow for a template
+    // that's currently being ingested. Avoids paying for duplicate AI calls
+    // when the admin double-clicks Re-tag.
+    if (t.status === 'pending' || t.status === 'ingesting') {
+      return { skipped: true as const, reason: 'already-running' as const }
+    }
     await ctx.db.patch(id, { status: 'pending', ingestError: undefined })
     await workflow.start(ctx, internal.templates.ingestTemplateWorkflow, {
       templateId: id,
       imageUrl: t.imageUrl,
     })
+    await logAdminAction(ctx, adminUserId, {
+      action: 'template.retry',
+      targetId: id,
+    })
+    return { skipped: false as const }
   },
 })
 
@@ -286,19 +280,70 @@ export const retryTemplateIngest = mutation({
 export const retryTemplatesBatch = mutation({
   args: { ids: v.array(v.id('adTemplates')) },
   handler: async (ctx, { ids }) => {
-    await requireAdminIdentity(ctx)
+    const adminUserId = await requireAdminIdentity(ctx)
     let queued = 0
+    let alreadyRunning = 0
+    const queuedIds: Array<typeof ids[number]> = []
     for (const id of ids) {
       const t = await ctx.db.get(id)
       if (!t) continue
+      // Skip rows that are already mid-ingest — see retryTemplateIngest.
+      if (t.status === 'pending' || t.status === 'ingesting') {
+        alreadyRunning++
+        continue
+      }
       await ctx.db.patch(id, { status: 'pending', ingestError: undefined })
       await workflow.start(ctx, internal.templates.ingestTemplateWorkflow, {
         templateId: id,
         imageUrl: t.imageUrl,
       })
+      queuedIds.push(id)
       queued++
     }
-    return { queued }
+    if (queued > 0) {
+      await logAdminAction(ctx, adminUserId, {
+        action: 'template.retry-batch',
+        details: { queued, alreadyRunning, ids: queuedIds },
+      })
+    }
+    return { queued, alreadyRunning }
+  },
+})
+
+/**
+ * Best-effort cleanup of an R2 upload that never made it into the templates
+ * table. The client invokes this when createTemplate throws after
+ * uploadTemplateImage already wrote the bytes to R2 — without it, those
+ * orphans leak forever. Same-key dedup matches deleteTemplate so an
+ * abandoned upload where thumbnail and image happened to share a key
+ * isn't double-deleted.
+ */
+export const cleanupOrphanedUpload = mutation({
+  args: {
+    imageStorageKey: v.optional(v.string()),
+    thumbnailStorageKey: v.optional(v.string()),
+  },
+  handler: async (ctx, { imageStorageKey, thumbnailStorageKey }) => {
+    const adminUserId = await requireAdminIdentity(ctx)
+    if (imageStorageKey) {
+      await ctx.scheduler.runAfter(0, internal.r2.clearTemplateStorage, {
+        key: imageStorageKey,
+      })
+    }
+    if (
+      thumbnailStorageKey &&
+      thumbnailStorageKey !== imageStorageKey
+    ) {
+      await ctx.scheduler.runAfter(0, internal.r2.clearTemplateStorage, {
+        key: thumbnailStorageKey,
+      })
+    }
+    if (imageStorageKey || thumbnailStorageKey) {
+      await logAdminAction(ctx, adminUserId, {
+        action: 'template.cleanup-orphan',
+        details: { imageStorageKey, thumbnailStorageKey },
+      })
+    }
   },
 })
 
@@ -310,7 +355,7 @@ export const retryTemplatesBatch = mutation({
 export const deleteTemplate = mutation({
   args: { id: v.id('adTemplates') },
   handler: async (ctx, { id }) => {
-    await requireAdminIdentity(ctx)
+    const adminUserId = await requireAdminIdentity(ctx)
     const row = await ctx.db.get(id)
     if (!row) return
     await ctx.db.delete(id)
@@ -327,36 +372,10 @@ export const deleteTemplate = mutation({
         key: row.thumbnailStorageKey,
       })
     }
+    await logAdminAction(ctx, adminUserId, {
+      action: 'template.delete',
+      targetId: id,
+    })
   },
 })
 
-// ─── Sample data ──────────────────────────────────────────────────────────
-/**
- * Publicly-hosted, CC-licensed product imagery from Unsplash (source.unsplash.com).
- * All 1:1 for the POC.  These are NOT Facebook ads per se — they're
- * product/lifestyle photos that the CLIP embedder can meaningfully index.
- */
-function getSampleTemplates() {
-  // Direct Unsplash image URLs (sized to 1024x1024).
-  const base = (id: string) => `https://images.unsplash.com/photo-${id}?w=1024&h=1024&fit=crop&auto=format`
-  const thumb = (id: string) => `https://images.unsplash.com/photo-${id}?w=512&h=512&fit=crop&auto=format&q=80`
-  const items = [
-    // Skincare/cosmetics
-    '1556228720-195a672e8a03', // serum bottle flat lay
-    '1608248543803-ba4f8c70ae0b', // lotion on stone
-    '1522337360788-8b13dee7a37e', // bathroom counter cosmetic
-    // Beverage
-    '1544252890-c3e95e867f88', // coffee cup lifestyle
-    '1523362628745-0c100150b504', // juice bottle outdoor
-    // Apparel / accessories
-    '1551232864-3f0890e580d9', // sneaker hero shot
-    '1523275335684-37898b6baf30', // watch studio
-  ]
-  return items.map((id) => ({
-    imageUrl: base(id),
-    thumbnailUrl: thumb(id),
-    aspectRatio: '1:1' as const,
-    width: 1024,
-    height: 1024,
-  }))
-}
