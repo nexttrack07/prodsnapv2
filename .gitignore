@@ -26,13 +26,16 @@ test-results/
 .firecrawl/
 .netlify/
 
-# Claude Code agent runtime — only the Convex AI skill docs are tracked
-.claude/
+# Claude Code agent runtime — only the Convex AI skill docs are tracked.
+# Use `.claude/*` (not `.claude/`) so the directory itself is not excluded;
+# git can't re-include children once a parent dir is fully excluded.
+.claude/*
 !.claude/skills/
 !.claude/skills/**
 
-# OMC runtime state — only runbooks are tracked
-.omc/
+# OMC runtime state — only runbooks are tracked. Same `/*` pattern so the
+# !.omc/runbooks negation actually applies.
+.omc/*
 !.omc/runbooks/
 !.omc/runbooks/**
 

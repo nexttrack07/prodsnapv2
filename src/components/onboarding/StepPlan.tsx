@@ -16,7 +16,7 @@ import {
 } from '@mantine/core'
 import { IconCheck } from '@tabler/icons-react'
 import { useNavigate } from '@tanstack/react-router'
-import { usePlans } from '@clerk/react/experimental'
+import { usePlans } from '../billing/clerkExperimental'
 import { useClerk } from '@clerk/react'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'

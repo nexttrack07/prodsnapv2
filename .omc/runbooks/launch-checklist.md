@@ -2,14 +2,41 @@
 
 Run through this before flipping DNS to prod, posting on Product Hunt, or announcing on BetaList.
 
-## 1. Clerk production setup
+## 1. Clerk production setup + 3-tier pricing rework
+
+The landing page advertises 3 tiers (solo / studio / agency) but the codebase
+ships with 2 (basic / pro). Path A is to update the product to match the
+landing — bundled with this prod migration so the new tiers ARE the prod
+launch.
+
+### Code changes (do BEFORE creating Clerk plans)
+- [ ] Update `convex/lib/billing/planConfig.ts`: replace `basic` / `pro`
+      entries with `solo` (productLimit 2, monthlyCredits 200), `studio`
+      (productLimit 8, monthlyCredits 1000, plus surgical-iteration +
+      cross-product-library capabilities), `agency` (productLimit
+      Infinity, monthlyCredits 5000, plus priority-support capability)
+- [ ] Define new capabilities in `convex/lib/billing/capabilities.ts` if
+      needed: `SURGICAL_ITERATION`, `CROSS_PRODUCT_LIBRARY`,
+      `PRIORITY_SUPPORT` — only those that the server actually gates on
+- [ ] Audit any `requireCapability(...)` call sites for ones that need to
+      be added/removed against the new tier matrix
+- [ ] Run vitest on `convex/lib/billing/__tests__/billing.test.ts` — adjust
+      expected slugs if any test references `basic` / `pro`
+
+### Clerk dashboard (prod)
 - [ ] Create prod Clerk application (if not already)
 - [ ] Enable Clerk Billing in prod
-- [ ] Create plan `basic` with price $49.99/mo and capabilities: variations, background_removal, hd_output, advanced_templates, batch_generation
-- [ ] Create plan `pro` with price $129.99/mo and same capabilities
+- [ ] Create plan `solo` with price $39/mo and capabilities matching planConfig.ts
+- [ ] Create plan `studio` with price $79/mo (mark as "popular" in Clerk if supported)
+- [ ] Create plan `agency` with price $199/mo
 - [ ] Verify plan slugs in prod dashboard EXACTLY match convex/lib/billing/planConfig.ts (case-sensitive)
 - [ ] Configure email verification ON for new signups
 - [ ] Set brand logo + primary color in Clerk appearance settings
+
+### After deploy
+- [ ] If any users still exist on the old `basic` / `pro` slugs in dev or a
+      pre-launch prod environment, decide migration: refund-and-resubscribe,
+      or one-time `userPlans` patch script. Document which.
 
 ## 2. Convex prod env vars
 Use `npx convex env set --prod <NAME> <VALUE>`:
