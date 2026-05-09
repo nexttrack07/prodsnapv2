@@ -23,6 +23,21 @@ playwright-report/
 test-results/
 
 # Local tooling scratch / caches — not for the repo
-.omc/
 .firecrawl/
 .netlify/
+
+# Claude Code agent runtime — only the Convex AI skill docs are tracked
+.claude/
+!.claude/skills/
+!.claude/skills/**
+
+# OMC runtime state — only runbooks are tracked
+.omc/
+!.omc/runbooks/
+!.omc/runbooks/**
+
+# OMC skills lockfile — regenerated on every run
+skills-lock.json
+
+# TanStack Start build cache
+.tanstack/
