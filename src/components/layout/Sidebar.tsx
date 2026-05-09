@@ -5,7 +5,7 @@
  */
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { UserButton } from '@clerk/react'
+import { UserButton, useUser } from '@clerk/react'
 import { useMediaQuery } from '@mantine/hooks'
 import {
   Box,
@@ -24,6 +24,7 @@ import {
   IconSparkles,
   IconReceipt,
   IconBolt,
+  IconShield,
 } from '@tabler/icons-react'
 import { api } from '../../../convex/_generated/api'
 import { LogoMark } from '../Logo'
@@ -44,13 +45,27 @@ const PRIMARY_NAV: ReadonlyArray<NavItem> = [
   { to: '/account/brand', icon: IconBrush, label: 'Brand kit' },
 ]
 
-const SECONDARY_NAV: ReadonlyArray<NavItem> = [
-  { to: '/account/billing', icon: IconReceipt, label: 'Billing' },
-]
+// Admin nav is included only when publicMetadata.role === 'admin'. This is
+// the same client-side check the /admin route guard does; it's purely for UI
+// visibility. The actual security boundary is server-side requireAdmin /
+// requireAdminIdentity on every admin mutation, so a non-admin who bypasses
+// the UI cannot do anything privileged.
+const ADMIN_NAV_ITEM: NavItem = { to: '/admin', icon: IconShield, label: 'Admin' }
+const BILLING_NAV_ITEM: NavItem = {
+  to: '/account/billing',
+  icon: IconReceipt,
+  label: 'Billing',
+}
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const billingStatus = useQuery(api.billing.syncPlan.getBillingStatus, {})
   const isMobile = useMediaQuery('(max-width: 768px)')
+  const { user } = useUser()
+  const isAdmin =
+    (user?.publicMetadata as Record<string, unknown> | undefined)?.role === 'admin'
+  const secondaryNav: ReadonlyArray<NavItem> = isAdmin
+    ? [ADMIN_NAV_ITEM, BILLING_NAV_ITEM]
+    : [BILLING_NAV_ITEM]
 
   return (
     <Stack h="100%" gap={0} justify="space-between" py="md" align={isMobile ? 'flex-start' : 'center'}>
@@ -76,7 +91,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </Stack>
 
       <Stack gap={6} align={isMobile ? 'flex-start' : 'center'} w="100%" px={8}>
-        {SECONDARY_NAV.map((item) => (
+        {secondaryNav.map((item) => (
           <NavIcon key={item.label} item={item} onNavigate={onNavigate} isMobile={isMobile ?? false} />
         ))}
 

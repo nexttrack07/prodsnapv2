@@ -1929,7 +1929,7 @@ function ImageCard({
                 justifyContent: 'center',
               }}
             >
-              <Loader size="sm" color="brand" type="dots" mb="xs" />
+              <Loader size="md" color="brand" type="dots" mb="xs" />
               <Text size="xs" c="dark.2">Processing...</Text>
             </Box>
           </AspectRatio>
@@ -2744,7 +2744,7 @@ function GenerationCard({
                 height: '100%',
               }}
             >
-              <Loader size="sm" color="brand" type="dots" mb="xs" />
+              <Loader size="md" color="brand" type="dots" mb="xs" />
               <Text size="xs" c="dark.2">{generation.currentStep || 'Processing...'}</Text>
             </Box>
           </AspectRatio>
@@ -2904,8 +2904,12 @@ function GenerateWizard({
   prefillEditAdId?: Id<'templateGenerations'> | null
 }) {
   // ── Segment state ──────────────────────────────────────────────────────────
+  // Default to Template — picking from the curated library is the recommended
+  // path for most users; Custom is for explicit "I want to write my own
+  // prompt" intent. Editing an existing ad still lands in Custom (the prefill
+  // effect overrides this when needed).
   const [activeSegment, setActiveSegment] = useState<WizardSegment>(
-    prefillTemplateId ? 'template' : 'custom',
+    prefillEditAdId ? 'custom' : 'template',
   )
   // When editing from an ad, ensure we land on the Custom segment
   useEffect(() => {
@@ -3376,8 +3380,8 @@ function GenerateWizard({
             value={activeSegment}
             onChange={(val) => setActiveSegment(val as WizardSegment)}
             data={[
-              { value: 'custom', label: 'Custom' },
               { value: 'template', label: 'Template' },
+              { value: 'custom', label: 'Custom' },
             ]}
             color="brand"
             fullWidth={!!isMobile}
