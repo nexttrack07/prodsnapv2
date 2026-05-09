@@ -142,32 +142,19 @@ function Btn({ children, kind = 'primary', size = 'md', style, icon }: {
 }
 
 // ============================================================
-// Ad thumbnail mock for hero
+// Hero batch — 6 sample variants (Harry's product). The source slot uses
+// the background-removed render; these are the "what one product becomes
+// after a single batch" thumbnails.
 // ============================================================
-const adThumbColors: Record<'a' | 'b' | 'c' | 'd', { bg: string; fg: string }> = {
-  a: { bg: 'E5E7EB', fg: '0B0D10' },
-  b: { bg: '0F1216', fg: 'FFFFFF' },
-  c: { bg: 'FFFFFF', fg: '0B0D10' },
-  d: { bg: '1A1A1A', fg: 'FFFFFF' },
-}
-function AdThumb({ label, kind }: { label?: string; kind: 'a' | 'b' | 'c' | 'd' }) {
-  const p = adThumbColors[kind] || adThumbColors.a
-  const text = label ? label.replace(/#/, 'Ad+') : 'Ad'
-  return (
-    <img
-      src={`https://placehold.co/200x200/${p.bg}/${p.fg}?text=${text}`}
-      alt={label || 'Ad thumbnail'}
-      style={{
-        width: '100%',
-        aspectRatio: '1',
-        objectFit: 'cover',
-        borderRadius: 8,
-        border: `1px solid ${T.border}`,
-        display: 'block',
-      }}
-    />
-  )
-}
+const HERO_SOURCE_SHOT = '/landing/shots/harrys-background-removed.png'
+const HERO_VARIANT_SHOTS = [
+  '/landing/shots/harrys-1-exact.png',
+  '/landing/shots/harrys-2-exact.png',
+  '/landing/shots/harrys-3-exact.png',
+  '/landing/shots/harrys-4-exact.png',
+  '/landing/shots/harrys-5-exact.png',
+  '/landing/shots/harrys-6-exact.png',
+]
 
 // ============================================================
 // HERO
@@ -189,8 +176,8 @@ function Hero() {
         </Pill>
         <h1 style={{
           fontFamily: fontDisplay,
-          fontSize: 84,
-          lineHeight: 1.0,
+          fontSize: 72,
+          lineHeight: 1.05,
           letterSpacing: '-0.035em',
           fontWeight: 600,
           margin: '0 auto',
@@ -229,7 +216,7 @@ function Hero() {
         </div>
 
         {/* Hero composition: photo → batch */}
-        <div style={{ marginTop: 72, display: 'grid', gridTemplateColumns: '280px 1fr', gap: 32, alignItems: 'center' }}>
+        <div style={{ marginTop: 72, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 32, alignItems: 'center' }}>
           {/* Source */}
           <div>
             <MonoLabel style={{ marginBottom: 10, display: 'block' }}>01 · source photo</MonoLabel>
@@ -242,20 +229,21 @@ function Hero() {
               position: 'relative',
             }}>
               <img
-                src="https://placehold.co/600x600/15181D/6B7079?text=Product+Shot"
+                src={HERO_SOURCE_SHOT}
                 alt="Product shot"
                 style={{
                   width: '100%',
                   height: '100%',
-                  objectFit: 'cover',
+                  objectFit: 'contain',
                   borderRadius: 6,
                   border: `1px solid ${T.border}`,
                   display: 'block',
+                  background: T.bg,
                 }}
               />
               <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14, padding: '8px 10px', background: '#0B0D10ee', borderRadius: 6, border: `1px solid ${T.border}`, fontFamily: fontMono, fontSize: 10, color: T.textMuted }}>
                 <div style={{ color: T.teal }}>✓ background removed</div>
-                <div>✓ analyzed · "ceramic matcha whisk"</div>
+                <div>✓ analyzed · "Harry's hydrating night lotion"</div>
                 <div>✓ description generated</div>
               </div>
             </div>
@@ -263,8 +251,7 @@ function Hero() {
           {/* Arrow + batch */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <MonoLabel>02 · one batch · 12 distinct concepts · 1:1 / 4:5 / 9:16</MonoLabel>
-              <MonoLabel><span style={{ color: T.teal }}>● live</span> · ~38 seconds</MonoLabel>
+              <MonoLabel>02 · one batch · 6 distinct concepts · 1:1 / 4:5 / 9:16</MonoLabel>
             </div>
             <div style={{
               background: T.bgElev,
@@ -272,16 +259,30 @@ function Hero() {
               border: `1px solid ${T.border}`,
               padding: 16,
             }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
-                {(['a','b','c','d','b','a','c','d','a','b','d','c'] as Array<'a'|'b'|'c'|'d'>).map((k, i) => (
-                  <AdThumb key={i} kind={k} label={`#${i+1}`} />
+              {/* CSS-columns masonry: each variant keeps its natural aspect
+                  ratio, no cropping, columns auto-balance heights. */}
+              <div style={{ columnCount: 3, columnGap: 1 }}>
+                {HERO_VARIANT_SHOTS.map((src, i) => (
+                  <img
+                    key={i}
+                    src={src}
+                    alt={`Generated ad #${i + 1}`}
+                    style={{
+                      width: '100%',
+                      marginBottom: 1,
+                      borderRadius: 8,
+                      border: `1px solid ${T.border}`,
+                      display: 'block',
+                      breakInside: 'avoid',
+                    }}
+                  />
                 ))}
               </div>
               <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: `1px dashed ${T.border}` }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Pill color={T.teal} bg={T.tealTint}>★ 4 starred</Pill>
                   <Pill>angle: comparison</Pill>
-                  <Pill>brand: matcha co.</Pill>
+                  <Pill>brand: harry's</Pill>
                 </div>
                 <MonoLabel>→ download / iterate</MonoLabel>
               </div>
