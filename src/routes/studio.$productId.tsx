@@ -3152,14 +3152,24 @@ function GenerateWizard({
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useCallback(
     (node: HTMLDivElement | null) => {
-      if (isFetchingNextPage) return
+      // Always disconnect the previous observer; bailing early during a
+      // fetch (the prior bug) caused observation to get lost when the
+      // callback identity changed mid-fetch. The fetch-in-flight guard
+      // belongs INSIDE the intersection callback, not at the top.
       if (observerRef.current) observerRef.current.disconnect()
-      observerRef.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && hasNextPage) {
-          fetchNextPage()
-        }
-      })
-      if (node) observerRef.current.observe(node)
+      if (!node) return
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+            fetchNextPage()
+          }
+        },
+        // Pre-fetch before the user reaches the actual bottom so the next
+        // page is in flight while they're still seeing the current rows.
+        // Reduces the "scroll into blank space" window.
+        { rootMargin: '400px' },
+      )
+      observerRef.current.observe(node)
     },
     [isFetchingNextPage, hasNextPage, fetchNextPage],
   )
@@ -3803,22 +3813,16 @@ function GenerateWizard({
                 <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
               ) : (
                 <>
-                  {/* Masonic caches cell positions and crashes when items
-                      shrink. Re-key on filter changes so it remounts. */}
-                  <Masonry
-                    key={[
-                      filterArgs.search ?? '',
-                      filterArgs.productCategory ?? '',
-                      filterArgs.imageStyle ?? '',
-                      filterArgs.setting ?? '',
-                      filterArgs.angleType ?? '',
-                      filterArgs.aspectRatio ?? '',
-                    ].join('|')}
-                    items={templates}
-                    columnCount={isMobile ? 2 : 4}
-                    columnGutter={1}
-                    rowGutter={1}
-                    render={({ data: tpl }) => {
+                  {/* CSS-columns masonry: non-virtualized, reliable for the
+                      ~100-200 template scale. Replaces masonic, which was
+                      not rendering newly-fetched cells reliably. */}
+                  <Box
+                    style={{
+                      columnCount: isMobile ? 2 : 4,
+                      columnGap: 1,
+                    }}
+                  >
+                    {templates.map((tpl) => {
                       const picked = pickedIds.includes(tpl._id)
                       const aspectRatio =
                         tpl.aspectRatio === '4:5'
@@ -3828,6 +3832,7 @@ function GenerateWizard({
                             : '1/1'
                       return (
                         <UnstyledButton
+                          key={tpl._id}
                           onClick={() => toggleTemplate(tpl._id)}
                           w="100%"
                           className="template-card-selectable"
@@ -3844,6 +3849,8 @@ function GenerateWizard({
                             display: 'block',
                             transition: 'all 200ms ease',
                             transform: picked ? 'scale(1.02)' : 'scale(1)',
+                            marginBottom: 1,
+                            breakInside: 'avoid',
                           }}
                         >
                           <Box style={{ aspectRatio }}>
@@ -3881,8 +3888,8 @@ function GenerateWizard({
                           )}
                         </UnstyledButton>
                       )
-                    }}
-                  />
+                    })}
+                  </Box>
                   {hasNextPage && (
                     <Box ref={loadMoreRef} py="md" ta="center">
                       {isFetchingNextPage ? (
@@ -4814,12 +4821,17 @@ function AddInspirationModal({
   const tplObserverRef = useRef<IntersectionObserver | null>(null)
   const tplLoadMoreRef = useCallback(
     (node: HTMLDivElement | null) => {
-      if (tplFetchingNext) return
       if (tplObserverRef.current) tplObserverRef.current.disconnect()
-      tplObserverRef.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && tplHasNext) tplFetchNext()
-      })
-      if (node) tplObserverRef.current.observe(node)
+      if (!node) return
+      tplObserverRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting && tplHasNext && !tplFetchingNext) {
+            tplFetchNext()
+          }
+        },
+        { rootMargin: '400px' },
+      )
+      tplObserverRef.current.observe(node)
     },
     [tplFetchingNext, tplHasNext, tplFetchNext],
   )

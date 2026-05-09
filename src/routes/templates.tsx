@@ -36,6 +36,7 @@ import {
   IconBookmark,
   IconBookmarkFilled,
   IconCheck,
+  IconDownload,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -156,14 +157,20 @@ function TemplatesBrowsePage() {
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useCallback(
     (node: HTMLDivElement | null) => {
-      if (isFetchingNextPage) return
+      // Always disconnect first; bailing out during a fetch loses observation
+      // when React calls the callback ref with the same node after dep changes.
+      // The fetch-in-flight guard belongs INSIDE the intersection callback.
       if (observerRef.current) observerRef.current.disconnect()
-      observerRef.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && hasNextPage) {
-          fetchNextPage()
-        }
-      })
-      if (node) observerRef.current.observe(node)
+      if (!node) return
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+            fetchNextPage()
+          }
+        },
+        { rootMargin: '400px' },
+      )
+      observerRef.current.observe(node)
     },
     [isFetchingNextPage, hasNextPage, fetchNextPage],
   )
@@ -527,6 +534,7 @@ function TemplateTile({
 }: {
   template: {
     _id: Id<'adTemplates'>
+    imageUrl: string
     thumbnailUrl: string
     aspectRatio: string
     productCategory?: string
@@ -554,6 +562,29 @@ function TemplateTile({
         ? '9/16'
         : '1/1'
 
+  // Download the full-resolution template via fetch+blob so we get a real
+  // file save (rather than the browser opening the R2 URL inline). Uses the
+  // R2 public URL — works because the bucket has public-read.
+  async function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation()
+    try {
+      const res = await fetch(template.imageUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/jpeg' ? 'jpg' : 'png'
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `template-${template._id}.${ext}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Template download failed:', err)
+    }
+  }
+
   return (
     <Box pos="relative">
       <UnstyledButton
@@ -577,6 +608,30 @@ function TemplateTile({
             style={{ display: 'block' }}
           />
         </Box>
+      </UnstyledButton>
+
+      {/* Download icon — top-right, next to bookmark */}
+      <UnstyledButton
+        pos="absolute"
+        top={8}
+        right={48}
+        onClick={handleDownload}
+        style={{
+          zIndex: 2,
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          backgroundColor: 'rgba(0, 0, 0, 0.55)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'transform 120ms ease, background-color 120ms ease',
+          cursor: 'pointer',
+        }}
+        aria-label="Download template"
+      >
+        <IconDownload size={16} color="white" />
       </UnstyledButton>
 
       {/* Bookmark icon — top-right corner */}

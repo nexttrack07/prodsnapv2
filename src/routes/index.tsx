@@ -169,8 +169,8 @@ function Hero() {
         background: `radial-gradient(900px 500px at 75% -10%, ${T.brandTint}, transparent 60%), radial-gradient(700px 400px at 10% 100%, ${T.tealTint}, transparent 60%)`,
         pointerEvents: 'none',
       }} />
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '88px 32px 72px', position: 'relative', textAlign: 'center' }}>
-        <Pill style={{ marginBottom: 28 }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '56px 32px 48px', position: 'relative', textAlign: 'center' }}>
+        <Pill style={{ marginBottom: 20 }}>
           <span style={{ width: 6, height: 6, borderRadius: 3, background: T.teal }} />
           performance creative co-pilot · for media buyers
         </Pill>
@@ -196,16 +196,16 @@ function Hero() {
         </h1>
         <p style={{
           fontFamily: fontBody,
-          fontSize: 19,
+          fontSize: 17,
           lineHeight: 1.5,
           color: T.textMuted,
-          margin: '32px auto 0',
-          maxWidth: 720,
+          margin: '20px auto 0',
+          maxWidth: 'none',
           fontWeight: 400,
         }}>
           One loop for swipe, generation, and winners — so your references actually shape the next batch.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 32 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 20 }}>
           <div style={{ display: 'flex', gap: 10 }}>
             <Link to="/home" style={{ textDecoration: 'none' }}>
               <Btn kind="primary" size="lg">Start 7-day free trial →</Btn>
@@ -216,7 +216,7 @@ function Hero() {
         </div>
 
         {/* Hero composition: photo → batch */}
-        <div style={{ marginTop: 72, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 32, alignItems: 'center' }}>
+        <div style={{ marginTop: 36, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 32, alignItems: 'center' }}>
           {/* Source */}
           <div>
             <MonoLabel style={{ marginBottom: 10, display: 'block' }}>01 · source photo</MonoLabel>
@@ -397,11 +397,11 @@ function LoopSection() {
               sub="Per-product. Bookmark templates, paste competitor URLs, drag images in."
             >
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                {[0,1,2,3,4,5].map(i => (
+                {[1, 2, 3, 4, 5, 6].map((i) => (
                   <img
                     key={i}
-                    src={`https://placehold.co/120x120/${i % 3 === 0 ? 'D1D5DB' : 'E5E7EB'}/5A6068?text=Ref+${i+1}`}
-                    alt={`Reference ${i+1}`}
+                    src={`/landing/shots/ref-${i}.jpg`}
+                    alt={`Reference ${i}`}
                     style={{
                       width: '100%',
                       aspectRatio: '1',
@@ -440,9 +440,9 @@ function LoopSection() {
                 <div><span style={{ color: T.brandSoft }}>prompt</span> "split-frame compare"</div>
                 <div><span style={{ color: T.teal }}>+ refs</span> 3 from swipe file</div>
                 <div><span style={{ color: T.teal }}>+ voc</span> "I bought this twice"</div>
-                <div><span style={{ color: T.teal }}>+ brand</span> matcha co. kit</div>
+                <div><span style={{ color: T.teal }}>+ brand</span> harry's kit</div>
                 <div><span style={{ color: T.teal }}>+ angle</span> comparison</div>
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${T.border}`, color: T.text }}>→ 12 concepts · ~38s</div>
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${T.border}`, color: T.text }}>→ 6 concepts</div>
               </div>
             </LoopCard>
 
@@ -454,19 +454,26 @@ function LoopSection() {
               title="Star → next batch references it"
               sub="Cross-product library. Filter by ★. Build on what works."
             >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
-                {[true, false, false, true].map((star, i) => (
+              {/* CSS-columns masonry: variants are uniform 1024×1024 so
+                  the column flow renders cleanly without cropping. */}
+              <div style={{ columnCount: 2, columnGap: 6 }}>
+                {[
+                  { src: '/landing/shots/toiletry-1.png', star: true },
+                  { src: '/landing/shots/toiletry-2.png', star: false },
+                  { src: '/landing/shots/toiletry-3.png', star: true },
+                  { src: '/landing/shots/toiletry-4.png', star: false },
+                ].map(({ src, star }, i) => (
                   <img
                     key={i}
-                    src={`https://placehold.co/120x120/${star ? '0F1216' : 'E5E7EB'}/${star ? '5FB8A6' : '5A6068'}?text=${star ? 'Winner' : 'Ad'}`}
+                    src={src}
                     alt={star ? 'Winner ad' : 'Ad thumbnail'}
                     style={{
                       width: '100%',
-                      aspectRatio: '1',
-                      objectFit: 'cover',
+                      marginBottom: 6,
                       borderRadius: 4,
                       border: `1px solid ${star ? T.brand : T.borderCream}`,
                       display: 'block',
+                      breakInside: 'avoid',
                     }}
                   />
                 ))}
@@ -611,14 +618,14 @@ function SplitSection() {
             letterSpacing: '-0.03em',
             fontWeight: 600,
             margin: '20px auto 16px',
-            maxWidth: 900,
+            maxWidth: 'none',
             paddingBottom: '0.18em',
           }}>
             Most teams run two tools.{' '}
             <span style={{ color: T.textMuted, fontWeight: 400 }}>We don't see why.</span>
           </h2>
-          <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, maxWidth: 700, margin: '0 auto', lineHeight: 1.55 }}>
-            Swipe tools study what's winning. Generators make new things. Almost no one does both.
+          <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, maxWidth: 'none', margin: '0 auto', lineHeight: 1.55 }}>
+            Swipe tools study what's winning. Generators make new things. Almost no one closes the loop.
           </p>
         </div>
 
@@ -686,7 +693,7 @@ function OnrampCard({ tag, title, desc, children, modes, tagPrimary }: {
       flexDirection: 'column',
     }}>
       <MonoLabel color={tagPrimary ? T.brand : T.textOnCreamMuted}>{tag}</MonoLabel>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 10 }}>
         <h3 style={{
           fontFamily: fontDisplay,
           fontSize: 28,
@@ -695,7 +702,7 @@ function OnrampCard({ tag, title, desc, children, modes, tagPrimary }: {
           margin: 0,
           color: T.ink,
         }}>{title}</h3>
-        {tagPrimary && <Pill color={T.brand} bg={T.brandTint}>★ differentiator</Pill>}
+        {tagPrimary && <Pill color={T.brand} bg={T.brandTint}>★ auto</Pill>}
       </div>
       <p style={{ fontFamily: fontBody, fontSize: 14, color: T.textOnCreamMuted, lineHeight: 1.5, margin: '6px 0 18px' }}>{desc}</p>
       <div style={{ flex: 1 }}>{children}</div>
@@ -752,18 +759,11 @@ function OnrampsSection() {
             modes={['Exact mode', 'Remix mode']}
           >
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-              {[
-                { bg: 'E5E7EB', fg: '374151' },
-                { bg: '0F1216', fg: '5FB8A6' },
-                { bg: 'FFFFFF', fg: '0063ff' },
-                { bg: '1A1A1A', fg: '1d72fe' },
-                { bg: '0F1216', fg: '374151' },
-                { bg: 'E5E7EB', fg: '0063ff' },
-              ].map((p, i) => (
+              {[1, 2, 3, 4, 5, 6].map((i) => (
                 <img
                   key={i}
-                  src={`https://placehold.co/120x120/${p.bg}/${p.fg}?text=Template+${i+1}`}
-                  alt={`Template ${i+1}`}
+                  src={`/landing/shots/template-${i}.jpg`}
+                  alt={`Template ${i}`}
                   style={{
                     width: '100%',
                     aspectRatio: '1',
@@ -821,7 +821,7 @@ function OnrampsSection() {
               position: 'relative',
             }}>
               <div style={{ position: 'absolute', top: 8, right: 10, fontFamily: fontMono, fontSize: 9, color: T.brand, letterSpacing: '0.06em' }}>● writing</div>
-              On a marble countertop, golden-hour lighting, with sliced citrus and steam rising — focus on the <span style={{ background: T.brandTint, padding: '0 4px', borderRadius: 2, color: T.brand, fontWeight: 500 }}>ceramic glaze</span>...
+              On a soft linen surface, golden-hour lighting, with citrus and ribbons of cream — focus on the <span style={{ background: T.brandTint, padding: '0 4px', borderRadius: 2, color: T.brand, fontWeight: 500 }}>bottle's matte finish</span>...
               <span style={{ display: 'inline-block', width: 1, height: 14, background: T.brand, marginLeft: 2, verticalAlign: 'middle', animation: 'blink 1s infinite' }}/>
             </div>
             <div style={{ marginTop: 12 }}>
@@ -868,7 +868,7 @@ function OnrampsSection() {
               <span style={{ color: T.brand, fontSize: 13, marginTop: 1 }}>✦</span>
               <div>
                 <span style={{ color: T.brand, fontWeight: 600 }}>AI suggestion:</span>{' '}
-                <span style={{ color: T.textOnCreamMuted }}>try "macro · texture-focus" — typically wins for ceramics in your category.</span>
+                <span style={{ color: T.textOnCreamMuted }}>try "macro · texture-focus" — typically wins for skincare in your category.</span>
               </div>
             </div>
           </OnrampCard>
@@ -881,10 +881,10 @@ function OnrampsSection() {
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {([
-                ['Comparison', 'vs. the plastic whisk you own', true],
-                ['Curiosity', 'why your matcha tastes flat', false],
-                ['Social proof', '"this is the whisk" — actual review', false],
-                ['Problem callout', 'clumpy matcha is a tool problem', false],
+                ['Comparison', 'vs. the drugstore lotion you settled for', true],
+                ['Curiosity', 'why your night cream stops working at 3am', false],
+                ['Social proof', '"finally a lotion my partner steals"', false],
+                ['Problem callout', 'morning skin shouldn\'t feel like sandpaper', false],
               ] as Array<[string, string, boolean]>).map(([title, hook, sel]) => (
                 <div key={title} style={{
                   padding: '10px 12px',
@@ -941,7 +941,7 @@ function VOCSection() {
             maxWidth: 900,
             paddingBottom: '0.18em',
           }}>
-            Sounds like the customer.{' '}
+            Sounds like the customer.<br />
             <span style={{ color: T.textMuted, fontWeight: 400 }}>Not like the AI.</span>
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, lineHeight: 1.55, margin: '32px auto 0', maxWidth: 700 }}>
@@ -975,16 +975,16 @@ function VOCSection() {
             <div style={{ padding: '14px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                 <MonoLabel color={T.text}>customer voice</MonoLabel>
-                <MonoLabel>· matcha co.</MonoLabel>
+                <MonoLabel>· harry's</MonoLabel>
               </div>
               <MonoLabel color={T.textDim}>17 phrases</MonoLabel>
             </div>
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
               {[
-                { src: 'amazon · ★★★★★', q: 'I bought this twice. The second was for my sister.', tags: ['repeat-buyer', 'gift'] },
-                { src: 'instagram comment', q: "finally a brand that doesn't treat matcha like a flavor.", tags: ['authenticity'] },
-                { src: 'support ticket #2,847', q: 'saved my morning routine — no more clumps.', tags: ['problem-solved'] },
-                { src: 'reddit · r/matcha', q: 'the ceramic actually matters. who knew.', tags: ['surprise'] },
+                { src: 'amazon · ★★★★★', q: 'I bought this twice. The second was for my partner.', tags: ['repeat-buyer', 'gift'] },
+                { src: 'instagram comment', q: "finally a lotion that doesn't smell like a chemistry lab.", tags: ['authenticity'] },
+                { src: 'support ticket #2,847', q: 'saved my dry-skin spiral. mornings actually feel different.', tags: ['problem-solved'] },
+                { src: 'reddit · r/SkincareAddiction', q: "the texture actually matters. didn't expect that.", tags: ['surprise'] },
               ].map((v, i) => (
                 <div key={i} style={{
                   background: T.bgElev,
@@ -1069,10 +1069,10 @@ function VOCSection() {
             </div>
             <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
               {[
-                { hl: 'Worth buying twice.', body: 'The second is usually a gift.', src: 'from amazon · repeat-buyer', tone: 'social proof' },
-                { hl: 'Not a flavor. A practice.', body: 'For people who already knew the difference.', src: 'from instagram · authenticity', tone: 'identity' },
-                { hl: 'No more clumps.', body: 'Mornings, fixed.', src: 'from support · problem-solved', tone: 'utility' },
-                { hl: 'Turns out the ceramic matters.', body: 'A small thing nobody told you.', src: 'from reddit · surprise', tone: 'discovery' },
+                { hl: 'Worth buying twice.', body: "The second's usually for someone you sleep next to.", src: 'from amazon · repeat-buyer', tone: 'social proof' },
+                { hl: 'Not a chemistry lab. A nightcap.', body: 'For people whose noses got tired of synthetic.', src: 'from instagram · authenticity', tone: 'identity' },
+                { hl: 'Mornings, fixed.', body: 'The dry spiral, broken.', src: 'from support · problem-solved', tone: 'utility' },
+                { hl: 'Turns out texture matters.', body: 'A small thing nobody told you.', src: 'from reddit · surprise', tone: 'discovery' },
               ].map((v, i) => (
                 <div key={i} style={{
                   background: T.bg,
@@ -1126,7 +1126,7 @@ function SurgicalSection() {
   return (
     <section style={{ background: T.cream, color: T.ink }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '120px 32px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>workflow muscle · 05</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
@@ -1136,160 +1136,167 @@ function SurgicalSection() {
             fontWeight: 600,
             margin: '20px auto 0',
             color: T.ink,
-            maxWidth: 900,
+            maxWidth: 'none',
             paddingBottom: '0.18em',
           }}>
-            Vary just the colors.{' '}
-            <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Lock everything else.</span>
+            Change one layer.{' '}
+            <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Lock the rest.</span>
           </h2>
-          <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textOnCreamMuted, lineHeight: 1.55, margin: '32px auto 0', maxWidth: 700 }}>
-            Don't regenerate from scratch. Change one layer, lock the rest.
+          <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textOnCreamMuted, lineHeight: 1.55, margin: '20px auto 0', maxWidth: 'none' }}>
+            Don't regenerate from scratch. Vary just the part that wasn't working — keep everything that was.
           </p>
         </div>
-        {/* Full-width variation drawer mock */}
-        <div style={{
-          background: T.bg,
-          color: T.text,
-          border: `1px solid ${T.border}`,
-          borderRadius: 14,
-          overflow: 'hidden',
-          boxShadow: '0 30px 60px -30px rgba(0,0,0,0.25)',
-          marginTop: 24,
-        }}>
-          <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <MonoLabel color={T.text}>variation drawer</MonoLabel>
-              <MonoLabel>· source: ★ winner #08</MonoLabel>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Btn kind="secondary" size="sm">Lock all</Btn>
-              <Btn kind="primary" size="sm">Regenerate →</Btn>
-            </div>
-          </div>
 
-          {/* Lock toggle row */}
-          <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <MonoLabel style={{ marginRight: 4 }}>vary:</MonoLabel>
-            {([
-              ['Text', false],
-              ['Icons', false],
-              ['Colors', true],
-              ['Composition', false],
-              ['Aspect ratio', false],
-            ] as Array<[string, boolean]>).map(([l, on]) => (
-              <div key={l} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                padding: '6px 12px',
-                borderRadius: 999,
-                border: `1px solid ${on ? T.brand : T.border}`,
-                background: on ? T.brandTint : 'transparent',
-              }}>
-                <div style={{
-                  width: 12, height: 12, borderRadius: 2,
-                  border: `1.5px solid ${on ? T.brand : T.border}`,
-                  background: on ? T.brand : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {on && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1 }}>✓</span>}
-                  {!on && <span style={{ color: T.textDim, fontSize: 9, lineHeight: 1 }}>🔒</span>}
-                </div>
-                <span style={{ fontFamily: fontBody, fontSize: 13, color: on ? T.text : T.textMuted, fontWeight: on ? 500 : 400 }}>{l}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Body: source + variants */}
-          <div style={{ padding: 24, display: 'grid', gridTemplateColumns: '220px 24px 1fr', gap: 24, alignItems: 'start' }}>
-            {/* Source */}
-            <div>
-              <MonoLabel style={{ display: 'block', marginBottom: 10 }}>source · winner #08</MonoLabel>
-              <img
-                src="https://placehold.co/400x400/0F1216/FFFFFF?text=Winner+%238"
-                alt="Winner #8"
-                style={{
-                  width: '100%',
-                  aspectRatio: '1',
-                  objectFit: 'cover',
-                  borderRadius: 10,
-                  border: `1px solid ${T.border}`,
-                  display: 'block',
-                }}
-              />
-              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between' }}>
-                <MonoLabel>★ 2.4× ROAS</MonoLabel>
-                <MonoLabel color={T.brandSoft}>locked</MonoLabel>
-              </div>
-            </div>
-
-            {/* Connector */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 80 }}>
-              <div style={{ width: 1, height: 32, background: T.border }} />
-              <div style={{
-                width: 24, height: 24, borderRadius: 12, background: T.brand, color: '#fff',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
-                boxShadow: `0 6px 16px -6px ${T.brand}aa`,
-              }}>→</div>
-              <div style={{ width: 1, height: 32, background: T.border }} />
-            </div>
-
-            {/* Variants */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-                <MonoLabel>4 colorways · same composition · same copy</MonoLabel>
-                <MonoLabel color={T.textDim}>generated 0:14 ago</MonoLabel>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                {[
-                  { bg: 'E5E7EB', fg: '0B0D10', label: 'paper / slate' },
-                  { bg: '1A1A1A', fg: 'FFFFFF', label: 'ink / teal' },
-                  { bg: 'FFFFFF', fg: '0B0D10', label: 'paper / ink' },
-                  { bg: '1F2937', fg: 'FFFFFF', label: 'slate / blue' },
-                ].map((p, i) => (
-                  <div key={i}>
-                    <img
-                      src={`https://placehold.co/300x300/${p.bg}/${p.fg}?text=${encodeURIComponent(p.label)}`}
-                      alt={p.label}
-                      style={{
-                        width: '100%',
-                        aspectRatio: '1',
-                        objectFit: 'cover',
-                        borderRadius: 10,
-                        border: `1px solid ${T.border}`,
-                        display: 'block',
-                      }}
-                    />
-                    <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <MonoLabel color={T.textDim}>{p.label}</MonoLabel>
-                      <span style={{ fontFamily: fontMono, fontSize: 10, color: T.textDim, cursor: 'pointer' }}>♡</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+        {/* Two side-by-side examples: colors + text */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 24 }}>
+          <SurgicalExample
+            label="vary: colors"
+            sub="same composition · same copy"
+            activeChip="Colors"
+            sources={[
+              '/landing/shots/cole-haan-color-1.png',
+              '/landing/shots/cole-haan-color-2.png',
+            ]}
+          />
+          <SurgicalExample
+            label="vary: text"
+            sub="same composition · same colors"
+            activeChip="Text"
+            sources={[
+              '/landing/shots/cole-haan-text-1.png',
+              '/landing/shots/cole-haan-text-2.png',
+            ]}
+          />
         </div>
 
-        {/* Buyer-language tagline */}
+        {/* Buyer-language tagline — minimal, matches the section's display-font
+            + mono-caption rhythm (no heavy callout box). */}
         <div style={{
-          marginTop: 32,
-          padding: '20px 24px',
-          background: T.creamElev,
-          border: `1px solid ${T.borderCream}`,
-          borderRadius: 12,
-          fontFamily: fontDisplay,
-          fontSize: 22,
-          lineHeight: 1.3,
-          letterSpacing: '-0.02em',
-          color: T.ink,
-          fontWeight: 500,
+          margin: '40px auto 0',
           textAlign: 'center',
-          maxWidth: 880,
-          margin: '32px auto 0',
+          maxWidth: 760,
         }}>
-          "Creative refresh" in a buyer's words: <span style={{ color: T.brand }}>keep the structure that worked, vary the part that didn't.</span>
+          <div style={{
+            fontFamily: fontDisplay,
+            fontSize: 24,
+            fontWeight: 400,
+            color: T.ink,
+            letterSpacing: '-0.015em',
+            lineHeight: 1.3,
+          }}>
+            Keep the structure that worked.{' '}
+            <span style={{ color: T.brand }}>Vary the part that didn't.</span>
+          </div>
+          <MonoLabel color={T.textOnCreamMuted} style={{ display: 'block', marginTop: 10 }}>
+            "creative refresh" — in a buyer's words
+          </MonoLabel>
         </div>
       </div>
     </section>
+  )
+}
+
+function SurgicalExample({
+  label, sub, activeChip, sources,
+}: {
+  label: string
+  sub: string
+  activeChip: 'Colors' | 'Text'
+  sources: string[]
+}) {
+  const chips: Array<[string, boolean]> = [
+    ['Text', activeChip === 'Text'],
+    ['Icons', false],
+    ['Colors', activeChip === 'Colors'],
+    ['Composition', false],
+    ['Aspect ratio', false],
+  ]
+  return (
+    <div style={{
+      background: T.bg,
+      color: T.text,
+      border: `1px solid ${T.border}`,
+      borderRadius: 14,
+      overflow: 'hidden',
+      boxShadow: '0 24px 48px -28px rgba(0,0,0,0.25)',
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      {/* Header bar */}
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: `1px solid ${T.border}`,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}>
+        <MonoLabel color={T.text}>{label}</MonoLabel>
+        <MonoLabel color={T.textDim}>{sub}</MonoLabel>
+      </div>
+
+      {/* Lock-chip row */}
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: `1px solid ${T.border}`,
+        display: 'flex',
+        gap: 8,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}>
+        {chips.map(([l, on]) => (
+          <div key={l} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '5px 10px',
+            borderRadius: 999,
+            border: `1px solid ${on ? T.brand : T.border}`,
+            background: on ? T.brandTint : 'transparent',
+          }}>
+            <div style={{
+              width: 10, height: 10, borderRadius: 2,
+              border: `1.5px solid ${on ? T.brand : T.border}`,
+              background: on ? T.brand : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {on && <span style={{ color: '#fff', fontSize: 8, lineHeight: 1 }}>✓</span>}
+              {!on && <span style={{ color: T.textDim, fontSize: 8, lineHeight: 1 }}>🔒</span>}
+            </div>
+            <span style={{
+              fontFamily: fontBody,
+              fontSize: 12,
+              color: on ? T.text : T.textMuted,
+              fontWeight: on ? 500 : 400,
+            }}>{l}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Variants — auto-fit row at 9:16 aspect ratio. Both example cards
+          render an equal number of thumbs, so heights match. */}
+      <div style={{
+        padding: 16,
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: `repeat(${sources.length}, 1fr)`,
+        gap: 8,
+        alignItems: 'start',
+      }}>
+        {sources.map((src, i) => (
+          <img
+            key={i}
+            src={src}
+            alt={`${activeChip} variant ${i + 1}`}
+            style={{
+              width: '100%',
+              aspectRatio: '9 / 16',
+              objectFit: 'cover',
+              borderRadius: 8,
+              border: `1px solid ${T.border}`,
+              display: 'block',
+            }}
+          />
+        ))}
+      </div>
+    </div>
   )
 }
 
