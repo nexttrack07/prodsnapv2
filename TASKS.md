@@ -22,7 +22,34 @@ Group by surface area. Within each section: ordered roughly by priority (top = m
 
 ## Landing page (`src/routes/index.tsx`)
 
-### Performance / polish
+### Pre-launch (canonical landing audit — `.omc/audit-landing-canonical.md`)
+
+Pre-launch must-do tier from the canonical list. Severity ranking sets order; details + line numbers in the canonical doc.
+
+- [ ] **C1 — Add real credibility** above the fold or directly below: founder paragraph + face, or one beta quote, or 60-90s Loom. Single highest-leverage conversion change.
+- [ ] **M0 — Replace `nano-banana-2` codename in public copy** at `src/routes/index.tsx:1338`. Either rename to a human-facing label ("Fast / High-fidelity") or use the upstream provider's public model name. Internal codenames must not ship to cold traffic.
+- [x] **H1 — Delete orphan `src/components/landing/HeroMediaFlow.tsx`** (0 importers). Grep `app.css` for `landing-hero-flow` classes and remove unused. **Done: deleted .tsx + 129 lines of orphan CSS (`landing-hero-flow*`, `landing-hero-input-card`, `landing-hero-results-panel`, `landing-hero-plus`, `landing-hero-template-card`, `landing-hero-product-shot`, `landing-hero-template-shot`, `landing-hero-variation-shot`, `landing-hero-arrow*`, `landing-hero-shell`, `landing-hero-grid`, `@keyframes landing-arrow-flow`, mobile media-query overrides).**
+- [x] **H2 — Add `loading="lazy" decoding="async"`** to all below-fold `<img>` tags in `src/routes/index.tsx` (lines 391, 456, 764, 1289). **Done.** Next pass: WebP/AVIF conversion of `public/landing/shots/` (~38 MB total).
+- [x] **L5 — Decorative thumbnails get `alt=""` + `role="presentation"`** — applied to ref/template/winner thumbnails (lines 391, 456, 764). Surgical-section variants (line 1289) keep informative alt because they demonstrate the feature.
+- [ ] **H6 — Fix `<button>` inside `<Link>`** at lines 213, 1520, 1664, 1667 — make `Btn` polymorphic via `as` prop or render as `<span role="button">` when wrapped in a `<Link>`.
+- [ ] **M8 — Add `:focus-visible` rules** for `<button>` and `<a>` in `src/styles/app.css` (or new `landing.module.css`). WCAG 2.4.7 violation today.
+- [ ] **M2 — Re-gate pricing**: ungate Surgical Iteration + Cross-product Library from Solo tier; gate on volume only. Bundled with Path A pricing rework in `.omc/runbooks/launch-checklist.md`.
+
+### High-value polish (≤ 1 day)
+
+- [ ] **H3 — Hero subhead** — keep H1, tighten subhead to surface literal benefit (suggested copy in canonical doc).
+- [ ] **H4 — Section 3 (Split) rewrite** with named competitors. Promote FAQ Q3 line ("Foreplay is a swipe file. ProdSnap is a swipe file that feeds a generator.") to Section 3 H2.
+- [ ] **H5 — Soften "overpowered for you"** in FAQ Q2.
+- [ ] **M1 — Reconcile "12 variants"** claim with hero visual: caption "6 of 12" or render full 12-thumbnail masonry.
+- [ ] **M3 — Fix `SurgicalSection` mobile spacing outlier** — pass `isMobile` to `SurgicalExample`; mirror `LoopSection` pattern.
+- [ ] **M7 — Add `<main>` + `aria-labelledby`** on each `<section>`; give each `<h2>` an `id`. ~50 lines mechanical.
+- [ ] **AdCreative comparison matrix accuracy** (sub-finding of H4) — Option B in Split section currently shows AdCreative with no brand kits / no templates. AdCreative actually has both. Either correct the matrix or remove AdCreative from the implied comparison.
+
+### Defer (canonical: M4-M10, L1-L8, N1-N3)
+
+Cosmetic and scale-out: context-lift the 12 useMediaQuery listeners (M4), email-capture off-ramp (M5), break headline rhythm pattern (M6), magic-number padding consolidation (M9), tuple → object types (M10), L1-L8, N1-N3. Action when growth or polish window allows.
+
+### Performance / polish (legacy items)
 
 - [ ] **Hero source resolution** — `harrys-background-removed.png` is 338×600. The source card now renders ~410px square (1fr 2fr split), so the image scales UP and looks blurry on retina. Re-export the cut-out at 800×800 minimum.
 - [ ] **Section 6 narrative break** — Section 6 (`SurgicalSection`) uses Cole Haan sneakers while the rest of the page uses Harry's hydrating night lotion. If you want a single product through-line, regenerate Section 6 examples with Harry's color/text variants. Otherwise leave it as a "another customer's example."

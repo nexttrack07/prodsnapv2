@@ -391,7 +391,10 @@ function LoopSection() {
                   <img
                     key={i}
                     src={`/landing/shots/ref-${i}.jpg`}
-                    alt={`Reference ${i}`}
+                    alt=""
+                    role="presentation"
+                    loading="lazy"
+                    decoding="async"
                     style={{
                       width: '100%',
                       aspectRatio: '1',
@@ -456,7 +459,10 @@ function LoopSection() {
                   <img
                     key={i}
                     src={src}
-                    alt={star ? 'Winner ad' : 'Ad thumbnail'}
+                    alt=""
+                    role="presentation"
+                    loading="lazy"
+                    decoding="async"
                     style={{
                       width: '100%',
                       marginBottom: 6,
@@ -764,7 +770,10 @@ function OnrampsSection() {
                 <img
                   key={i}
                   src={`/landing/shots/template-${i}.jpg`}
-                  alt={`Template ${i}`}
+                  alt=""
+                  role="presentation"
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     width: '100%',
                     aspectRatio: '1',
@@ -1290,6 +1299,8 @@ function SurgicalExample({
             key={i}
             src={src}
             alt={`${activeChip} variant ${i + 1}`}
+            loading="lazy"
+            decoding="async"
             style={{
               width: '100%',
               aspectRatio: '9 / 16',
