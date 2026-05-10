@@ -12,7 +12,7 @@ import {
   Group,
 } from '@mantine/core'
 import { useDisclosure, useMediaQuery } from '@mantine/hooks'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import { Sidebar } from './Sidebar'
 import { Breadcrumbs } from './Breadcrumbs'
 import { LogoMark } from '../Logo'
@@ -23,6 +23,13 @@ const MOBILE_HEADER_HEIGHT = 56
 export function AppShellLayout({ children }: { children: React.ReactNode }) {
   const [opened, { toggle, close }] = useDisclosure(false)
   const isMobile = useMediaQuery('(max-width: 768px)')
+  // Routes that own their inner padding (via Container fluid p="lg"). The
+  // outer shell padding is tightened so they don't double up.
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const isDenseRoute =
+    pathname === '/home' ||
+    pathname.startsWith('/home/') ||
+    (pathname.startsWith('/studio/') && pathname !== '/studio' && pathname !== '/studio/')
 
   return (
     <AppShell
@@ -74,7 +81,11 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Box px={{ base: 'md', sm: 'xl' }} pt="md" pb={48}>
+        <Box
+          px={isDenseRoute ? 'sm' : { base: 'md', sm: 'xl' }}
+          pt={isDenseRoute ? 'xs' : 'md'}
+          pb={48}
+        >
           {/* Breadcrumbs row + slot for page-level actions (right-aligned).
               Pages render into #page-header-actions via createPortal. */}
           <Group justify="space-between" align="center" wrap="nowrap" gap="md" mih={24}>
@@ -83,7 +94,7 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
             </Box>
             <Box id="page-header-actions" style={{ flexShrink: 0 }} />
           </Group>
-          <Box mt="md">{children}</Box>
+          <Box mt={isDenseRoute ? 'xs' : 'md'}>{children}</Box>
         </Box>
       </AppShell.Main>
     </AppShell>

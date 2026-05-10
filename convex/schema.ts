@@ -255,7 +255,12 @@ const schema = defineSchema({
     periodStart: v.optional(v.number()),    // Unix ms, from Clerk currentPeriodStartDate
     periodEnd: v.optional(v.number()),      // Unix ms, from Clerk currentPeriodEndDate
     billingStatus: v.optional(v.string()),  // Clerk subscription status (active, past_due, etc.)
-  }).index('by_userId', ['userId']),
+    // Set when the user schedules a cancellation; cleared when reactivated.
+    // Used to render "cancellation scheduled" UI without re-querying Clerk.
+    cancelScheduledAt: v.optional(v.number()),
+  })
+    .index('by_userId', ['userId'])
+    .index('by_clerkUserId', ['clerkUserId']),
 
   // ─── Billing audit + credit ledger ───────────────────────────────────────
   // Append-only. Rows with context: 'usage' also serve as the monthly-credit
@@ -457,6 +462,22 @@ const schema = defineSchema({
   })
     .index('by_eventId', ['eventId'])
     .index('by_receivedAt', ['receivedAt']),
+
+  // ─── Durable retry queue for failed webhook handlers ─────────────────────
+  // Populated by handleBillingEvent when its inner Clerk-API call throws.
+  // The retryFailedWebhooks cron drains this table with exponential backoff,
+  // idempotent against the existing webhookEvents dedup row.
+  webhookRetryQueue: defineTable({
+    eventId: v.string(),       // Svix event id (the dedup key)
+    eventType: v.string(),     // for triage
+    payload: v.string(),       // JSON-stringified original event payload
+    attempts: v.number(),      // 0..MAX
+    nextAttemptAt: v.number(), // ms epoch
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index('by_nextAttemptAt', ['nextAttemptAt'])
+    .index('by_eventId', ['eventId']),
 
   // ─── Admin audit log ─────────────────────────────────────────────────────
   adminAuditEvents: defineTable({

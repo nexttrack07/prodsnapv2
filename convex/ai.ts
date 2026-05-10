@@ -779,7 +779,9 @@ export const generateFromTemplate = internalAction({
     }
     const template = ctxData.template as TemplateContext | null
 
-    const aspectRatio = template?.aspectRatio ?? generation.aspectRatio ?? '1:1'
+    // User's chosen aspectRatio wins. Template's own ratio is a fallback for
+    // legacy generations that didn't capture the user's pick at submit time.
+    const aspectRatio = generation.aspectRatio ?? template?.aspectRatio ?? '1:1'
 
     const { generatedUrl } = await callImageEditModel({
       model: (generation.model ?? 'nano-banana-2') as ImageEditModel,
@@ -886,12 +888,16 @@ export const composeFromAnglePrompt = internalAction({
         'You are an expert ad-image prompt composer. Write nano-banana prompts that produce scroll-stopping Facebook ad images grounded in the user\'s real product photo. Be specific about composition, lighting, palette, and visible text.',
     })
 
-    console.log(`[composeFromAnglePrompt] generationId=${generationId} rawTextType=${typeof text} rawTextLen=${text?.length ?? 'null'}`)
+    if (process.env.DEBUG_AI === 'true') {
+      console.log(`[composeFromAnglePrompt] generationId=${generationId} rawTextType=${typeof text} rawTextLen=${text?.length ?? 'null'}`)
+    }
     if (typeof text !== 'string') {
       throw new Error(`Composer returned non-string response: ${JSON.stringify(text).slice(0, 200)}`)
     }
     const prompt = text.trim()
-    console.log(`[composeFromAnglePrompt] generationId=${generationId} trimmedLen=${prompt.length} preview=${prompt.slice(0, 120)}`)
+    if (process.env.DEBUG_AI === 'true') {
+      console.log(`[composeFromAnglePrompt] generationId=${generationId} trimmedLen=${prompt.length} preview=${prompt.slice(0, 120)}`)
+    }
     if (!prompt) {
       throw new Error(`Composer returned an empty prompt (raw text length=${text.length}, raw preview=${JSON.stringify(text.slice(0, 120))})`)
     }
@@ -919,20 +925,26 @@ export const generateFromAngle = internalAction({
     })
     if (!ctxData?.generation) throw new Error('Generation not found')
     let { generation } = ctxData
-    console.log(`[generateFromAngle] generationId=${generationId} mode=${generation.mode} status=${generation.status} dynamicPromptLen=${generation.dynamicPrompt?.length ?? 'undef'} productImageUrlLen=${generation.productImageUrl?.length ?? 'undef'}`)
+    if (process.env.DEBUG_AI === 'true') {
+      console.log(`[generateFromAngle] generationId=${generationId} mode=${generation.mode} status=${generation.status} dynamicPromptLen=${generation.dynamicPrompt?.length ?? 'undef'} productImageUrlLen=${generation.productImageUrl?.length ?? 'undef'}`)
+    }
 
     // Defensive: if dynamicPrompt is missing, re-fetch once after a short
     // delay to rule out a read-staleness race between the composer's patch
     // and this action's runQuery. (Has been observed in production.)
     if (!generation.dynamicPrompt) {
-      console.warn(`[generateFromAngle] dynamicPrompt missing on first read for ${generationId}; retrying after 750ms`)
+      if (process.env.DEBUG_AI === 'true') {
+        console.warn(`[generateFromAngle] dynamicPrompt missing on first read for ${generationId}; retrying after 750ms`)
+      }
       await new Promise((r) => setTimeout(r, 750))
       ctxData = await ctx.runQuery(internal.studio.getGenerationContextInternal, {
         generationId,
       })
       if (!ctxData?.generation) throw new Error('Generation not found on retry')
       generation = ctxData.generation
-      console.log(`[generateFromAngle] retry generationId=${generationId} dynamicPromptLen=${generation.dynamicPrompt?.length ?? 'undef'}`)
+      if (process.env.DEBUG_AI === 'true') {
+        console.log(`[generateFromAngle] retry generationId=${generationId} dynamicPromptLen=${generation.dynamicPrompt?.length ?? 'undef'}`)
+      }
     }
     if (!generation.dynamicPrompt) {
       throw new Error(

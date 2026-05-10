@@ -474,6 +474,7 @@ export const getFocusProduct = query({
     let recentAds: Array<{
       _id: string
       outputUrl: string
+      aspectRatio: string
       adCopy: { headlines: Array<string> } | null
       createdAt: number
     }> = []
@@ -485,10 +486,11 @@ export const getFocusProduct = query({
         .take(20)
       recentAds = ads
         .filter((a) => a.status === 'complete' && !!a.outputUrl)
-        .slice(0, 6)
+        .slice(0, 12)
         .map((a) => ({
           _id: a._id as string,
           outputUrl: a.outputUrl as string,
+          aspectRatio: a.aspectRatio ?? '1:1',
           adCopy: a.adCopy
             ? { headlines: a.adCopy.headlines ?? [] }
             : null,

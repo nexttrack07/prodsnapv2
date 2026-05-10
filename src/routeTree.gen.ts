@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as StudioRouteImport } from './routes/studio'
+import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
@@ -24,6 +26,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as ProductsIndexRouteImport } from './routes/products.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as StudioProductIdRouteImport } from './routes/studio.$productId'
 import { Route as ProductsNewRouteImport } from './routes/products.new'
 import { Route as BoardsBoardIdRouteImport } from './routes/boards.$boardId'
@@ -49,6 +52,16 @@ const TemplatesRoute = TemplatesRouteImport.update({
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
   path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignUpRoute = SignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -110,6 +123,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AdminRoute,
+} as any)
+const AccountIndexRoute = AccountIndexRouteImport.update({
+  id: '/account/',
+  path: '/account/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const StudioProductIdRoute = StudioProductIdRouteImport.update({
   id: '/$productId',
@@ -177,6 +195,8 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/products': typeof ProductsRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
   '/studio': typeof StudioRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
@@ -190,6 +210,7 @@ export interface FileRoutesByFullPath {
   '/boards/$boardId': typeof BoardsBoardIdRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
+  '/account/': typeof AccountIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/products/': typeof ProductsIndexRoute
   '/studio/': typeof StudioIndexRoute
@@ -203,6 +224,8 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
@@ -215,6 +238,7 @@ export interface FileRoutesByTo {
   '/boards/$boardId': typeof BoardsBoardIdRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
+  '/account': typeof AccountIndexRoute
   '/admin': typeof AdminIndexRoute
   '/products': typeof ProductsIndexRoute
   '/studio': typeof StudioIndexRoute
@@ -231,6 +255,8 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/products': typeof ProductsRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
   '/studio': typeof StudioRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
@@ -244,6 +270,7 @@ export interface FileRoutesById {
   '/boards/$boardId': typeof BoardsBoardIdRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
+  '/account/': typeof AccountIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/products/': typeof ProductsIndexRoute
   '/studio/': typeof StudioIndexRoute
@@ -261,6 +288,8 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/products'
+    | '/sign-in'
+    | '/sign-up'
     | '/studio'
     | '/templates'
     | '/terms'
@@ -274,6 +303,7 @@ export interface FileRouteTypes {
     | '/boards/$boardId'
     | '/products/new'
     | '/studio/$productId'
+    | '/account/'
     | '/admin/'
     | '/products/'
     | '/studio/'
@@ -287,6 +317,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pricing'
     | '/privacy'
+    | '/sign-in'
+    | '/sign-up'
     | '/templates'
     | '/terms'
     | '/account/billing'
@@ -299,6 +331,7 @@ export interface FileRouteTypes {
     | '/boards/$boardId'
     | '/products/new'
     | '/studio/$productId'
+    | '/account'
     | '/admin'
     | '/products'
     | '/studio'
@@ -314,6 +347,8 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/products'
+    | '/sign-in'
+    | '/sign-up'
     | '/studio'
     | '/templates'
     | '/terms'
@@ -327,6 +362,7 @@ export interface FileRouteTypes {
     | '/boards/$boardId'
     | '/products/new'
     | '/studio/$productId'
+    | '/account/'
     | '/admin/'
     | '/products/'
     | '/studio/'
@@ -343,6 +379,8 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
   ProductsRoute: typeof ProductsRouteWithChildren
+  SignInRoute: typeof SignInRoute
+  SignUpRoute: typeof SignUpRoute
   StudioRoute: typeof StudioRouteWithChildren
   TemplatesRoute: typeof TemplatesRoute
   TermsRoute: typeof TermsRoute
@@ -350,6 +388,7 @@ export interface RootRouteChildren {
   AccountBrandRoute: typeof AccountBrandRoute
   AdsAdIdRoute: typeof AdsAdIdRoute
   BoardsBoardIdRoute: typeof BoardsBoardIdRoute
+  AccountIndexRoute: typeof AccountIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -373,6 +412,20 @@ declare module '@tanstack/react-router' {
       path: '/studio'
       fullPath: '/studio'
       preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -458,6 +511,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/account/': {
+      id: '/account/'
+      path: '/account'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AccountIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/studio/$productId': {
       id: '/studio/$productId'
@@ -606,6 +666,8 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
   ProductsRoute: ProductsRouteWithChildren,
+  SignInRoute: SignInRoute,
+  SignUpRoute: SignUpRoute,
   StudioRoute: StudioRouteWithChildren,
   TemplatesRoute: TemplatesRoute,
   TermsRoute: TermsRoute,
@@ -613,6 +675,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountBrandRoute: AccountBrandRoute,
   AdsAdIdRoute: AdsAdIdRoute,
   BoardsBoardIdRoute: BoardsBoardIdRoute,
+  AccountIndexRoute: AccountIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

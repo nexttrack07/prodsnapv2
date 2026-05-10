@@ -79,7 +79,7 @@ function HomePage() {
   const goToNewProduct = () => navigate({ to: '/products/new' })
 
   return (
-    <Container size="lg" py="xl">
+    <Container fluid p="lg">
       {hasProducts && (
         <PageHeaderActions>
           <Button
@@ -256,49 +256,62 @@ function CollageBackground({
 }: {
   ads: DashboardData['recentAds']
 }) {
-  // Masonry-ish 3-column layout for up to 6 ads. Heights vary slightly to
-  // give it visual interest. Clicks bubble to the parent Paper which
-  // navigates to the product — we deliberately don't open ad detail from
-  // the home collage; users go to the product first.
+  // True masonry: each tile takes the ad's actual aspectRatio (1:1, 4:5,
+  // 9:16) so images render at correct proportions, no cropping. CSS columns
+  // give Pinterest-style variable-height stacking. Clicks bubble to the
+  // parent Paper which navigates to the product — we deliberately don't
+  // open ad detail from the home collage.
   return (
-    <SimpleGrid
-      cols={{ base: 2, sm: 3 }}
-      spacing={2}
-      style={{ minHeight: 360 }}
+    <Box
+      style={{
+        columnCount: 6,
+        columnGap: 2,
+        minHeight: 360,
+      }}
     >
-      {ads.slice(0, 6).map((ad, i) => (
-        <Box
-          key={ad._id}
-          style={{
-            aspectRatio: i % 3 === 1 ? '1 / 1.2' : '1 / 1',
-            overflow: 'hidden',
-          }}
-        >
-          <Image
-            src={ad.outputUrl}
-            alt=""
-            fit="cover"
-            w="100%"
-            h="100%"
+      {ads.slice(0, 12).map((ad) => {
+        const ratio =
+          ad.aspectRatio === '4:5'
+            ? '4 / 5'
+            : ad.aspectRatio === '9:16'
+              ? '9 / 16'
+              : '1 / 1'
+        return (
+          <Box
+            key={ad._id}
             style={{
-              transition: 'transform 600ms ease',
+              aspectRatio: ratio,
+              overflow: 'hidden',
+              marginBottom: 2,
+              breakInside: 'avoid',
             }}
-          />
-        </Box>
-      ))}
-      {/* If fewer than 6 ads, fill the remaining tiles with a soft-blurred placeholder so the masonry isn't ragged. */}
-      {Array.from({ length: Math.max(0, 6 - ads.length) }).map((_, i) => (
+          >
+            <Image
+              src={ad.outputUrl}
+              alt=""
+              fit="cover"
+              w="100%"
+              h="100%"
+              style={{ transition: 'transform 600ms ease' }}
+            />
+          </Box>
+        )
+      })}
+      {/* If fewer than 8 ads, fill the remaining tiles with a soft-blurred placeholder so the masonry isn't ragged. */}
+      {Array.from({ length: Math.max(0, 12 - ads.length) }).map((_, i) => (
         <Box
           key={`fill-${i}`}
           style={{
             aspectRatio: '1 / 1',
+            marginBottom: 2,
+            breakInside: 'avoid',
             backgroundColor: 'var(--mantine-color-dark-6)',
             backgroundImage:
               'linear-gradient(135deg, rgba(84, 116, 180, 0.18), rgba(84, 116, 180, 0.04))',
           }}
         />
       ))}
-    </SimpleGrid>
+    </Box>
   )
 }
 

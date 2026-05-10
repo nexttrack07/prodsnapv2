@@ -13,6 +13,7 @@ import {
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { Notifications } from '@mantine/notifications'
+import { ModalsProvider } from '@mantine/modals'
 import type { QueryClient } from '@tanstack/react-query'
 import { Authenticated } from 'convex/react'
 import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
@@ -114,12 +115,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <MantineProvider theme={theme} forceColorScheme="dark">
-          <Notifications position={isMobile ? 'top-center' : 'bottom-right'} />
-          <Authenticated>
-            <BillingSync />
-            <OnboardingGuard />
-          </Authenticated>
-          <LayoutSwitcher>{children}</LayoutSwitcher>
+          <ModalsProvider>
+            <Notifications position={isMobile ? 'top-center' : 'bottom-right'} />
+            <Authenticated>
+              <BillingSync />
+              <OnboardingGuard />
+            </Authenticated>
+            <LayoutSwitcher>{children}</LayoutSwitcher>
+          </ModalsProvider>
         </MantineProvider>
         <Scripts />
       </body>

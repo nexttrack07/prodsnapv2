@@ -11,4 +11,11 @@ crons.hourly(
   internal.billing.syncPlan.refreshStalePeriodsInternal,
 )
 
+crons.interval(
+  'retry failed billing webhooks',
+  { minutes: 1 },
+  internal.billing.webhookHandler.retryFailedWebhooks,
+  {},
+)
+
 export default crons

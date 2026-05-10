@@ -22,7 +22,8 @@ export function CreditsIndicator() {
     return null
   }
 
-  const isPastDue = (status as { billingStatus?: string }).billingStatus === 'past_due'
+  const billingStatus = (status as { billingStatus?: string }).billingStatus
+  const isPastDue = billingStatus === 'past_due' || billingStatus === 'incomplete' || billingStatus === 'unpaid'
 
   const used = status.creditsUsed
   const total = status.creditsTotal

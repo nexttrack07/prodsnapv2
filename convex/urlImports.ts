@@ -15,6 +15,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from './_generated/server'
 import { internal } from './_generated/api'
 
@@ -47,6 +48,42 @@ export const listMyUrlImports = query({
   },
 })
 
+// URL imports trigger Firecrawl (paid) + LLM extraction. Cap at 10/user/min so
+// a runaway loop can't drain Firecrawl credits.
+const URL_IMPORT_RATE_WINDOW_MS = 60_000
+const URL_IMPORT_RATE_MAX_CALLS = 10
+
+async function enforceUrlImportRateLimit(ctx: MutationCtx, userId: string): Promise<void> {
+  const since = Date.now() - URL_IMPORT_RATE_WINDOW_MS
+  const recent = await ctx.db
+    .query('billingEvents')
+    .withIndex('by_userId', (q) => q.eq('userId', userId))
+    .filter((q) =>
+      q.and(
+        q.gte(q.field('timestamp'), since),
+        q.eq(q.field('mutationName'), 'createUrlImport'),
+      ),
+    )
+    .collect()
+  if (recent.length >= URL_IMPORT_RATE_MAX_CALLS) {
+    await ctx.db.insert('billingEvents', {
+      userId,
+      mutationName: 'createUrlImport',
+      allowed: false,
+      timestamp: Date.now(),
+      context: 'rate-limited',
+    })
+    throw new Error('Too many URL imports — please wait a minute before trying again.')
+  }
+  await ctx.db.insert('billingEvents', {
+    userId,
+    mutationName: 'createUrlImport',
+    allowed: true,
+    timestamp: Date.now(),
+    context: 'usage',
+  })
+}
+
 // ─── Public mutation: kick off an import ──────────────────────────────────
 export const createUrlImport = mutation({
   args: {
@@ -58,6 +95,7 @@ export const createUrlImport = mutation({
   },
   handler: async (ctx, { url, mode }) => {
     const userId = await requireAuth(ctx)
+    await enforceUrlImportRateLimit(ctx, userId)
     const sourceUrl = normalizeUrl(url)
     const resolvedMode = mode ?? 'product-and-brand'
 

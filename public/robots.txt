@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /account
+Disallow: /studio
+Disallow: /library
+Disallow: /products
+Disallow: /onboarding
+Disallow: /checkout
+Disallow: /home
+
+Sitemap: https://prodsnap.io/sitemap.xml

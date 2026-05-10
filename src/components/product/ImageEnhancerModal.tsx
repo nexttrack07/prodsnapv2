@@ -22,6 +22,7 @@ import {
 import { useMutation } from '@tanstack/react-query'
 import { useConvexMutation } from '@convex-dev/react-query'
 import { notifications } from '@mantine/notifications'
+import { modals } from '@mantine/modals'
 import { useMediaQuery } from '@mantine/hooks'
 import {
   IconDownload,
@@ -169,18 +170,25 @@ export function ImageEnhancerModal({
       })
       return
     }
-    if (!confirm('Delete this image? This cannot be undone.')) return
-    try {
-      await deleteMutation.mutateAsync({ imageId: image._id })
-      notifications.show({ title: 'Deleted', message: 'Image removed.', color: 'green' })
-      onClose()
-    } catch (err) {
-      notifications.show({
-        title: 'Delete failed',
-        message: err instanceof Error ? err.message : 'Try again',
-        color: 'red',
-      })
-    }
+    modals.openConfirmModal({
+      title: 'Delete this image?',
+      children: <Text size="sm">This cannot be undone.</Text>,
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          await deleteMutation.mutateAsync({ imageId: image._id })
+          notifications.show({ title: 'Deleted', message: 'Image removed.', color: 'green' })
+          onClose()
+        } catch (err) {
+          notifications.show({
+            title: 'Delete failed',
+            message: err instanceof Error ? err.message : 'Try again',
+            color: 'red',
+          })
+        }
+      },
+    })
   }
 
   // Shared sidebar content (header + actions + enhance buttons)

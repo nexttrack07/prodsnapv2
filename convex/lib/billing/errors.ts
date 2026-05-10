@@ -10,6 +10,7 @@ import { ConvexError } from 'convex/values'
 
 export type BillingErrorCode =
   | 'NO_SUBSCRIPTION'
+  | 'NO_PLAN'
   | 'MISSING_CAPABILITY'
   | 'PRODUCT_LIMIT'
   | 'CREDITS_EXHAUSTED'

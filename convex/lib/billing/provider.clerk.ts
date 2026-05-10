@@ -38,11 +38,20 @@ export class ClerkBillingProvider implements BillingProvider {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) return null
 
-    // Look up the user's synced plan row.
-    const row = await ctx.db
+    // Look up the user's synced plan row. Webhook-first writes key by
+    // clerkUserId while client-first writes key by tokenIdentifier — fall
+    // back to clerkUserId so either ordering converges on the same row.
+    let row = await ctx.db
       .query('userPlans')
       .withIndex('by_userId', (q) => q.eq('userId', identity.tokenIdentifier))
       .unique()
+    const clerkUserId = identity.subject
+    if (!row && clerkUserId) {
+      row = await ctx.db
+        .query('userPlans')
+        .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', clerkUserId))
+        .first()
+    }
 
     const plan = row?.plan ?? ''
     const planConfig = plan ? PLAN_CONFIG[plan] : undefined

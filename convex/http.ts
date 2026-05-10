@@ -5,6 +5,30 @@ import { Webhook } from 'svix'
 
 const http = httpRouter()
 
+// Schema version constant — bump when introducing breaking schema changes
+// so external probes can detect deploy boundaries via /healthz.
+const SCHEMA_VERSION = '1'
+// Captured at module load (per cold start) — close enough for a deploy probe.
+const DEPLOYED_AT = new Date().toISOString()
+
+http.route({
+  path: '/healthz',
+  method: 'GET',
+  handler: httpAction(async () => {
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        schemaVersion: SCHEMA_VERSION,
+        deployedAt: DEPLOYED_AT,
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      },
+    )
+  }),
+})
+
 http.route({
   path: '/webhooks/clerk',
   method: 'POST',

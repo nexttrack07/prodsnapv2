@@ -8,7 +8,50 @@ import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import { internal } from './_generated/api'
 import { uploadFromUrl, deleteFromR2 } from './r2'
+import { upgradeToHighResImageUrl } from './lib/imageUrls'
 import { nanoid } from 'nanoid'
+
+// HEAD an image URL and return its Content-Length in bytes, or null if
+// the header is missing / the request fails. Used as a quality floor
+// before upload — if the response is suspiciously small (a thumbnail
+// the upgrade fn missed), skip it instead of uploading garbage to R2.
+//
+// Uses the SAME headers as uploadFromUrl: many CDNs hotlink-block any
+// fetch that doesn't look browser-shaped, including HEAD requests.
+async function headSize(url: string): Promise<number | null> {
+  let referer: string | undefined
+  try {
+    referer = new URL(url).origin
+  } catch {
+    return null
+  }
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        ...(referer ? { Referer: referer } : {}),
+      },
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    const len = res.headers.get('content-length')
+    if (!len) return null
+    const n = parseInt(len, 10)
+    return Number.isFinite(n) ? n : null
+  } catch {
+    return null
+  }
+}
+
+// Reject thumbnails that slipped past upgradeToHighResImageUrl. 30KB is
+// well below a usable product image (Harry's _large.jpg is 32KB / 480px;
+// the original is ~184KB / full-res). Anything below this floor is
+// either a tracking pixel, a tiny preview, or a CDN we don't yet support.
+const MIN_IMAGE_BYTES = 30_000
 
 type FirecrawlExtractedJson = {
   productName?: string
@@ -184,16 +227,18 @@ export const runUrlImport = internalAction({
       const fallbackDescription =
         meta.description || meta.ogDescription || meta['og:description']
 
-      console.log(
-        `[urlImport ${importId}] firecrawl extracted: ` +
-          `name=${JSON.stringify((extracted.productName ?? '').slice(0, 60))} ` +
-          `descLen=${extracted.productDescription?.length ?? 0} ` +
-          `images=${(extracted.productImageUrls ?? []).length} ` +
-          `metaTitle=${JSON.stringify(fallbackTitle?.slice(0, 60) ?? '')} ` +
-          `metaDescLen=${fallbackDescription?.length ?? 0} ` +
-          `metaOgImage=${fallbackImage ? 'yes' : 'no'} ` +
-          `markdownLen=${scrapePayload.data.markdown?.length ?? 0}`,
-      )
+      if (process.env.DEBUG_AI === 'true') {
+        console.log(
+          `[urlImport ${importId}] firecrawl extracted: ` +
+            `name=${JSON.stringify((extracted.productName ?? '').slice(0, 60))} ` +
+            `descLen=${extracted.productDescription?.length ?? 0} ` +
+            `images=${(extracted.productImageUrls ?? []).length} ` +
+            `metaTitle=${JSON.stringify(fallbackTitle?.slice(0, 60) ?? '')} ` +
+            `metaDescLen=${fallbackDescription?.length ?? 0} ` +
+            `metaOgImage=${fallbackImage ? 'yes' : 'no'} ` +
+            `markdownLen=${scrapePayload.data.markdown?.length ?? 0}`,
+        )
+      }
 
       const isBrandOnly = importRow.mode === 'brand-only'
 
@@ -218,22 +263,30 @@ export const runUrlImport = internalAction({
         //    sources miss)
         const markdownImages = extractMarkdownImageUrls(scrapePayload.data.markdown ?? '')
         const htmlImages = extractHtmlImageUrls(scrapePayload.data.html ?? '')
+        // Order matters — the first 5 (after dedup + upgrade) win:
+        //   1. HTML <img>/srcset: extractor picks LARGEST descriptor → highest-res candidates
+        //   2. Markdown: also direct image URLs, no srcset metadata
+        //   3. LLM-extracted: tends to grab whatever's visible-rendered, often the gallery
+        //      thumbnail variant on Shopify-style CDNs
+        //   4. og:image: usually a cropped 1200×630 social card, not the product photo
         const rawImageUrls = [
+          ...htmlImages,
+          ...markdownImages,
           ...(extracted.productImageUrls ?? []),
           ...(fallbackImage ? [fallbackImage] : []),
-          ...markdownImages,
-          ...htmlImages,
         ]
         const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 5)
-        console.log(
-          `[urlImport ${importId}] image urls: raw=${rawImageUrls.length} ` +
-            `(llm=${(extracted.productImageUrls ?? []).length} ` +
-            `og=${fallbackImage ? 1 : 0} ` +
-            `markdown=${markdownImages.length} ` +
-            `html=${htmlImages.length}) ` +
-            `valid=${candidateImages.length} ` +
-            `rejected=${rawImageUrls.length - candidateImages.length}`,
-        )
+        if (process.env.DEBUG_AI === 'true') {
+          console.log(
+            `[urlImport ${importId}] image urls: raw=${rawImageUrls.length} ` +
+              `(llm=${(extracted.productImageUrls ?? []).length} ` +
+              `og=${fallbackImage ? 1 : 0} ` +
+              `markdown=${markdownImages.length} ` +
+              `html=${htmlImages.length}) ` +
+              `valid=${candidateImages.length} ` +
+              `rejected=${rawImageUrls.length - candidateImages.length}`,
+          )
+        }
 
         if (candidateImages.length === 0) {
           // Surface the raw URLs we got so the user knows whether Firecrawl
@@ -257,6 +310,14 @@ export const runUrlImport = internalAction({
         const uploadErrors: string[] = []
         for (let i = 0; i < candidateImages.length; i++) {
           const sourceUrl = candidateImages[i]
+          // Quality floor: HEAD first; reject anything below MIN_IMAGE_BYTES
+          // so we don't ship pixelated thumbnails into R2. Servers that
+          // don't return Content-Length fall through (size === null).
+          const size = await headSize(sourceUrl)
+          if (size !== null && size < MIN_IMAGE_BYTES) {
+            uploadErrors.push(`Skipped (too small: ${Math.round(size / 1024)}kb): ${sourceUrl}`)
+            continue
+          }
           const ext = guessExtension(sourceUrl)
           const key = `imports/${importId}/${i}-${nanoid(8)}${ext}`
           try {
@@ -515,49 +576,6 @@ function extractHtmlImageUrls(html: string): string[] {
   return out
 }
 
-// Many image CDNs serve the same image at multiple sizes via path
-// tokens (Shopify "_100x100", "_320x"), query params (?width=100),
-// or path segments (.../w_120/...). Lazy-loaded galleries often
-// reference the small preview by default. Rewrite obvious
-// thumbnail patterns to a high-resolution variant.
-function upgradeToHighResImageUrl(rawUrl: string): string {
-  let parsed: URL
-  try {
-    parsed = new URL(rawUrl)
-  } catch {
-    return rawUrl
-  }
-
-  // Shopify CDN: ".../t-shirt_100x100.jpg" → strip the size token so we get
-  // the original. The CDN serves the original when no size suffix is present.
-  // Match _NxN, _Nx, _xN where N is digits, just before the extension.
-  parsed.pathname = parsed.pathname.replace(
-    /(_\d+x\d*|_x\d+)(?=\.[a-z]{2,5}$)/i,
-    '',
-  )
-
-  // Cloudinary: ".../w_120,h_120,c_fill/.../image.jpg" — drop common small
-  // transformations so the original is served. We're conservative: only
-  // strip transformations that look like resize-only segments.
-  parsed.pathname = parsed.pathname.replace(
-    /\/(w_\d+|h_\d+|c_(?:fill|fit|scale)|q_auto|f_auto)(?:,(?:w_\d+|h_\d+|c_(?:fill|fit|scale)|q_auto|f_auto))*\//gi,
-    '/',
-  )
-
-  // Generic resize query params: width, w, height, h. Strip when small
-  // (<400) so the CDN falls back to its default size.
-  const stripParams = ['width', 'w', 'height', 'h']
-  for (const p of stripParams) {
-    const v = parsed.searchParams.get(p)
-    if (v != null) {
-      const n = parseInt(v, 10)
-      if (Number.isFinite(n) && n < 400) parsed.searchParams.delete(p)
-    }
-  }
-
-  return parsed.toString()
-}
-
 function looksLikeImageUrl(u: string): boolean {
   let parsed: URL
   try {
@@ -788,7 +806,9 @@ export const deleteImportR2Objects = internalAction({
         console.warn(`[deleteImportR2Objects] Failed to delete ${key}:`, err)
       }
     }
-    // eslint-disable-next-line no-console
-    console.log(`[deleteImportR2Objects] deleted ${deleted}/${keys.length} R2 objects`)
+    if (process.env.DEBUG_AI === 'true') {
+      // eslint-disable-next-line no-console
+      console.log(`[deleteImportR2Objects] deleted ${deleted}/${keys.length} R2 objects`)
+    }
   },
 })

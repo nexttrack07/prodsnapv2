@@ -1,9 +1,11 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
+import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
 import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useAction, useQuery as useConvexQuery } from 'convex/react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { notifications } from '@mantine/notifications'
+import { modals } from '@mantine/modals'
 import { useMediaQuery, useHotkeys, useDisclosure } from '@mantine/hooks'
 import { useConvex } from 'convex/react'
 import {
@@ -115,6 +117,7 @@ export const Route = createFileRoute('/studio/$productId')({
     return out
   },
   component: ProductWorkspacePage,
+  errorComponent: DefaultCatchBoundary,
 })
 
 type AspectRatio = '1:1' | '4:5' | '9:16'
@@ -276,7 +279,7 @@ function ProductWorkspacePage() {
 
   if (productLoading) {
     return (
-      <Container size="lg" py={40}>
+      <Container fluid p="lg">
         <Group gap="xs" mb="lg">
           <Skeleton height={20} width={100} radius="sm" />
           <Skeleton height={20} width={20} radius="sm" />
@@ -308,7 +311,7 @@ function ProductWorkspacePage() {
 
   if (!product) {
     return (
-      <Container size="lg" py={40}>
+      <Container fluid p="lg">
         <Box py={80} ta="center">
           <Title order={2} fz="xl" fw={500} c="white" mb="xs">Product not found</Title>
           <Anchor component={Link} to="/studio" c="brand.5">
@@ -325,7 +328,7 @@ function ProductWorkspacePage() {
   const anglesCount = product.marketingAngles?.length ?? 0
 
   return (
-    <Container size="lg" py="md">
+    <Container fluid p="lg">
       {/* US-U06: Credits exhausted banner */}
       {creditsExhausted && (
         <Alert
@@ -2575,7 +2578,7 @@ function GenerationCard({
     if (diffDays === 1) return 'Yesterday'
     if (diffDays < 7) return `${diffDays}d ago`
 
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   }
 
   const getModeLabel = (mode: string): string => {
@@ -3201,11 +3204,21 @@ function GenerateWizard({
 
   function applyBuilderToPrompt() {
     const assembled = builderPreview
-    if (prompt.trim().length > 0) {
-      if (!window.confirm('This will replace your current prompt. Continue?')) return
+    const apply = () => {
+      setPrompt(assembled)
+      setBuilderOpen(false)
     }
-    setPrompt(assembled)
-    setBuilderOpen(false)
+    if (prompt.trim().length === 0) {
+      apply()
+      return
+    }
+    modals.openConfirmModal({
+      title: 'Replace your prompt?',
+      children: <Text size="sm">This will overwrite your current prompt.</Text>,
+      labels: { confirm: 'Replace', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: apply,
+    })
   }
 
   function resetBuilder() {
@@ -3233,11 +3246,21 @@ function GenerateWizard({
   }
 
   function useSuggestion(text: string) {
-    if (prompt.trim().length > 0) {
-      if (!window.confirm('This will replace your current prompt. Continue?')) return
+    const apply = () => {
+      setPrompt(text)
+      setSelectedAngleIndex(null)
     }
-    setPrompt(text)
-    setSelectedAngleIndex(null)
+    if (prompt.trim().length === 0) {
+      apply()
+      return
+    }
+    modals.openConfirmModal({
+      title: 'Replace your prompt?',
+      children: <Text size="sm">This will overwrite your current prompt.</Text>,
+      labels: { confirm: 'Replace', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: apply,
+    })
   }
 
   // ── Generate logic ─────────────────────────────────────────────────────────
@@ -3402,7 +3425,7 @@ function GenerateWizard({
       <Box style={{
         display: 'grid',
         gridTemplateColumns: isMobile ? '1fr' : '1fr 320px',
-        gap: 'var(--mantine-spacing-lg)',
+        gap: 'var(--mantine-spacing-md)',
       }}>
         {/* ═══ Per-segment content area ═══ */}
         <Box
@@ -3795,7 +3818,7 @@ function GenerateWizard({
                   display: 'grid',
                   gridTemplateColumns: isMobile
                     ? 'repeat(2, 1fr)'
-                    : 'repeat(4, 1fr)',
+                    : 'repeat(auto-fill, minmax(180px, 1fr))',
                   gap: 1,
                 }}>
                   {Array.from({ length: 8 }).map((_, i) => (
@@ -3818,7 +3841,11 @@ function GenerateWizard({
                       not rendering newly-fetched cells reliably. */}
                   <Box
                     style={{
-                      columnCount: isMobile ? 2 : 4,
+                      // CSS columns "as many 180px+ columns as fit". Gives
+                      // 5 cols at ~960px main column, 6 at ~1080px, 7+ on
+                      // wide displays — denser than the previous fixed 4.
+                      columnWidth: isMobile ? 'auto' : 180,
+                      columnCount: isMobile ? 2 : undefined,
                       columnGap: 1,
                     }}
                   >

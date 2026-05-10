@@ -184,8 +184,13 @@ export async function requireProductLimitForUser(
 
   const plan = PLAN_CONFIG[row.plan]
   if (!plan) {
-    // Unknown plan slug — allow through (forward-compat).
-    return
+    console.warn(
+      '[requireProductLimitForUser] no plan found for user',
+      userId,
+      'slug=',
+      row.plan,
+    )
+    throw billingError('NO_PLAN', 'No active subscription')
   }
   const limit = plan.productLimit
   if (limit === Infinity) return

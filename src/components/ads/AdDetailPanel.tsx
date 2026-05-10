@@ -119,7 +119,7 @@ function getModeColor(mode: string): string {
 }
 
 function formatTimestamp(ts: number): string {
-  return new Date(ts).toLocaleDateString('en-US', {
+  return new Date(ts).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

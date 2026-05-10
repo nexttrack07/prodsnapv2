@@ -339,6 +339,23 @@ export const clearBrandLogoStorage = internalAction({
   },
 })
 
+/**
+ * Generic best-effort R2 object delete used by the GDPR user-deletion path
+ * (see convex/billing/userDeletion.ts). Distinct from the brand/template
+ * helpers because the source table is heterogeneous — products, generations,
+ * url-import uploads, inspirations, etc.
+ */
+export const clearUserObjectStorage = internalAction({
+  args: { key: v.string() },
+  handler: async (_ctx, { key }) => {
+    try {
+      await deleteFromR2(key)
+    } catch (err) {
+      console.warn(`clearUserObjectStorage: failed to delete R2 key ${key}:`, err)
+    }
+  },
+})
+
 export const clearTemplateStorage = internalAction({
   args: { key: v.string() },
   handler: async (_ctx, { key }) => {

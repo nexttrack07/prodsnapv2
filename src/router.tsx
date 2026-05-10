@@ -15,9 +15,22 @@ import { NotFound } from './components/NotFound'
 
 const CLERK_PUBLISHABLE_KEY = (import.meta as any).env.VITE_CLERK_PUBLISHABLE_KEY
 
+let globalHandlersRegistered = false
+function registerGlobalErrorHandlers() {
+  if (globalHandlersRegistered || typeof window === 'undefined') return
+  globalHandlersRegistered = true
+  window.addEventListener('unhandledrejection', (event) => {
+    console.warn('[unhandledrejection]', event.reason)
+  })
+  window.addEventListener('error', (event) => {
+    console.warn('[window.onerror]', event.error ?? event.message)
+  })
+}
+
 export function getRouter() {
   if (typeof document !== 'undefined') {
     notifyManager.setScheduler(window.requestAnimationFrame)
+    registerGlobalErrorHandlers()
   }
 
   const CONVEX_URL = (import.meta as any).env.VITE_CONVEX_URL!
@@ -55,7 +68,9 @@ export function getRouter() {
       <ClerkProvider
         publishableKey={CLERK_PUBLISHABLE_KEY}
         signInUrl="/sign-in"
-        signUpUrl="/sign-in"
+        signUpUrl="/sign-up"
+        signInForceRedirectUrl="/home"
+        signUpForceRedirectUrl="/home"
         afterSignOutUrl="/"
       >
         <ConvexProviderWithClerk client={convexQueryClient.convexClient} useAuth={useAuth}>

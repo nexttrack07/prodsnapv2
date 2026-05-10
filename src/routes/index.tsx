@@ -1,8 +1,16 @@
-import { useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMediaQuery } from '@mantine/hooks'
 import { LogoMark } from '~/components/Logo'
 import { seo } from '~/utils/seo'
+
+// Single layout context — replaces 12 per-section useMediaQuery listeners.
+// `getInitialValueInEffect: false` makes Mantine read matchMedia synchronously
+// on first client render, so phones don't flash desktop layout before hydration.
+const LandingLayoutContext = createContext<boolean>(false)
+function useIsMobile() {
+  return useContext(LandingLayoutContext)
+}
 
 export const Route = createFileRoute('/')({
   head: () => ({
@@ -10,7 +18,7 @@ export const Route = createFileRoute('/')({
       ...seo({
         title: 'ProdSnap — performance creative co-pilot for media buyers',
         description:
-          'Save what\'s winning. Generate ads that rhyme with it. One loop for swipe, generation, and winners — so your references actually shape the next batch.',
+          'Save winning ads to a swipe file. Generate 12 Meta-ready variants per batch — using those exact references.',
         image: '/prodsnap_logo.png',
       }),
     ],
@@ -30,7 +38,7 @@ const T = {
   ink: '#0B0D10',
   text: '#FFFFFF',
   textMuted: '#9CA1AA',
-  textDim: '#6B7079',
+  textDim: '#8A8F98',
   textOnCream: '#0B0D10',
   textOnCreamMuted: '#5A6068',
   border: '#262A31',
@@ -41,8 +49,17 @@ const T = {
   brandTint: 'rgba(0, 99, 255, 0.10)',
   teal: '#5FB8A6',
   tealTint: 'rgba(95, 184, 166, 0.14)',
-  warn: '#94A3B8',
+  neutral: '#94A3B8',
 }
+
+// Shared section padding — duplicated 8 places before consolidation.
+const SECTION_PADDING = (m: boolean) => m ? '64px 16px' : '120px 32px'
+
+type ComparisonRow = { label: string; status: boolean | 'limited' }
+type Toggle = { label: string; on: boolean }
+type AngleEntry = { title: string; hook: string; selected: boolean }
+type FAQItem = { q: string; a: string }
+type PricingFeature = { label: string; on: boolean }
 
 const fontDisplay = '"Inter Tight", "Inter", -apple-system, sans-serif'
 const fontBody = '"Inter", -apple-system, sans-serif'
@@ -107,35 +124,48 @@ function Pill({ children, color, bg, style }: { children: React.ReactNode; color
 }
 
 
-function Btn({ children, kind = 'primary', size = 'md', style, icon }: {
-  children: React.ReactNode; kind?: 'primary' | 'secondary' | 'secondaryCream' | 'ghost' | 'light'; size?: 'sm' | 'md' | 'lg'; style?: React.CSSProperties; icon?: React.ReactNode
+type BtnKind = 'primary' | 'secondary' | 'secondaryCream' | 'ghost' | 'light'
+type BtnSize = 'sm' | 'md' | 'lg'
+function Btn({ children, kind = 'primary', size = 'md', style, icon, as = 'button' }: {
+  children: React.ReactNode; kind?: BtnKind; size?: BtnSize; style?: React.CSSProperties; icon?: React.ReactNode; as?: 'button' | 'span'
 }) {
-  const sizes = {
+  const sizes: Record<BtnSize, React.CSSProperties> = {
     sm: { padding: '8px 14px', fontSize: 13, gap: 6 },
     md: { padding: '12px 20px', fontSize: 14, gap: 8 },
     lg: { padding: '14px 24px', fontSize: 15, gap: 10 },
   }
-  const kinds: Record<string, React.CSSProperties> = {
+  const kinds: Record<BtnKind, React.CSSProperties> = {
     primary: { background: T.brand, color: '#fff', border: `1px solid ${T.brand}` },
     secondary: { background: 'transparent', color: T.text, border: `1px solid ${T.border}` },
     secondaryCream: { background: 'transparent', color: T.ink, border: `1px solid ${T.borderCream}` },
     ghost: { background: 'transparent', color: T.text, border: '1px solid transparent' },
     light: { background: T.cream, color: T.ink, border: `1px solid ${T.cream}` },
   }
+  const sharedStyle: React.CSSProperties = {
+    ...sizes[size],
+    ...kinds[kind],
+    fontFamily: fontBody,
+    fontWeight: 500,
+    borderRadius: 8,
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    letterSpacing: '-0.01em',
+    transition: 'transform .12s ease, background .12s ease',
+    ...style,
+  }
+  // When wrapped in a <Link>, render as <span> so the parent <a> owns
+  // the keyboard focus and we don't ship <button> inside <a> (invalid HTML).
+  if (as === 'span') {
+    return (
+      <span role="button" tabIndex={-1} style={sharedStyle}>
+        {children}
+        {icon}
+      </span>
+    )
+  }
   return (
-    <button style={{
-      ...sizes[size],
-      ...kinds[kind],
-      fontFamily: fontBody,
-      fontWeight: 500,
-      borderRadius: 8,
-      cursor: 'pointer',
-      display: 'inline-flex',
-      alignItems: 'center',
-      letterSpacing: '-0.01em',
-      transition: 'transform .12s ease, background .12s ease',
-      ...style,
-    }}>
+    <button style={sharedStyle}>
       {children}
       {icon}
     </button>
@@ -161,9 +191,9 @@ const HERO_VARIANT_SHOTS = [
 // HERO
 // ============================================================
 function Hero() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{ position: 'relative', overflow: 'hidden' }}>
+    <section aria-labelledby="hero-title" style={{ position: 'relative', overflow: 'hidden' }}>
       {/* Ambient gradient */}
       <div style={{
         position: 'absolute',
@@ -186,7 +216,7 @@ function Hero() {
           color: T.text,
           maxWidth: 1100,
           paddingBottom: '0.15em',
-        }}>
+        }} id="hero-title">
           Save what's winning.<br />
           <span style={{ color: T.textMuted, fontWeight: 400 }}>Generate ads that</span>{' '}
           <span style={{
@@ -205,15 +235,28 @@ function Hero() {
           maxWidth: 'none',
           fontWeight: 400,
         }}>
-          One loop for swipe, generation, and winners — so your references actually shape the next batch.
+          Save winning ads to a swipe file. Generate 12 Meta-ready variants per batch — using those exact references.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 20 }}>
           <div style={{ display: 'flex', gap: 10 }}>
-            <Link to="/home" style={{ textDecoration: 'none' }}>
-              <Btn kind="primary" size="lg">Start 7-day free trial →</Btn>
+            <Link to="/onboarding" style={{ textDecoration: 'none' }}>
+              <Btn as="span" kind="primary" size="lg">Start 7-day free trial →</Btn>
             </Link>
           </div>
           <MonoLabel>card required · cancel before day 7, no charge</MonoLabel>
+          <a
+            href="#loop-title"
+            style={{
+              fontFamily: fontBody,
+              fontSize: 13,
+              color: T.textMuted,
+              textDecoration: 'none',
+              marginTop: 4,
+              cursor: 'pointer',
+            }}
+          >
+            see how it works ↓
+          </a>
         </div>
 
         {/* Hero composition: photo → batch */}
@@ -252,7 +295,7 @@ function Hero() {
           {/* Arrow + batch */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <MonoLabel>02 · one batch · 12 distinct variants · 1:1 / 4:5 / 9:16</MonoLabel>
+              <MonoLabel>02 · one batch · 6 of 12 variants · 1:1 / 4:5 / 9:16</MonoLabel>
             </div>
             <div style={{
               background: T.bgElev,
@@ -345,23 +388,23 @@ function LoopArrow() {
 }
 
 function LoopSection() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{ background: T.cream, color: T.ink, position: 'relative' }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '120px 32px' }}>
+    <section aria-labelledby="loop-title" style={{ background: T.cream, color: T.ink, position: 'relative' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>the loop · 01</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
-            fontSize: isMobile ? 36 : 64,
+            fontSize: isMobile ? 36 : 56,
             lineHeight: 1.05,
-            letterSpacing: '-0.035em',
+            letterSpacing: '-0.03em',
             fontWeight: 600,
             margin: '20px auto 0',
             color: T.ink,
             maxWidth: 900,
             paddingBottom: '0.18em',
-          }}>
+          }} id="loop-title">
             Swipe feeds generation.{' '}
             <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Generation feeds winners.</span>{' '}
             <span style={{ color: T.brand }}>Winners feed swipe.</span>
@@ -523,9 +566,9 @@ function LoopSection() {
 // ============================================================
 
 function CompareCard({ tier, title, desc, rows, primary }: {
-  tier: string; title: string; desc: string; rows: Array<[string, boolean | 'limited']>; primary?: boolean
+  tier: string; title: string; desc: string; rows: ComparisonRow[]; primary?: boolean
 }) {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
     <div style={{
       background: primary
@@ -584,7 +627,7 @@ function CompareCard({ tier, title, desc, rows, primary }: {
         marginBottom: primary ? 26 : 22,
       }}>{desc}</p>
       <div style={{ borderTop: `1px solid ${primary ? '#ffffff33' : T.border}` }}>
-        {rows.map(([label, val], i) => (
+        {rows.map(({ label, status }, i) => (
           <div key={i} style={{
             display: 'flex',
             justifyContent: 'space-between',
@@ -599,9 +642,9 @@ function CompareCard({ tier, title, desc, rows, primary }: {
               fontWeight: primary ? 500 : 400,
             }}>{label}</span>
             <span style={{ fontFamily: fontMono, fontSize: primary ? 13 : 12 }}>
-              {val === true && <span style={{ color: primary ? '#fff' : T.teal, fontWeight: primary ? 600 : 400 }}>● yes</span>}
-              {val === false && <span style={{ color: primary ? '#ffffff66' : T.textDim }}>○ no</span>}
-              {val === 'limited' && <span style={{ color: primary ? '#ffffffaa' : T.warn }}>◐ limited</span>}
+              {status === true && <span style={{ color: primary ? '#fff' : T.teal, fontWeight: primary ? 600 : 400 }}>● yes</span>}
+              {status === false && <span style={{ color: primary ? '#ffffff66' : T.textDim }}>○ no</span>}
+              {status === 'limited' && <span style={{ color: primary ? '#ffffffaa' : T.neutral }}>◐ limited</span>}
             </span>
           </div>
         ))}
@@ -611,10 +654,10 @@ function CompareCard({ tier, title, desc, rows, primary }: {
 }
 
 function SplitSection() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{ background: T.bg, color: T.text }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '120px 32px' }}>
+    <section aria-labelledby="split-title" style={{ background: T.bg, color: T.text }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow style={{ justifyContent: 'center' }}>positioning · 02</Eyebrow>
           <h2 style={{
@@ -626,9 +669,8 @@ function SplitSection() {
             margin: '20px auto 16px',
             maxWidth: 'none',
             paddingBottom: '0.18em',
-          }}>
-            Most teams run two tools.{' '}
-            <span style={{ color: T.textMuted, fontWeight: 400 }}>We don't see why.</span>
+          }} id="split-title">
+            Swipe and generation belong in the same tool.
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, maxWidth: 'none', margin: '0 auto', lineHeight: 1.55 }}>
             Swipe tools study what's winning. Generators make new things. Almost no one closes the loop.
@@ -641,12 +683,12 @@ function SplitSection() {
             title="Swipe-file tools"
             desc="Browse and save winning ads from a public library. Tag and organize. But they're a research tool — not a creative one."
             rows={[
-              ['Swipe library', true],
-              ['Save / tag refs', true],
-              ['Generate ads', false],
-              ['Angle extraction', false],
-              ['Multi-brand', 'limited'],
-              ['Surgical iteration', false],
+              { label: 'Swipe library', status: true },
+              { label: 'Save / tag refs', status: true },
+              { label: 'Generate ads', status: false },
+              { label: 'Angle extraction', status: false },
+              { label: 'Multi-brand', status: 'limited' },
+              { label: 'Surgical iteration', status: false },
             ]}
           />
           <CompareCard
@@ -654,12 +696,12 @@ function SplitSection() {
             title="Generic AI ad gen"
             desc="Type a prompt, get an image. No memory of category. No reference for what's already converting in your niche. Templates only."
             rows={[
-              ['Swipe library', false],
-              ['Save / tag refs', false],
-              ['Generate ads', true],
-              ['Angle extraction', false],
-              ['Multi-brand', false],
-              ['Surgical iteration', false],
+              { label: 'Swipe library', status: false },
+              { label: 'Save / tag refs', status: false },
+              { label: 'Generate ads', status: true },
+              { label: 'Angle extraction', status: false },
+              { label: 'Multi-brand', status: false },
+              { label: 'Surgical iteration', status: false },
             ]}
           />
           <CompareCard
@@ -667,12 +709,12 @@ function SplitSection() {
             title="Both. One loop."
             desc="Swipe + reference + generate + iterate, in one place. Per product, per brand. Every signal in your account ends up in the prompt."
             rows={[
-              ['Swipe library', true],
-              ['Save / tag refs', true],
-              ['Generate ads', true],
-              ['Angle extraction', true],
-              ['Multi-brand', true],
-              ['Surgical iteration', true],
+              { label: 'Swipe library', status: true },
+              { label: 'Save / tag refs', status: true },
+              { label: 'Generate ads', status: true },
+              { label: 'Angle extraction', status: true },
+              { label: 'Multi-brand', status: true },
+              { label: 'Surgical iteration', status: true },
             ]}
             primary
           />
@@ -732,10 +774,10 @@ function OnrampCard({ tag, title, desc, children, modes, tagPrimary }: {
 }
 
 function OnrampsSection() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{ background: T.cream, color: T.ink }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '120px 32px' }}>
+    <section aria-labelledby="onramps-title" style={{ background: T.cream, color: T.ink }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>three on-ramps · 03</Eyebrow>
           <h2 style={{
@@ -748,7 +790,7 @@ function OnrampsSection() {
             color: T.ink,
             maxWidth: 900,
             paddingBottom: '0.18em',
-          }}>
+          }} id="onramps-title">
             Templates. Custom prompts. Marketing angles.{' '}
             <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Pick the one that matches your week.</span>
           </h2>
@@ -802,7 +844,7 @@ function OnrampsSection() {
           >
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 10, padding: 4, background: '#fff', border: `1px solid ${T.borderCream}`, borderRadius: 8 }}>
-              {([['Free text', true], ['Chip builder', false], ['From template', false]] as Array<[string, boolean]>).map(([l, on], i) => (
+              {([{ label: 'Free text', on: true }, { label: 'Chip builder', on: false }, { label: 'From template', on: false }] as Toggle[]).map(({ label, on }, i) => (
                 <span key={i} style={{
                   padding: '6px 10px',
                   fontFamily: fontMono,
@@ -814,7 +856,7 @@ function OnrampsSection() {
                   cursor: 'pointer',
                   flex: 1,
                   textAlign: 'center',
-                }}>{l}</span>
+                }}>{label}</span>
               ))}
             </div>
             <div style={{
@@ -838,13 +880,13 @@ function OnrampsSection() {
               <div style={{ fontFamily: fontMono, fontSize: 10, color: T.textOnCreamMuted, marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase' }}>add to prompt</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {([
-                  ['setting', false],
-                  ['lighting', true],
-                  ['mood', false],
-                  ['camera', false],
-                  ['style', false],
-                  ['voc', false],
-                ] as Array<[string, boolean]>).map(([l, on], i) => (
+                  { label: 'setting', on: false },
+                  { label: 'lighting', on: true },
+                  { label: 'mood', on: false },
+                  { label: 'camera', on: false },
+                  { label: 'style', on: false },
+                  { label: 'voc', on: false },
+                ] as Toggle[]).map(({ label, on }, i) => (
                   <span key={i} style={{
                     padding: '5px 10px',
                     fontFamily: fontMono,
@@ -858,7 +900,7 @@ function OnrampsSection() {
                     alignItems: 'center',
                     gap: 4,
                   }}>
-                    {on ? '✓' : '+'} {l}
+                    {on ? '✓' : '+'} {label}
                   </span>
                 ))}
               </div>
@@ -891,15 +933,15 @@ function OnrampsSection() {
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {([
-                ['Comparison', 'vs. the drugstore lotion you settled for', true],
-                ['Curiosity', 'why your night cream stops working at 3am', false],
-                ['Social proof', '"finally a lotion my partner steals"', false],
-                ['Problem callout', 'morning skin shouldn\'t feel like sandpaper', false],
-              ] as Array<[string, string, boolean]>).map(([title, hook, sel]) => (
+                { title: 'Comparison', hook: 'vs. the drugstore lotion you settled for', selected: true },
+                { title: 'Curiosity', hook: 'why your night cream stops working at 3am', selected: false },
+                { title: 'Social proof', hook: '"finally a lotion my partner steals"', selected: false },
+                { title: 'Problem callout', hook: "morning skin shouldn't feel like sandpaper", selected: false },
+              ] as AngleEntry[]).map(({ title, hook, selected }) => (
                 <div key={title} style={{
                   padding: '10px 12px',
-                  background: sel ? T.brand : '#fff',
-                  border: `1px solid ${sel ? T.brand : T.borderCream}`,
+                  background: selected ? T.brand : '#fff',
+                  border: `1px solid ${selected ? T.brand : T.borderCream}`,
                   borderRadius: 6,
                   display: 'flex',
                   gap: 10,
@@ -908,18 +950,18 @@ function OnrampsSection() {
                   <div style={{
                     width: 14, height: 14, marginTop: 2,
                     borderRadius: 7,
-                    border: `1.5px solid ${sel ? '#fff' : T.borderCream}`,
-                    background: sel ? '#fff' : 'transparent',
+                    border: `1.5px solid ${selected ? '#fff' : T.borderCream}`,
+                    background: selected ? '#fff' : 'transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
                   }}>
-                    {sel && <div style={{ width: 6, height: 6, borderRadius: 3, background: T.brand }}/>}
+                    {selected && <div style={{ width: 6, height: 6, borderRadius: 3, background: T.brand }}/>}
                   </div>
                   <div>
-                    <div style={{ fontFamily: fontBody, fontSize: 13, fontWeight: 600, color: sel ? '#fff' : T.ink }}>{title}</div>
-                    <div style={{ fontFamily: fontBody, fontSize: 12, fontStyle: 'italic', color: sel ? '#ffffffcc' : T.textOnCreamMuted, marginTop: 2 }}>"{hook}"</div>
+                    <div style={{ fontFamily: fontBody, fontSize: 13, fontWeight: 600, color: selected ? '#fff' : T.ink }}>{title}</div>
+                    <div style={{ fontFamily: fontBody, fontSize: 12, fontStyle: 'italic', color: selected ? '#ffffffcc' : T.textOnCreamMuted, marginTop: 2 }}>"{hook}"</div>
                   </div>
                 </div>
               ))}
@@ -936,10 +978,10 @@ function OnrampsSection() {
 // ============================================================
 
 function VOCSection() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{ background: T.bg, color: T.text }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '120px 32px' }}>
+    <section aria-labelledby="voc-title" style={{ background: T.bg, color: T.text }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow style={{ justifyContent: 'center' }}>workflow muscle · 04</Eyebrow>
           <h2 style={{
@@ -951,9 +993,8 @@ function VOCSection() {
             margin: '20px auto 0',
             maxWidth: 900,
             paddingBottom: '0.18em',
-          }}>
-            Sounds like the customer.<br />
-            <span style={{ color: T.textMuted, fontWeight: 400 }}>Not like the AI.</span>
+          }} id="voc-title">
+            Headlines that sound like real customers, not AI.
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, lineHeight: 1.55, margin: '32px auto 0', maxWidth: 700 }}>
             Paste real phrases per-product. The generator writes in that exact voice.
@@ -1136,11 +1177,11 @@ function VOCSection() {
 // ============================================================
 
 function SurgicalSection() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{ background: T.cream, color: T.ink }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '120px 32px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+    <section aria-labelledby="surgical-title" style={{ background: T.cream, color: T.ink }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
+        <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>workflow muscle · 05</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
@@ -1152,7 +1193,7 @@ function SurgicalSection() {
             color: T.ink,
             maxWidth: 'none',
             paddingBottom: '0.18em',
-          }}>
+          }} id="surgical-title">
             Change one layer.{' '}
             <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Lock the rest.</span>
           </h2>
@@ -1164,6 +1205,7 @@ function SurgicalSection() {
         {/* Two side-by-side examples: colors + text */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 16 : 24, marginTop: 24 }}>
           <SurgicalExample
+            isMobile={isMobile}
             label="vary: colors"
             sub="same composition · same copy"
             activeChip="Colors"
@@ -1173,6 +1215,7 @@ function SurgicalSection() {
             ]}
           />
           <SurgicalExample
+            isMobile={isMobile}
             label="vary: text"
             sub="same composition · same colors"
             activeChip="Text"
@@ -1211,19 +1254,20 @@ function SurgicalSection() {
 }
 
 function SurgicalExample({
-  label, sub, activeChip, sources,
+  label, sub, activeChip, sources, isMobile = false,
 }: {
   label: string
   sub: string
   activeChip: 'Colors' | 'Text'
   sources: string[]
+  isMobile?: boolean
 }) {
-  const chips: Array<[string, boolean]> = [
-    ['Text', activeChip === 'Text'],
-    ['Icons', false],
-    ['Colors', activeChip === 'Colors'],
-    ['Composition', false],
-    ['Aspect ratio', false],
+  const chips: Toggle[] = [
+    { label: 'Text', on: activeChip === 'Text' },
+    { label: 'Icons', on: false },
+    { label: 'Colors', on: activeChip === 'Colors' },
+    { label: 'Composition', on: false },
+    { label: 'Aspect ratio', on: false },
   ]
   return (
     <div style={{
@@ -1257,8 +1301,8 @@ function SurgicalExample({
         alignItems: 'center',
         flexWrap: 'wrap',
       }}>
-        {chips.map(([l, on]) => (
-          <div key={l} style={{
+        {chips.map(({ label, on }) => (
+          <div key={label} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '5px 10px',
             borderRadius: 999,
@@ -1279,7 +1323,7 @@ function SurgicalExample({
               fontSize: 12,
               color: on ? T.text : T.textMuted,
               fontWeight: on ? 500 : 400,
-            }}>{l}</span>
+            }}>{label}</span>
           </div>
         ))}
       </div>
@@ -1287,11 +1331,11 @@ function SurgicalExample({
       {/* Variants — auto-fit row at 9:16 aspect ratio. Both example cards
           render an equal number of thumbs, so heights match. */}
       <div style={{
-        padding: 16,
+        padding: isMobile ? 12 : 16,
         flex: 1,
         display: 'grid',
         gridTemplateColumns: `repeat(${sources.length}, 1fr)`,
-        gap: 8,
+        gap: isMobile ? 6 : 8,
         alignItems: 'start',
       }}>
         {sources.map((src, i) => (
@@ -1321,10 +1365,10 @@ function SurgicalExample({
 // ============================================================
 
 function FeatureGrid() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{ background: T.bg, color: T.text }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '120px 32px' }}>
+    <section aria-labelledby="features-title" style={{ background: T.bg, color: T.text }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow style={{ justifyContent: 'center' }}>everything else · 06</Eyebrow>
           <h2 style={{
@@ -1336,7 +1380,7 @@ function FeatureGrid() {
             margin: '20px auto 0',
             maxWidth: 900,
             paddingBottom: '0.18em',
-          }}>
+          }} id="features-title">
             The bundled details.{' '}
             <span style={{ color: T.textMuted, fontWeight: 400 }}>Things that usually cost extra.</span>
           </h2>
@@ -1382,16 +1426,16 @@ function PricingSection() {
       sub: 'one buyer, one or two brands',
       price: 39,
       features: [
-        ['Up to 2 brand kits', true],
-        ['200 generations / month', true],
-        ['All AI image models', true],
-        ['All Meta aspect ratios', true],
-        ['Swipe file + angle extraction', true],
-        ['Voice of customer', true],
-        ['Surgical iteration', false],
-        ['Cross-product library', false],
-        ['Priority support', false],
-      ] as Array<[string, boolean]>,
+        { label: 'Up to 2 brand kits', on: true },
+        { label: '200 generations / month', on: true },
+        { label: 'All AI image models', on: true },
+        { label: 'All Meta aspect ratios', on: true },
+        { label: 'Swipe file + angle extraction', on: true },
+        { label: 'Voice of customer', on: true },
+        { label: 'Surgical iteration', on: false },
+        { label: 'Cross-product library', on: false },
+        { label: 'Priority support', on: false },
+      ] as PricingFeature[],
     },
     {
       tier: 'studio',
@@ -1399,39 +1443,39 @@ function PricingSection() {
       price: 79,
       popular: true,
       features: [
-        ['Up to 8 brand kits', true],
-        ['1,000 generations / month', true],
-        ['All AI image models', true],
-        ['All Meta aspect ratios', true],
-        ['Swipe file + angle extraction', true],
-        ['Voice of customer', true],
-        ['Surgical iteration', true],
-        ['Cross-product library', true],
-        ['Priority support', false],
-      ] as Array<[string, boolean]>,
+        { label: 'Up to 8 brand kits', on: true },
+        { label: '1,000 generations / month', on: true },
+        { label: 'All AI image models', on: true },
+        { label: 'All Meta aspect ratios', on: true },
+        { label: 'Swipe file + angle extraction', on: true },
+        { label: 'Voice of customer', on: true },
+        { label: 'Surgical iteration', on: true },
+        { label: 'Cross-product library', on: true },
+        { label: 'Priority support', on: false },
+      ] as PricingFeature[],
     },
     {
       tier: 'agency',
       sub: 'agencies running 10+ brands',
       price: 199,
       features: [
-        ['Unlimited brand kits', true],
-        ['5,000 generations / month', true],
-        ['All AI image models', true],
-        ['All Meta aspect ratios', true],
-        ['Swipe file + angle extraction', true],
-        ['Voice of customer', true],
-        ['Surgical iteration', true],
-        ['Cross-product library', true],
-        ['Priority support + onboarding', true],
-      ] as Array<[string, boolean]>,
+        { label: 'Unlimited brand kits', on: true },
+        { label: '5,000 generations / month', on: true },
+        { label: 'All AI image models', on: true },
+        { label: 'All Meta aspect ratios', on: true },
+        { label: 'Swipe file + angle extraction', on: true },
+        { label: 'Voice of customer', on: true },
+        { label: 'Surgical iteration', on: true },
+        { label: 'Cross-product library', on: true },
+        { label: 'Priority support + onboarding', on: true },
+      ] as PricingFeature[],
     },
   ]
 
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{ background: T.cream, color: T.ink }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '120px 32px' }}>
+    <section aria-labelledby="pricing-title" style={{ background: T.cream, color: T.ink }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>start free · 07</Eyebrow>
           <h2 style={{
@@ -1444,7 +1488,7 @@ function PricingSection() {
             color: T.ink,
             maxWidth: 900,
             paddingBottom: '0.18em',
-          }}>
+          }} id="pricing-title">
             Seven days free.{' '}
             <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Then a flat monthly.</span>
           </h2>
@@ -1508,7 +1552,7 @@ function PricingSection() {
                   gap: 10,
                   flex: 1,
                 }}>
-                  {p.features.map(([label, on], i) => (
+                  {p.features.map(({ label, on }, i) => (
                     <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                       <span style={{
                         color: on ? T.teal : (popular ? T.textDim : '#B8BCC4'),
@@ -1527,8 +1571,9 @@ function PricingSection() {
                   ))}
                 </div>
                 <div style={{ marginTop: 24 }}>
-                  <Link to="/home" style={{ textDecoration: 'none', display: 'block' }}>
+                  <Link to="/onboarding" style={{ textDecoration: 'none', display: 'block' }}>
                     <Btn
+                      as="span"
                       kind={popular ? 'primary' : 'secondaryCream'}
                       size="lg"
                       style={{ width: '100%', justifyContent: 'center' }}
@@ -1555,19 +1600,19 @@ function PricingSection() {
 
 function FAQSection() {
   const [open, setOpen] = useState(0)
-  const isMobile = useMediaQuery('(max-width: 768px)')
-  const items: Array<[string, string]> = [
-    ['Why card-required for the trial?', "Anti-abuse, not a trick. ProdSnap generates with paid AI models — without a card, the trial gets farmed in 24 hours and the price has to go up for everyone. Cancel anytime in the 7 days, you won't be charged."],
-    ['Is this the same as AdCreative or Glorify?', "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want quick output. ProdSnap is built for media buyers running performance creative across multiple brands — angle testing, swipe files, voice of customer, winners loops. If you don't know what those words mean, ProdSnap is overpowered for you."],
-    ['How is this different from Foreplay?', "Foreplay is a swipe file. ProdSnap is a swipe file that feeds a generator. The references you save in ProdSnap actually shape the ads we generate — that loop doesn't exist anywhere else."],
-    ['What about my brand consistency?', "Each brand keeps its own kit — colors, fonts, voice notes. Tag a product with the brand it belongs to, and the generator references that kit on every gen. Studio fits 8 brand kits, Agency is unlimited. Kits don't bleed into each other across products."],
-    ['Will the output actually run on Meta?', "Yes — every output is in 1:1, 4:5, or 9:16 (you pick), exported as PNG / WebP / JPG, and meets Meta's Ads Manager spec. Optional ad copy generation follows Meta best practices for headlines, primary texts, and CTAs."],
-    ['Can I bring competitor ads as references?', "Yes. Paste URLs from Meta Ad Library, drag images in, or bookmark templates from our curated library. Per-product. They feed the generator on every batch for that product."],
+  const isMobile = useIsMobile()
+  const items: FAQItem[] = [
+    { q: 'Why card-required for the trial?', a: "Anti-abuse, not a trick. ProdSnap generates with paid AI models — without a card, the trial gets farmed in 24 hours and the price has to go up for everyone. Cancel anytime in the 7 days, you won't be charged." },
+    { q: 'Is this the same as AdCreative or Glorify?', a: "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want a fast prompt-to-output flow. ProdSnap is built for performance teams — if you're testing 5+ angles a week, this is for you. Angle testing, swipe files, voice of customer, winners loops — the muscles you build when you ship creative every week." },
+    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file. ProdSnap is a swipe file that feeds a generator. The references you save in ProdSnap actually shape the ads we generate — that loop doesn't exist anywhere else." },
+    { q: 'What about my brand consistency?', a: "Each brand keeps its own kit — colors, fonts, voice notes. Tag a product with the brand it belongs to, and the generator references that kit on every gen. Studio fits 8 brand kits, Agency is unlimited. Kits don't bleed into each other across products." },
+    { q: 'Will the output actually run on Meta?', a: "Yes — every output is in 1:1, 4:5, or 9:16 (you pick), exported as PNG / WebP / JPG, and meets Meta's Ads Manager spec. Optional ad copy generation follows Meta best practices for headlines, primary texts, and CTAs." },
+    { q: 'Can I bring competitor ads as references?', a: "Yes. Paste URLs from Meta Ad Library, drag images in, or bookmark templates from our curated library. Per-product. They feed the generator on every batch for that product." },
   ]
 
   return (
-    <section style={{ background: T.bg, color: T.text }}>
-      <div style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '64px 16px' : '120px 32px' }}>
+    <section aria-labelledby="faq-title" style={{ background: T.bg, color: T.text }}>
+      <div style={{ maxWidth: 980, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow style={{ justifyContent: 'center' }}>faq · 08</Eyebrow>
           <h2 style={{
@@ -1578,12 +1623,12 @@ function FAQSection() {
             fontWeight: 600,
             margin: '20px auto 0',
             paddingBottom: '0.18em',
-          }}>
+          }} id="faq-title">
             Things media buyers ask first.
           </h2>
         </div>
         <div style={{ borderTop: `1px solid ${T.border}` }}>
-          {items.map(([q, a], i) => (
+          {items.map(({ q, a }, i) => (
             <div key={i} style={{ borderBottom: `1px solid ${T.border}` }}>
               <button
                 onClick={() => setOpen(open === i ? -1 : i)}
@@ -1639,9 +1684,9 @@ function FAQSection() {
 // ============================================================
 
 function FinalCTA() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   return (
-    <section style={{
+    <section aria-labelledby="final-cta-title" style={{
       background: `linear-gradient(135deg, ${T.bg} 0%, #161B26 100%)`,
       color: T.text,
       position: 'relative',
@@ -1663,7 +1708,7 @@ function FinalCTA() {
           margin: '24px auto 36px',
           maxWidth: 1100,
           paddingBottom: '0.12em',
-        }}>
+        }} id="final-cta-title">
           Stop briefing designers <br/>
           <span style={{ color: T.textMuted, fontWeight: 400 }}>for every angle test.</span>
         </h2>
@@ -1671,11 +1716,11 @@ function FinalCTA() {
           Three paths. Twelve variants per batch. One loop that learns from what wins.
         </p>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
-          <Link to="/home" style={{ textDecoration: 'none' }}>
-            <Btn kind="primary" size="lg">Start 7-day free trial →</Btn>
+          <Link to="/onboarding" style={{ textDecoration: 'none' }}>
+            <Btn as="span" kind="primary" size="lg">Start 7-day free trial →</Btn>
           </Link>
           <Link to="/templates" style={{ textDecoration: 'none' }}>
-            <Btn kind="secondary" size="lg">Browse templates</Btn>
+            <Btn as="span" kind="secondary" size="lg">Browse templates</Btn>
           </Link>
         </div>
         <div style={{ marginTop: 18 }}>
@@ -1691,7 +1736,7 @@ function FinalCTA() {
 // ============================================================
 
 function LandingFooter() {
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useIsMobile()
   const linkStyle: React.CSSProperties = {
     fontFamily: fontBody,
     fontSize: 14,
@@ -1720,14 +1765,14 @@ function LandingFooter() {
           </div>
           {/* Links — only functional ones rendered. Add more as the public
               pages they point to ship. */}
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-            <a href="mailto:support@prodsnap.io" style={linkStyle}>Contact</a>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+            <a href="mailto:support@prodsnap.io" style={linkStyle}>support@prodsnap.io</a>
             <Link to="/privacy" style={linkStyle}>Privacy</Link>
             <Link to="/terms" style={linkStyle}>Terms</Link>
           </div>
         </div>
         <div style={{ paddingTop: 24, borderTop: `1px solid ${T.border}` }}>
-          <MonoLabel>© 2026 ProdSnap · made for buyers, by buyers</MonoLabel>
+          <MonoLabel>© {new Date().getFullYear()} ProdSnap · made for buyers, by buyers</MonoLabel>
         </div>
       </div>
     </footer>
@@ -1739,19 +1784,22 @@ function LandingFooter() {
 // ============================================================
 
 function Home() {
+  const isMobile = useMediaQuery('(max-width: 768px)', false, { getInitialValueInEffect: false }) ?? false
   return (
-    <div style={{ background: T.bg, minHeight: '100vh' }}>
-      <Hero />
-      <LoopSection />
-      <SplitSection />
-      <OnrampsSection />
-      <VOCSection />
-      <SurgicalSection />
-      <FeatureGrid />
-      <PricingSection />
-      <FAQSection />
-      <FinalCTA />
-      <LandingFooter />
-    </div>
+    <LandingLayoutContext.Provider value={isMobile}>
+      <main className="landing-root" style={{ background: T.bg, minHeight: '100vh' }}>
+        <Hero />
+        <LoopSection />
+        <SplitSection />
+        <OnrampsSection />
+        <VOCSection />
+        <SurgicalSection />
+        <FeatureGrid />
+        <PricingSection />
+        <FAQSection />
+        <FinalCTA />
+        <LandingFooter />
+      </main>
+    </LandingLayoutContext.Provider>
   )
 }

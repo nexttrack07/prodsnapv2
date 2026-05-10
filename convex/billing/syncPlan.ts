@@ -324,8 +324,38 @@ export const cancelMySubscription = action({
         clerkUserId,
         plan: '',
       })
+    } else if (canceled.length > 0) {
+      // End-of-period cancel: stamp cancelScheduledAt so the UI can render
+      // the "cancellation scheduled" banner without re-querying Clerk.
+      await ctx.runMutation(
+        internal.billing.syncPlan.markCancelScheduled,
+        { userId: identity.tokenIdentifier, scheduledAt: Date.now() },
+      )
     }
     return { canceledItemIds: canceled }
+  },
+})
+
+/**
+ * Internal mutation — stamps/clears cancelScheduledAt on the user's plan row.
+ * Used by cancelMySubscription (set) and reactivateMySubscription (clear).
+ */
+export const markCancelScheduled = internalMutation({
+  args: {
+    userId: v.string(),
+    scheduledAt: v.union(v.number(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { userId, scheduledAt }) => {
+    const row = await ctx.db
+      .query('userPlans')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    if (!row) return null
+    await ctx.db.patch(row._id, {
+      cancelScheduledAt: scheduledAt ?? undefined,
+    })
+    return null
   },
 })
 
@@ -379,6 +409,8 @@ export const getBillingStatus = query({
       signedIn: true,
       plan: planSlug || null,
       billingStatus: row?.billingStatus ?? null,
+      cancelScheduledAt: row?.cancelScheduledAt ?? null,
+      periodEnd: row?.periodEnd ?? null,
       productCount: products.length,
       productLimit: productLimit === Infinity ? null : productLimit,
       creditsUsed,

@@ -92,6 +92,17 @@ export function AccountBillingPage() {
       })
     : null
 
+  const cancelScheduledAt = (status as { cancelScheduledAt?: number | null })
+    .cancelScheduledAt ?? null
+  const periodEnd = (status as { periodEnd?: number | null }).periodEnd ?? null
+  const periodEndLabel = periodEnd
+    ? new Date(periodEnd).toLocaleDateString(undefined, {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null
+
   const doCancel = async () => {
     setCanceling(true)
     setCancelError(null)
@@ -116,10 +127,11 @@ export function AccountBillingPage() {
       <Stack gap="lg">
         <Title order={2}>Billing</Title>
 
-        {(status as { billingStatus?: string }).billingStatus === 'past_due' && (
+        {(['past_due', 'incomplete', 'unpaid'] as const).includes(
+          (status as { billingStatus?: string }).billingStatus as 'past_due' | 'incomplete' | 'unpaid',
+        ) && (
           <Alert color="yellow" variant="light" title="Payment issue">
-            We're having trouble with your payment. Update your card in account
-            settings to avoid losing access.{' '}
+            There's a problem with your payment — update your payment method to keep using ProdSnap.{' '}
             <Button
               variant="transparent"
               color="yellow"
@@ -129,6 +141,28 @@ export function AccountBillingPage() {
             >
               Update payment method
             </Button>
+          </Alert>
+        )}
+
+        {cancelScheduledAt && (
+          <Alert color="orange" variant="light" title="Cancellation scheduled">
+            <Stack gap="xs">
+              <Text size="sm">
+                Your subscription is scheduled to end
+                {periodEndLabel ? ` on ${periodEndLabel}` : ' at the end of the current billing period'}
+                . You'll keep access until then.
+              </Text>
+              <Group>
+                <Button
+                  variant="light"
+                  color="brand"
+                  size="xs"
+                  onClick={() => openUserProfile()}
+                >
+                  Resume subscription
+                </Button>
+              </Group>
+            </Stack>
           </Alert>
         )}
 

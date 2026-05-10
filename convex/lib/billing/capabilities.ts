@@ -22,8 +22,6 @@
 export const CAPABILITIES = {
   GENERATE_VARIATIONS: 'variations',
   REMOVE_BACKGROUND: 'background_removal',
-  HD_OUTPUT: 'hd_output',
-  ADVANCED_TEMPLATES: 'advanced_templates',
   BATCH_GENERATION: 'batch_generation',
 } as const
 

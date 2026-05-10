@@ -398,6 +398,23 @@ h1, h2 { font-weight: 700; }
   outline-offset: 2px;
 }
 
+/* Landing-root focus rings — inline styles can't express :focus-visible,
+   so cover every interactive element on the public marketing pages here.
+   WCAG 2.4.7. Drops mouse-click rings via :focus-visible (not :focus). */
+.landing-root button:focus-visible,
+.landing-root a:focus-visible,
+.landing-root [role="button"]:focus-visible {
+  outline: 2px solid #76FFBF;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Smooth-scroll for in-page anchors on the landing page only. */
+html:has(.landing-root) {
+  scroll-behavior: smooth;
+  scroll-padding-top: 24px;
+}
+
 /* Generation card focus */
 .generation-card-hover:focus-visible {
   outline: 2px solid var(--mantine-color-brand-5);

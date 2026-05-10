@@ -13,6 +13,9 @@
     X-Content-Type-Options = "nosniff"
     X-XSS-Protection = "1; mode=block"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    Content-Security-Policy = "default-src 'self'; img-src 'self' https: data: blob:; script-src 'self' https://*.clerk.accounts.dev https://*.convex.cloud 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.clerk.accounts.dev https://*.convex.cloud wss://*.convex.cloud https://api.fal.ai https://*.fal.ai https://*.r2.cloudflarestorage.com https://*.r2.dev https://api.stripe.com; frame-src https://*.clerk.accounts.dev https://js.stripe.com https://*.stripe.com; worker-src 'self' blob:"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
 [[headers]]
   for = "/assets/*"

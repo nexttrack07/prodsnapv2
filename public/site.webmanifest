@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "short_name": "",
+  "name": "ProdSnap",
+  "short_name": "ProdSnap",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",
@@ -13,7 +13,7 @@
       "type": "image/png"
     }
   ],
-  "theme_color": "#ffffff",
-  "background_color": "#ffffff",
+  "theme_color": "#0063ff",
+  "background_color": "#0B0D10",
   "display": "standalone"
 }

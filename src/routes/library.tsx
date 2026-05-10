@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
 import { useState, useMemo } from 'react'
 import { useQuery } from 'convex/react'
 import { useMediaQuery } from '@mantine/hooks'
@@ -37,6 +38,7 @@ export const Route = createFileRoute('/library')({
     return {}
   },
   component: LibraryPage,
+  errorComponent: DefaultCatchBoundary,
 })
 
 const PAGE_SIZE = 24
