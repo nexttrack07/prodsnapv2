@@ -16,7 +16,7 @@
  * The same table doubles as the monthly-credit ledger.
  */
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
-import type { Capability } from './capabilities'
+import { CAPABILITIES, type Capability } from './capabilities'
 import { PLAN_CONFIG } from './planConfig'
 import { ClerkBillingProvider } from './provider.clerk'
 import type { BillingContext, BillingProvider } from './provider'
@@ -127,7 +127,7 @@ export async function requireProductLimit(
 
   const plan = PLAN_CONFIG[billing.plan]
   const limit = plan.productLimit
-  if (limit === Infinity) return billing
+  if (limit === -1) return billing
 
   // Count the user's non-archived products.
   const existing = await ctx.db
@@ -193,7 +193,7 @@ export async function requireProductLimitForUser(
     throw billingError('NO_PLAN', 'No active subscription')
   }
   const limit = plan.productLimit
-  if (limit === Infinity) return
+  if (limit === -1) return
 
   const existing = await ctx.db
     .query('products')
@@ -218,6 +218,95 @@ export async function requireProductLimitForUser(
         `Archive products or upgrade.`,
     )
   }
+}
+
+// ─── Brand-kit limit ──────────────────────────────────────────────────────
+
+/**
+ * Assert the user is under their plan's brand-kit limit. Persistent count
+ * (not period-anchored). Bypassed by the kill switch.
+ */
+export async function requireBrandKitLimit(
+  ctx: MutationCtx,
+  mutationName: string,
+): Promise<BillingContext> {
+  const billing = await getBillingContext(ctx)
+  if (!billing) throw new Error('Not authenticated')
+  if (!isBillingEnabled()) return billing
+
+  if (!billing.hasKnownPlan) {
+    if (isCacheTrusted(billing.syncedAt)) return billing
+    await recordDenial(ctx, billing, mutationName, 'brand-kit-limit', billing.plan)
+    throw billingError(
+      'NO_SUBSCRIPTION',
+      'No active subscription — choose a plan at /pricing',
+    )
+  }
+
+  const plan = PLAN_CONFIG[billing.plan]
+  const limit = plan.brandKitLimit
+  if (limit === -1) return billing
+
+  const existing = await ctx.db
+    .query('brandKits')
+    .withIndex('by_userId', (q) => q.eq('userId', billing.userId))
+    .collect()
+
+  if (existing.length >= limit) {
+    await recordDenial(ctx, billing, mutationName, 'brand-kit-limit', billing.plan)
+    throw billingError(
+      'BRAND_KIT_LIMIT',
+      `You have ${existing.length} brand kits but your plan allows ${limit}. ` +
+        `Delete one or upgrade.`,
+    )
+  }
+
+  return billing
+}
+
+// ─── Saved-template (swipe-file) limit ────────────────────────────────────
+
+/**
+ * Assert the user is under their plan's saved-template (swipe-file) limit.
+ * Counts `productInspirations` rows owned by the user across all products.
+ * Persistent count. Bypassed by the kill switch.
+ */
+export async function requireSavedTemplateLimit(
+  ctx: MutationCtx,
+  mutationName: string,
+): Promise<BillingContext> {
+  const billing = await getBillingContext(ctx)
+  if (!billing) throw new Error('Not authenticated')
+  if (!isBillingEnabled()) return billing
+
+  if (!billing.hasKnownPlan) {
+    if (isCacheTrusted(billing.syncedAt)) return billing
+    await recordDenial(ctx, billing, mutationName, 'saved-template-limit', billing.plan)
+    throw billingError(
+      'NO_SUBSCRIPTION',
+      'No active subscription — choose a plan at /pricing',
+    )
+  }
+
+  const plan = PLAN_CONFIG[billing.plan]
+  const limit = plan.savedTemplateLimit
+  if (limit === -1) return billing
+
+  const existing = await ctx.db
+    .query('productInspirations')
+    .withIndex('by_userId', (q) => q.eq('userId', billing.userId))
+    .collect()
+
+  if (existing.length >= limit) {
+    await recordDenial(ctx, billing, mutationName, 'saved-template-limit', billing.plan)
+    throw billingError(
+      'SAVED_TEMPLATE_LIMIT',
+      `Your swipe file holds ${existing.length} items but your plan allows ${limit}. ` +
+        `Remove some or upgrade.`,
+    )
+  }
+
+  return billing
 }
 
 // ─── Monthly credit quota ─────────────────────────────────────────────────
@@ -349,6 +438,70 @@ export async function recordCreditUse(
   })
 }
 
+/**
+ * Assert the user has at least `count` ad-copy generations remaining in the
+ * current billing period. Tracks against `monthlyAdCopyLimit` (separate from
+ * the image-gen `monthlyCredits` quota). Bypassed by the kill switch.
+ */
+export async function requireAdCopyLimit(
+  ctx: MutationCtx,
+  mutationName: string,
+  count = 1,
+): Promise<BillingContext> {
+  const billing = await getBillingContext(ctx)
+  if (!billing) throw new Error('Not authenticated')
+  if (!isBillingEnabled()) return billing
+
+  if (!billing.hasKnownPlan) {
+    if (isCacheTrusted(billing.syncedAt)) return billing
+    await recordDenial(ctx, billing, mutationName, 'ad-copy-limit', billing.plan)
+    throw billingError(
+      'NO_SUBSCRIPTION',
+      'No active subscription — choose a plan at /pricing',
+    )
+  }
+
+  const plan = PLAN_CONFIG[billing.plan]
+  const limit = plan.monthlyAdCopyLimit
+  if (limit === -1) return billing
+
+  const used = await countAdCopyUseSincePeriodStart(ctx, billing.userId)
+  const remaining = limit - used
+
+  if (remaining < count) {
+    await recordDenial(ctx, billing, mutationName, 'ad-copy-limit', billing.plan)
+    throw billingError(
+      'AD_COPY_LIMIT',
+      `You've used ${used} of ${limit} ad-copy generations this period.` +
+        (remaining <= 0 ? ' Quota resets next billing period.' : ` Only ${remaining} left.`),
+    )
+  }
+
+  return billing
+}
+
+/**
+ * Append a usage row to `billingEvents` with capability=AD_COPY. Call
+ * immediately after `requireAdCopyLimit` returns, before the downstream
+ * LLM call.
+ */
+export async function recordAdCopyUse(
+  ctx: MutationCtx,
+  billing: BillingContext,
+  mutationName: string,
+): Promise<void> {
+  await ctx.db.insert('billingEvents', {
+    userId: billing.userId,
+    mutationName,
+    capability: CAPABILITIES.AD_COPY,
+    allowed: true,
+    claimedPlan: billing.plan || undefined,
+    timestamp: Date.now(),
+    units: 1,
+    context: 'usage',
+  })
+}
+
 export async function countUsageSincePeriodStart(
   ctx: QueryCtx | MutationCtx,
   userId: string,
@@ -386,7 +539,8 @@ export async function countUsageSincePeriodStart(
     .collect()
   let sum = 0
   for (const r of rows) {
-    if (r.context === 'usage' && r.allowed) {
+    // Image-gen quota only — ad-copy usage has its own counter / quota.
+    if (r.context === 'usage' && r.allowed && r.capability !== CAPABILITIES.AD_COPY) {
       sum += r.units ?? 1
     }
   }
@@ -399,6 +553,34 @@ export async function countUsageThisMonth(
   userId: string,
 ): Promise<number> {
   return countUsageSincePeriodStart(ctx, userId)
+}
+
+/**
+ * Count ad-copy generations the user has consumed since the start of the
+ * current billing period. Mirrors `countUsageSincePeriodStart` but filters
+ * to capability=AD_COPY so the two quotas don't share a counter.
+ */
+export async function countAdCopyUseSincePeriodStart(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+): Promise<number> {
+  const row = await ctx.db
+    .query('userPlans')
+    .withIndex('by_userId', (q) => q.eq('userId', userId))
+    .unique()
+  const since = row?.periodStart ?? startOfMonthUtc()
+  const rows = await ctx.db
+    .query('billingEvents')
+    .withIndex('by_userId', (q) => q.eq('userId', userId))
+    .filter((q) => q.gte(q.field('timestamp'), since))
+    .collect()
+  let sum = 0
+  for (const r of rows) {
+    if (r.context === 'usage' && r.allowed && r.capability === CAPABILITIES.AD_COPY) {
+      sum += r.units ?? 1
+    }
+  }
+  return sum
 }
 
 // ─── Audit helper ─────────────────────────────────────────────────────────

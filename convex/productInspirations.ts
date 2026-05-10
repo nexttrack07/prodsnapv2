@@ -6,6 +6,7 @@ import {
   type MutationCtx,
 } from './_generated/server'
 import type { Id } from './_generated/dataModel'
+import { requireSavedTemplateLimit } from './lib/billing'
 
 // ─── Auth helpers (mirror products.ts pattern) ──────────────────────────────
 
@@ -140,6 +141,9 @@ export const saveTemplateAsInspiration = mutation({
       return alreadySaved._id
     }
 
+    // Quota check only when actually inserting a new row (dedup short-circuits above).
+    await requireSavedTemplateLimit(ctx, 'saveTemplateAsInspiration')
+
     return await ctx.db.insert('productInspirations', {
       productId,
       userId,
@@ -170,6 +174,8 @@ export const saveExternalInspiration = mutation({
     if (product.userId && product.userId !== userId) {
       throw new Error('Not authorized')
     }
+
+    await requireSavedTemplateLimit(ctx, 'saveExternalInspiration')
 
     return await ctx.db.insert('productInspirations', {
       productId,

@@ -13,8 +13,11 @@ export type BillingErrorCode =
   | 'NO_PLAN'
   | 'MISSING_CAPABILITY'
   | 'PRODUCT_LIMIT'
+  | 'BRAND_KIT_LIMIT'
+  | 'SAVED_TEMPLATE_LIMIT'
   | 'CREDITS_EXHAUSTED'
   | 'CREDITS_INSUFFICIENT'
+  | 'AD_COPY_LIMIT'
   | 'RATE_LIMIT'
 
 export type BillingErrorData = {

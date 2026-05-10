@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
+import { requireBrandKitLimit } from './lib/billing'
 
 async function requireAuth(
   ctx: { auth: { getUserIdentity: () => Promise<unknown> } },
@@ -120,6 +121,7 @@ export const createBrandKit = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
+    await requireBrandKitLimit(ctx, 'createBrandKit')
     const existing = await ctx.db
       .query('brandKits')
       .withIndex('by_userId', (q) => q.eq('userId', userId))

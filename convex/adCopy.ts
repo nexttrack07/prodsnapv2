@@ -8,6 +8,8 @@ import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, type ActionCtx } from './_generated/server'
 import { api, internal } from './_generated/api'
 import { billingError } from './lib/billing/errors'
+import { requireAdCopyLimit } from './lib/billing'
+import { CAPABILITIES } from './lib/billing/capabilities'
 
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX_CALLS = 20
@@ -52,10 +54,24 @@ export const recordAdCopyUsage = internalMutation({
     await ctx.db.insert('billingEvents', {
       userId,
       mutationName: 'generateAdCopy',
+      capability: CAPABILITIES.AD_COPY,
       allowed: true,
       timestamp: Date.now(),
+      units: 1,
       context: 'usage',
     })
+  },
+})
+
+/**
+ * Pre-LLM gate: throws if the caller has exceeded their plan's monthly
+ * ad-copy quota. Called from the action before the LLM round-trip so the
+ * user gets an upgrade prompt instead of a wasted token spend.
+ */
+export const enforceAdCopyQuota = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdCopyLimit(ctx, 'generateAdCopy')
   },
 })
 
@@ -88,6 +104,9 @@ export const generateAdCopy = action({
         'Too many requests — please wait a moment before generating again.',
       )
     }
+
+    // Monthly ad-copy quota gate (per-tier limit, separate from image-gen credits).
+    await ctx.runMutation(internal.adCopy.enforceAdCopyQuota, {})
 
     const product = await ctx.runQuery(api.products.getProduct, { productId })
     // Returns "Product not found" rather than "Not authorized" to avoid leaking
@@ -163,6 +182,9 @@ export const generateAdCopyForGeneration = action({
         'Too many requests — please wait a moment before generating again.',
       )
     }
+
+    // Monthly ad-copy quota gate (per-tier limit, separate from image-gen credits).
+    await ctx.runMutation(internal.adCopy.enforceAdCopyQuota, {})
 
     // Ownership check via the parent generation row.
     const gen = await ctx.runQuery(internal.adCopy.getGenerationOwner, { generationId })

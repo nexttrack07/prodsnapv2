@@ -61,6 +61,7 @@ Cosmetic and scale-out: context-lift the 12 useMediaQuery listeners (M4), email-
 
 - [ ] **Verify "scroll past 24" bug is gone** — replaced masonic with CSS-columns + hardened IntersectionObserver. Spot-check by selecting Templates, scrolling past the first page, confirming the next 24 render and pre-fetch fires before reaching bottom.
 - [ ] **Other masonic instance at `~line 2220`** — there's another `<Masonry>` in the file outside the wizard's templates segment. If users hit similar virtualization bugs there, swap it the same way.
+- [ ] **Custom template upload (Pro + Max only)** — gated by `customTemplateUpload: true` in `convex/lib/billing/planConfig.ts`. Build the UI for users to upload their own template image + label/category, persist as a private `adTemplates` row visible only to that user (or a new `userTemplates` table). Wire it into the wizard's template gallery (filter by ownership). Wire `requireCapability` server-side. Currently the plan flag exists but the feature isn't built — Lite users will see the upgrade gate cleanly when added.
 
 ---
 
