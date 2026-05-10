@@ -8,10 +8,11 @@
 import * as React from 'react'
 import { Anchor, Box, Button, Group } from '@mantine/core'
 import { Link } from '@tanstack/react-router'
-import { SignedIn, SignOutButton } from '@clerk/react'
+import { SignOutButton, useAuth } from '@clerk/react'
 import { Logo } from '../Logo'
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
+  const { isSignedIn } = useAuth()
   return (
     <Box
       mih="100vh"
@@ -23,13 +24,13 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         <Anchor component={Link} to="/" underline="never" aria-label="ProdSnap home">
           <Logo size="sm" />
         </Anchor>
-        <SignedIn>
+        {isSignedIn && (
           <SignOutButton>
             <Button variant="subtle" color="gray" size="sm">
               Sign out
             </Button>
           </SignOutButton>
-        </SignedIn>
+        )}
       </Group>
       <Box>{children}</Box>
     </Box>
