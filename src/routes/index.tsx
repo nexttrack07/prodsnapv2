@@ -1681,33 +1681,39 @@ function FinalCTA() {
 
 function LandingFooter() {
   const isMobile = useMediaQuery('(max-width: 768px)')
+  const linkStyle: React.CSSProperties = {
+    fontFamily: fontBody,
+    fontSize: 14,
+    color: T.textMuted,
+    textDecoration: 'none',
+    cursor: 'pointer',
+  }
   return (
     <footer style={{ background: T.bg, color: T.textMuted, borderTop: `1px solid ${T.border}` }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '32px 16px 24px' : '48px 32px 32px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr 1fr 1fr 1fr', gap: isMobile ? 24 : 32, marginBottom: 40 }}>
+        <div style={{
+          display: isMobile ? 'flex' : 'grid',
+          flexDirection: isMobile ? 'column' : undefined,
+          gridTemplateColumns: isMobile ? undefined : '1fr auto',
+          gap: isMobile ? 24 : 32,
+          alignItems: isMobile ? 'flex-start' : 'flex-end',
+          marginBottom: 32,
+        }}>
           <div>
             <span style={{ display: 'inline-block' }}>
               <LogoMark size="sm" />
             </span>
-            <div style={{ fontFamily: fontBody, fontSize: 14, color: T.textDim, marginTop: 16, maxWidth: 280, lineHeight: 1.5 }}>
+            <div style={{ fontFamily: fontBody, fontSize: 14, color: T.textDim, marginTop: 16, maxWidth: 360, lineHeight: 1.5 }}>
               Performance creative co-pilot for media buyers and small agencies running multiple brands.
             </div>
           </div>
-          {([
-            ['Product', ['Templates', 'Workflow', 'Pricing', 'Changelog']],
-            ['Resources', ['Docs', 'Swipe library', 'Angle guide', 'Meta specs']],
-            ['Company', ['About', 'Customers', 'Contact', 'Press kit']],
-            ['Legal', ['Privacy', 'Terms', 'Security', 'DPA']],
-          ] as Array<[string, string[]]>).map(([title, links]) => (
-            <div key={title}>
-              <MonoLabel style={{ display: 'block', marginBottom: 14 }}>{title}</MonoLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {links.map(l => (
-                  <span key={l} style={{ fontFamily: fontBody, fontSize: 14, color: T.textMuted }}>{l}</span>
-                ))}
-              </div>
-            </div>
-          ))}
+          {/* Links — only functional ones rendered. Add more as the public
+              pages they point to ship. */}
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            <a href="mailto:support@prodsnap.io" style={linkStyle}>Contact</a>
+            <Link to="/privacy" style={linkStyle}>Privacy</Link>
+            <Link to="/terms" style={linkStyle}>Terms</Link>
+          </div>
         </div>
         <div style={{ paddingTop: 24, borderTop: `1px solid ${T.border}` }}>
           <MonoLabel>© 2026 ProdSnap · made for buyers, by buyers</MonoLabel>

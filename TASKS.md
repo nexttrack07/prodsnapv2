@@ -26,7 +26,7 @@ Group by surface area. Within each section: ordered roughly by priority (top = m
 
 - [ ] **Hero source resolution** — `harrys-background-removed.png` is 338×600. The source card now renders ~410px square (1fr 2fr split), so the image scales UP and looks blurry on retina. Re-export the cut-out at 800×800 minimum.
 - [ ] **Section 6 narrative break** — Section 6 (`SurgicalSection`) uses Cole Haan sneakers while the rest of the page uses Harry's hydrating night lotion. If you want a single product through-line, regenerate Section 6 examples with Harry's color/text variants. Otherwise leave it as a "another customer's example."
-- [ ] **Footer link list is light** — non-functional `<span>`s for now (intentional — visitors aren't logged in, so /templates, /pricing etc. would force login). When public marketing pages exist for items like Changelog, Docs, Pricing-marketing, About, Contact, Privacy, Terms — wire them with `<a href>` (not `<Link>`, since these are public routes outside TanStack Router auth shell). Keep light until those pages exist.
+- [ ] **Footer link list grows as public pages ship** — current footer shows only Contact / Privacy / Terms (the 3 functional ones). Stripped Product / Resources / Company / Legal columns to avoid pretending placeholder labels were links. Append new entries inline as Changelog / Docs / About / Customers / Press kit / Security / DPA pages ship.
 
 ---
 
