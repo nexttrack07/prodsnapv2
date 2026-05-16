@@ -4,7 +4,7 @@
  * Sync constraint: plan slugs here MUST match Clerk dashboard plan slugs.
  * Clerk is source of truth for *which* capability a user has (via JWT).
  * This config is source of truth for *scalar limits* (productLimit,
- * monthlyCredits, brandKitLimit, etc.) which Clerk cannot express as
+ * imageCredits, brandKitLimit, etc.) which Clerk cannot express as
  * boolean features today.
  *
  * Convention: `-1` means unlimited.
@@ -23,10 +23,10 @@ export type PlanConfig = {
   slug: string
   /** Max products (catalogue size). -1 = unlimited. */
   productLimit: number
-  /** Image generations per billing period. -1 = unlimited. */
-  monthlyCredits: number
-  /** Ad copy generations per billing period. -1 = unlimited. */
-  monthlyAdCopyLimit: number
+  /** Image credits per billing period (1 image gen = 10 credits, BG removal = 2 credits). */
+  imageCredits: number
+  /** Monthly price in US cents (0 for free tier). */
+  monthlyPriceCents: number
   /** Distinct brand kits the user can create. -1 = unlimited. */
   brandKitLimit: number
   /** Saved-template (swipe-file) entries across all products. -1 = unlimited. */
@@ -42,7 +42,6 @@ const ALL_CAPABILITIES: readonly Capability[] = [
   CAPABILITIES.GENERATE_VARIATIONS,
   CAPABILITIES.REMOVE_BACKGROUND,
   CAPABILITIES.BATCH_GENERATION,
-  CAPABILITIES.AD_COPY,
 ]
 
 export const PLAN_CONFIG: Record<string, PlanConfig> = {
@@ -52,8 +51,8 @@ export const PLAN_CONFIG: Record<string, PlanConfig> = {
   free_user: {
     slug: 'free_user',
     productLimit: 0,
-    monthlyCredits: 0,
-    monthlyAdCopyLimit: 0,
+    imageCredits: 0,
+    monthlyPriceCents: 0,
     brandKitLimit: 0,
     savedTemplateLimit: 0,
     customTemplateUpload: false,
@@ -63,8 +62,8 @@ export const PLAN_CONFIG: Record<string, PlanConfig> = {
   lite: {
     slug: 'lite',
     productLimit: 5,
-    monthlyCredits: 50,
-    monthlyAdCopyLimit: 1000,
+    imageCredits: 500,
+    monthlyPriceCents: 2999,
     brandKitLimit: 2,
     savedTemplateLimit: 50,
     customTemplateUpload: false,
@@ -74,8 +73,8 @@ export const PLAN_CONFIG: Record<string, PlanConfig> = {
   pro: {
     slug: 'pro',
     productLimit: 100,
-    monthlyCredits: 150,
-    monthlyAdCopyLimit: -1,
+    imageCredits: 1500,
+    monthlyPriceCents: 5999,
     brandKitLimit: 10,
     savedTemplateLimit: 250,
     customTemplateUpload: true,
@@ -85,8 +84,8 @@ export const PLAN_CONFIG: Record<string, PlanConfig> = {
   max: {
     slug: 'max',
     productLimit: -1,
-    monthlyCredits: 400,
-    monthlyAdCopyLimit: -1,
+    imageCredits: 4000,
+    monthlyPriceCents: 12900,
     brandKitLimit: -1,
     savedTemplateLimit: -1,
     customTemplateUpload: true,

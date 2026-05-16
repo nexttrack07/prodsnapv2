@@ -1,19 +1,12 @@
 import { v } from 'convex/values'
-import { internalQuery, mutation, query, type MutationCtx } from './_generated/server'
+import { internalQuery, mutation, query } from './_generated/server'
+import { requireAdminIdentity } from './lib/admin/requireAdmin'
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
-
-/**
- * Gets the authenticated user's ID from Clerk JWT.
- * Throws if user is not authenticated.
- */
-async function requireAuth(ctx: MutationCtx): Promise<string> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity) {
-    throw new Error('Not authenticated')
-  }
-  return identity.tokenIdentifier
-}
+//
+// All prompt-config reads and writes are gated behind requireAdminIdentity
+// (checks CLERK_ADMIN_USER_IDS). Without this, ANY authenticated user could
+// rewrite the system prompt that runs for every other user's generations.
 
 const KEY = 'generation'
 
@@ -55,6 +48,9 @@ function defaults() {
 export const getPromptConfig = query({
   args: {},
   handler: async (ctx) => {
+    // Admin-only read: the prompt config IS the proprietary prompt
+    // engineering; leaking it publicly makes prompt-injection trivial.
+    await requireAdminIdentity(ctx)
     const row = await ctx.db
       .query('promptConfigs')
       .withIndex('by_key', (q) => q.eq('key', KEY))
@@ -101,7 +97,7 @@ export const updatePromptConfig = mutation({
     colorAdaptSuffix: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx) // Admin action - require authentication
+    await requireAdminIdentity(ctx)
     const existing = await ctx.db
       .query('promptConfigs')
       .withIndex('by_key', (q) => q.eq('key', KEY))
@@ -118,7 +114,7 @@ export const updatePromptConfig = mutation({
 export const resetPromptConfig = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireAuth(ctx) // Admin action - require authentication
+    await requireAdminIdentity(ctx)
     const existing = await ctx.db
       .query('promptConfigs')
       .withIndex('by_key', (q) => q.eq('key', KEY))

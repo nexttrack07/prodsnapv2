@@ -88,6 +88,10 @@ export function PricingPage() {
         Payments processed securely. Cancel anytime from Account →
         Billing.
       </Text>
+
+      <Text c="dark.3" size="xs" ta="center" mt={12} maw={680} mx="auto" fs="italic">
+        Each image generation uses 10 credits. Background removal uses 2 credits. Ad copy, brand kits, and product analysis are free on every plan.
+      </Text>
     </Container>
   )
 }

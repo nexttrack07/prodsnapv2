@@ -21,6 +21,7 @@ import {
 } from '@mantine/core'
 import { useMutation } from '@tanstack/react-query'
 import { useConvexMutation } from '@convex-dev/react-query'
+import { useQuery as useConvexQuery } from 'convex/react'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
 import { useMediaQuery } from '@mantine/hooks'
@@ -36,6 +37,7 @@ import {
 } from '@tabler/icons-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
+
 import { fetchDownloadAsset } from '../../utils/downloads'
 
 export type ImageEnhancerImage = {
@@ -70,6 +72,9 @@ export function ImageEnhancerModal({
 }: ImageEnhancerModalProps) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [downloading, setDownloading] = useState(false)
+
+  const creditBalance = useConvexQuery(api.credits.getBalance, {})
+  const notEnoughForBgRemoval = creditBalance != null && creditBalance.creditsRemaining < 2
 
   const setPrimary = useConvexMutation(api.productImages.setPrimaryImage)
   const setPrimaryMutation = useMutation({ mutationFn: setPrimary })
@@ -277,19 +282,25 @@ export function ImageEnhancerModal({
         <Text size="xs" tt="uppercase" fw={700} c="dark.2">
           Enhance
         </Text>
-        <Button
-          variant="default"
-          leftSection={<IconWand size={14} />}
-          onClick={handleRemoveBackground}
-          disabled={blocksActions || image.type === 'background-removed'}
-          loading={removeBgMutation.isPending}
-          fullWidth
-          justify="flex-start"
+        <Tooltip
+          label="Not enough credits — buy more or upgrade"
+          disabled={!notEnoughForBgRemoval || blocksActions || image.type === 'background-removed'}
+          position="left"
         >
-          {image.type === 'background-removed'
-            ? 'Background already removed'
-            : 'Remove background'}
-        </Button>
+          <Button
+            variant="default"
+            leftSection={<IconWand size={14} />}
+            onClick={handleRemoveBackground}
+            disabled={blocksActions || image.type === 'background-removed' || notEnoughForBgRemoval}
+            loading={removeBgMutation.isPending}
+            fullWidth
+            justify="flex-start"
+          >
+            {image.type === 'background-removed'
+              ? 'Background already removed'
+              : 'Remove background — 2 credits'}
+          </Button>
+        </Tooltip>
         <ComingSoonButton icon={<IconArrowsMaximize size={14} />} label="Upscale" />
         <ComingSoonButton icon={<IconBulb size={14} />} label="Lighting" />
         <ComingSoonButton icon={<IconPalette size={14} />} label="Color correct" />

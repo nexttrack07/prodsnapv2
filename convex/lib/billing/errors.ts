@@ -19,6 +19,7 @@ export type BillingErrorCode =
   | 'CREDITS_INSUFFICIENT'
   | 'AD_COPY_LIMIT'
   | 'RATE_LIMIT'
+  | 'UNKNOWN_MODEL'
 
 export type BillingErrorData = {
   code: BillingErrorCode

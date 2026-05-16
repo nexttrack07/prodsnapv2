@@ -30,7 +30,7 @@ import { action, internalAction, internalMutation, internalQuery, query } from '
 import type { ActionCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
 import { isKnownPlan, PLAN_CONFIG } from '../lib/billing/planConfig'
-import { countUsageThisMonth } from '../lib/billing'
+import { mcToCredits } from '../lib/billing/credits'
 
 /**
  * Public Convex action — called from the client.
@@ -390,7 +390,7 @@ export const getBillingStatus = query({
     const planConfig = planSlug ? PLAN_CONFIG[planSlug] : undefined
 
     const productLimit = planConfig?.productLimit ?? 0
-    const creditsTotal = planConfig?.monthlyCredits ?? 0
+    const creditsTotal = planConfig?.imageCredits ?? 0
 
     const products = await ctx.db
       .query('products')
@@ -399,7 +399,14 @@ export const getBillingStatus = query({
       )
       .collect()
 
-    const creditsUsed = await countUsageThisMonth(ctx, userId)
+    const creditBalance = await ctx.db
+      .query('creditBalances')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+
+    const creditsUsed = creditBalance
+      ? Math.floor(mcToCredits(creditBalance.planUsedMc))
+      : 0
 
     // Use Clerk's period end if available; fall back to first of next UTC month.
     const now = new Date()

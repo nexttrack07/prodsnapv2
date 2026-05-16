@@ -14,9 +14,7 @@ import { workflow } from './studio'
 import type { Id } from './_generated/dataModel'
 import {
   CAPABILITIES,
-  recordCreditUse,
   requireCapability,
-  requireCredit,
   requireProductLimit,
   requireProductLimitForUser,
 } from './lib/billing'
@@ -718,6 +716,8 @@ export const removeProductBackground = mutation({
     }
     // Billing: capability check (no credit consumption in v1 for bg-removal).
     await requireCapability(ctx, CAPABILITIES.REMOVE_BACKGROUND, 'removeProductBackground')
+    // Rate limit: prevent a bot from spamming BG removal to burn fal.ai $.
+    await enforceGenerationRateLimit(ctx, userId, 'removeProductBackground')
 
     await ctx.db.patch(productId, {
       backgroundRemovalStatus: 'processing',
@@ -750,6 +750,7 @@ export const runBackgroundRemoval = internalAction({
       const result = await ctx.runAction(internal.ai.removeBackground, {
         productId,
         imageUrl: product.imageUrl,
+        userId: product.userId,
       })
 
       await ctx.runMutation(internal.products.saveBackgroundRemoval, {
@@ -906,8 +907,8 @@ export const generateFromProduct = mutation({
       throw new Error('Cannot generate from archived product')
     }
 
-    // Billing: capability + credit enforcement.
-    const billing = await requireCapability(
+    // Billing: capability enforcement.
+    await requireCapability(
       ctx,
       CAPABILITIES.GENERATE_VARIATIONS,
       'generateFromProduct',
@@ -919,8 +920,6 @@ export const generateFromProduct = mutation({
         'generateFromProduct',
       )
     }
-    const totalCredits = args.templateIds.length * args.variationsPerTemplate
-    await requireCredit(ctx, 'generateFromProduct', totalCredits)
 
     // Resolve the source image: caller-supplied productImageId wins (so the
     // wizard can pick a non-primary source for this run); falls back to the
@@ -984,15 +983,6 @@ export const generateFromProduct = mutation({
           model: args.model ?? 'nano-banana-2',
         })
         generationIds.push(genId)
-
-        // Billing: record credit consumption before scheduling — ensures
-        // retries/failures still count against quota.
-        await recordCreditUse(
-          ctx,
-          billing,
-          'generateFromProduct',
-          CAPABILITIES.GENERATE_VARIATIONS,
-        )
 
         // Start the generation workflow
         await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
@@ -1193,13 +1183,12 @@ export const generateVariations = mutation({
       throw new Error('Must select at least one thing to change')
     }
 
-    // Billing: capability + reserve credits upfront.
-    const billing = await requireCapability(
+    // Billing: capability gate.
+    await requireCapability(
       ctx,
       CAPABILITIES.GENERATE_VARIATIONS,
       'generateVariations',
     )
-    await requireCredit(ctx, 'generateVariations', args.variationCount)
 
     // Get the source generation for metadata
     const sourceGen = await ctx.db.get(args.generationId)
@@ -1230,14 +1219,6 @@ export const generateVariations = mutation({
         },
       })
       generationIds.push(genId)
-
-      // Billing: consume one credit per generation.
-      await recordCreditUse(
-        ctx,
-        billing,
-        'generateVariations',
-        CAPABILITIES.GENERATE_VARIATIONS,
-      )
 
       // Start the variation workflow
       await workflow.start(ctx, internal.studio.generateVariationWorkflow, {

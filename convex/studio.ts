@@ -15,9 +15,7 @@ import { Workpool } from '@convex-dev/workpool'
 import type { Id } from './_generated/dataModel'
 import {
   CAPABILITIES,
-  recordCreditUse,
   requireCapability,
-  requireCredit,
 } from './lib/billing'
 
 export const workflow = new WorkflowManager(components.workflow)
@@ -153,12 +151,27 @@ export const getRunInternal = internalQuery({
 // ─── Reactive reads the UI uses ───────────────────────────────────────────
 export const getRun = query({
   args: { runId: v.id('studioRuns') },
-  handler: async (ctx, { runId }) => ctx.db.get(runId),
+  handler: async (ctx, { runId }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return null
+    const run = await ctx.db.get(runId)
+    if (!run) return null
+    // Allow legacy rows (no userId) for backward compat; enforce ownership
+    // for new rows. Prevents IDOR on guessed studioRun ids.
+    if (run.userId && run.userId !== identity.tokenIdentifier) return null
+    return run
+  },
 })
 
 export const getGenerations = query({
   args: { runId: v.id('studioRuns') },
   handler: async (ctx, { runId }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return []
+    const run = await ctx.db.get(runId)
+    if (!run) return []
+    if (run.userId && run.userId !== identity.tokenIdentifier) return []
+
     const rows = await ctx.db
       .query('templateGenerations')
       .withIndex('by_run', (q) => q.eq('runId', runId))
@@ -282,8 +295,8 @@ export const submitRun = mutation({
       throw new Error(`Run not ready (status=${run.status})`)
     }
 
-    // Billing: capability + credit enforcement (same gates as generateFromProduct).
-    const billing = await requireCapability(
+    // Billing: capability enforcement.
+    await requireCapability(
       ctx,
       CAPABILITIES.GENERATE_VARIATIONS,
       'submitRun',
@@ -291,8 +304,6 @@ export const submitRun = mutation({
     if (args.variationsPerTemplate > 2) {
       await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitRun')
     }
-    const totalCredits = args.templateIds.length * args.variationsPerTemplate
-    await requireCredit(ctx, 'submitRun', totalCredits)
 
     await ctx.db.patch(args.runId, {
       status: 'generating',
@@ -322,7 +333,6 @@ export const submitRun = mutation({
           status: 'queued',
           userId,
         })
-        await recordCreditUse(ctx, billing, 'submitRun', CAPABILITIES.GENERATE_VARIATIONS)
         await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
           generationId: genId,
         })
@@ -677,9 +687,6 @@ export const retryGeneration = mutation({
     if (gen.status !== 'failed' && !isStalePending) {
       throw new Error('Only failed or timed-out generations can be retried')
     }
-    // Billing: retries count against the monthly quota (counting rule).
-    const billing = await requireCredit(ctx, 'retryGeneration', 1)
-    await recordCreditUse(ctx, billing, 'retryGeneration', CAPABILITIES.GENERATE_VARIATIONS)
     await ctx.db.patch(generationId, {
       status: 'queued',
       error: undefined,

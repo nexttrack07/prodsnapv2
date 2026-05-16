@@ -23,7 +23,7 @@ import {
   IconLibrary,
   IconSparkles,
   IconReceipt,
-  IconBolt,
+  IconCoins,
   IconShield,
 } from '@tabler/icons-react'
 import { api } from '../../../convex/_generated/api'
@@ -297,7 +297,7 @@ function CreditsIcon({
           backgroundColor: 'rgba(84, 116, 180, 0.10)',
         }}
       >
-        <IconBolt size={18} stroke={1.6} />
+        <IconCoins size={18} stroke={1.6} />
         {isMobile && (
           <Text size="sm" fw={400} c="inherit" style={{ lineHeight: 1 }}>
             {planName} · {creditsLeft} credits

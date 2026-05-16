@@ -5,7 +5,6 @@
  *   - `getBillingContext` for read access to plan/capability state.
  *   - `requireCapability` for boolean gates (TypeScript-checked against Capability).
  *   - `requireProductLimit` for scalar product-count enforcement.
- *   - `requireCredit` + `recordCreditUse` for monthly credit quota enforcement.
  *
  * Kill switch: when `BILLING_ENABLED !== 'true'`, all enforcement helpers
  * short-circuit to allow. This is the server-side rollback mechanism —
@@ -20,15 +19,20 @@ import { CAPABILITIES, type Capability } from './capabilities'
 import { PLAN_CONFIG } from './planConfig'
 import { ClerkBillingProvider } from './provider.clerk'
 import type { BillingContext, BillingProvider } from './provider'
-import { internal } from '../../_generated/api'
 import { billingError } from './errors'
 
 // ─── Provider instance (swap here to change providers) ────────────────────
 export const billingProvider: BillingProvider = new ClerkBillingProvider()
 
 // ─── Kill switch ──────────────────────────────────────────────────────────
+// Fail-CLOSED default: billing enforcement is ON unless `BILLING_ENABLED` is
+// explicitly set to `'false'`. Prior behavior was fail-open (enforcement
+// required opt-in via `'true'`), which meant a missing env var in prod
+// silently let every user have the full app for free. Reversed here so a
+// forgotten env var fails safely. Dev devs who need to bypass enforcement
+// must add `BILLING_ENABLED=false` to .env.local explicitly.
 function isBillingEnabled(): boolean {
-  return process.env.BILLING_ENABLED === 'true'
+  return process.env.BILLING_ENABLED !== 'false'
 }
 
 // ─── Cache-trust flag ─────────────────────────────────────────────────────
@@ -321,187 +325,6 @@ export function startOfMonthUtc(now = Date.now()): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0)
 }
 
-/**
- * Assert the user has at least `count` monthly credits remaining (default 1).
- * Throws on exhaustion with the billing-period reset date. Does NOT consume
- * credits — call `recordCreditUse` for each consumption after success.
- *
- * Counting rule: every generation attempt consumes one credit regardless of
- * success/failure. The caller is expected to call `recordCreditUse` before
- * scheduling downstream API work so retries/failures still count.
- *
- * For batched generation (e.g., 3 templates × 4 variations = 12 credits),
- * call `requireCredit(ctx, name, 12)` once upfront to fail fast, then call
- * `recordCreditUse` 12 times as the rows are inserted.
- */
-export async function requireCredit(
-  ctx: MutationCtx,
-  mutationName: string,
-  count = 1,
-): Promise<BillingContext> {
-  const billing = await getBillingContext(ctx)
-  if (!billing) throw new Error('Not authenticated')
-
-  if (!isBillingEnabled()) return billing
-
-  if (!billing.hasKnownPlan) {
-    // BILLING_TRUST_CACHE: allow access when cache is fresh enough during outage.
-    if (isCacheTrusted(billing.syncedAt)) return billing
-    await recordDenial(ctx, billing, mutationName, 'monthly-credits', billing.plan)
-    throw billingError(
-      'NO_SUBSCRIPTION',
-      'No active subscription — choose a plan at /pricing',
-    )
-  }
-
-  // Layer 3: stale-period fallback — fire-and-forget sync if period has expired.
-  const row = await ctx.db
-    .query('userPlans')
-    .withIndex('by_userId', (q) => q.eq('userId', billing.userId))
-    .unique()
-  const now = Date.now()
-  const periodExpired = row?.periodEnd && row.periodEnd < now
-  const debounceOk = !row?.syncedAt || row.syncedAt + 30_000 < now
-  if (periodExpired && debounceOk && row?.clerkUserId) {
-    await ctx.db.insert('billingEvents', {
-      userId: billing.userId,
-      mutationName,
-      capability: 'monthly-credits',
-      allowed: true,
-      timestamp: now,
-      context: 'stale-period-fallback',
-    })
-    await ctx.scheduler.runAfter(
-      0,
-      internal.billing.syncPlan.syncUserPlanInternal,
-      { userId: billing.userId, clerkUserId: row.clerkUserId },
-    )
-  }
-
-  const plan = PLAN_CONFIG[billing.plan]
-  const used = await countUsageSincePeriodStart(ctx, billing.userId)
-  const remaining = plan.monthlyCredits - used
-
-  if (remaining < count) {
-    await recordDenial(ctx, billing, mutationName, 'monthly-credits', billing.plan)
-    // Build reset date from periodEnd or start of next month as fallback.
-    const resetMs = row?.periodEnd ?? startOfMonthUtc(now + 32 * 24 * 60 * 60 * 1000)
-    const resetDate = new Date(resetMs).toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-      timeZone: 'UTC',
-    })
-    // Append retry hint when period just rolled (within last 2 minutes).
-    const justRenewed =
-      row?.periodEnd && row.periodEnd > now - 2 * 60 * 1000 && row.periodEnd <= now
-    const retrySuffix = justRenewed
-      ? ' If you just renewed, please retry in a few seconds.'
-      : ''
-    if (remaining <= 0) {
-      throw billingError(
-        'CREDITS_EXHAUSTED',
-        `You've used all ${plan.monthlyCredits} credits for this billing period. ` +
-          `Credits reset on ${resetDate}.${retrySuffix}`,
-      )
-    }
-    throw billingError(
-      'CREDITS_INSUFFICIENT',
-      `Not enough credits. This request needs ${count} but you have ${remaining} remaining. ` +
-        `Upgrade or reduce the request size.`,
-    )
-  }
-
-  return billing
-}
-
-/**
- * Append a usage row to `billingEvents`, consuming one credit of the user's
- * monthly quota. Call immediately after `requireCredit` returns, before
- * scheduling the downstream workflow/action.
- */
-export async function recordCreditUse(
-  ctx: MutationCtx,
-  billing: BillingContext,
-  mutationName: string,
-  capability: Capability,
-): Promise<void> {
-  await ctx.db.insert('billingEvents', {
-    userId: billing.userId,
-    mutationName,
-    capability,
-    allowed: true,
-    claimedPlan: billing.plan || undefined,
-    timestamp: Date.now(),
-    units: 1,
-    context: 'usage',
-  })
-}
-
-/**
- * Assert the user has at least `count` ad-copy generations remaining in the
- * current billing period. Tracks against `monthlyAdCopyLimit` (separate from
- * the image-gen `monthlyCredits` quota). Bypassed by the kill switch.
- */
-export async function requireAdCopyLimit(
-  ctx: MutationCtx,
-  mutationName: string,
-  count = 1,
-): Promise<BillingContext> {
-  const billing = await getBillingContext(ctx)
-  if (!billing) throw new Error('Not authenticated')
-  if (!isBillingEnabled()) return billing
-
-  if (!billing.hasKnownPlan) {
-    if (isCacheTrusted(billing.syncedAt)) return billing
-    await recordDenial(ctx, billing, mutationName, 'ad-copy-limit', billing.plan)
-    throw billingError(
-      'NO_SUBSCRIPTION',
-      'No active subscription — choose a plan at /pricing',
-    )
-  }
-
-  const plan = PLAN_CONFIG[billing.plan]
-  const limit = plan.monthlyAdCopyLimit
-  if (limit === -1) return billing
-
-  const used = await countAdCopyUseSincePeriodStart(ctx, billing.userId)
-  const remaining = limit - used
-
-  if (remaining < count) {
-    await recordDenial(ctx, billing, mutationName, 'ad-copy-limit', billing.plan)
-    throw billingError(
-      'AD_COPY_LIMIT',
-      `You've used ${used} of ${limit} ad-copy generations this period.` +
-        (remaining <= 0 ? ' Quota resets next billing period.' : ` Only ${remaining} left.`),
-    )
-  }
-
-  return billing
-}
-
-/**
- * Append a usage row to `billingEvents` with capability=AD_COPY. Call
- * immediately after `requireAdCopyLimit` returns, before the downstream
- * LLM call.
- */
-export async function recordAdCopyUse(
-  ctx: MutationCtx,
-  billing: BillingContext,
-  mutationName: string,
-): Promise<void> {
-  await ctx.db.insert('billingEvents', {
-    userId: billing.userId,
-    mutationName,
-    capability: CAPABILITIES.AD_COPY,
-    allowed: true,
-    claimedPlan: billing.plan || undefined,
-    timestamp: Date.now(),
-    units: 1,
-    context: 'usage',
-  })
-}
-
 export async function countUsageSincePeriodStart(
   ctx: QueryCtx | MutationCtx,
   userId: string,
@@ -539,8 +362,7 @@ export async function countUsageSincePeriodStart(
     .collect()
   let sum = 0
   for (const r of rows) {
-    // Image-gen quota only — ad-copy usage has its own counter / quota.
-    if (r.context === 'usage' && r.allowed && r.capability !== CAPABILITIES.AD_COPY) {
+    if (r.context === 'usage' && r.allowed) {
       sum += r.units ?? 1
     }
   }
@@ -553,34 +375,6 @@ export async function countUsageThisMonth(
   userId: string,
 ): Promise<number> {
   return countUsageSincePeriodStart(ctx, userId)
-}
-
-/**
- * Count ad-copy generations the user has consumed since the start of the
- * current billing period. Mirrors `countUsageSincePeriodStart` but filters
- * to capability=AD_COPY so the two quotas don't share a counter.
- */
-export async function countAdCopyUseSincePeriodStart(
-  ctx: QueryCtx | MutationCtx,
-  userId: string,
-): Promise<number> {
-  const row = await ctx.db
-    .query('userPlans')
-    .withIndex('by_userId', (q) => q.eq('userId', userId))
-    .unique()
-  const since = row?.periodStart ?? startOfMonthUtc()
-  const rows = await ctx.db
-    .query('billingEvents')
-    .withIndex('by_userId', (q) => q.eq('userId', userId))
-    .filter((q) => q.gte(q.field('timestamp'), since))
-    .collect()
-  let sum = 0
-  for (const r of rows) {
-    if (r.context === 'usage' && r.allowed && r.capability === CAPABILITIES.AD_COPY) {
-      sum += r.units ?? 1
-    }
-  }
-  return sum
 }
 
 // ─── Audit helper ─────────────────────────────────────────────────────────

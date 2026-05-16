@@ -783,12 +783,39 @@ export const generateFromTemplate = internalAction({
     // legacy generations that didn't capture the user's pick at submit time.
     const aspectRatio = generation.aspectRatio ?? template?.aspectRatio ?? '1:1'
 
+    const mdlKey = (generation.model ?? 'nano-banana-2') === 'gpt-image-2'
+      ? 'gpt-image-2-edit'
+      : 'nano-banana-2'
+
+    // Guard: productImageUrl is typed v.string() on templateGenerations but
+    // legacy rows can have it missing. Without this throw, fal.ai receives
+    // [string, undefined] and returns a silent error.
+    if (!generation.productImageUrl) {
+      throw new Error(
+        `generateFromTemplate: generation ${generationId} has no productImageUrl`,
+      )
+    }
+
     const { generatedUrl } = await callImageEditModel({
       model: (generation.model ?? 'nano-banana-2') as ImageEditModel,
       prompt: generation.dynamicPrompt,
       imageUrls: [templateImageUrl, generation.productImageUrl],
       aspectRatio,
     })
+
+    // Charge credits after model success only.
+    if (generation.userId) {
+      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeCreditsInternal, {
+        userId: generation.userId,
+        modelKey: mdlKey,
+        note: 'generateFromTemplate',
+      })
+    } else {
+      // Visibility for silent revenue leaks on legacy rows without userId.
+      console.error(
+        `[generateFromTemplate] uncharged: generation ${generationId} has no userId`,
+      )
+    }
 
     const key = `studio/outputs/${generation.runId ?? generation.productId}/${generation.variationIndex}-${nanoid(6)}.png`
     const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
@@ -956,6 +983,13 @@ export const generateFromAngle = internalAction({
 
     // When productImageUrl is empty the caller requested text-to-image (no source).
     let generatedUrl: string
+    // Determine modelKey: gpt-image-2 uses the gen endpoint (not edit) for text-to-image,
+    // and the edit endpoint when a source image is present.
+    const angleModelKey =
+      mdl === 'gpt-image-2'
+        ? generation.productImageUrl ? 'gpt-image-2-edit' : 'gpt-image-2'
+        : 'nano-banana-2'
+
     if (!generation.productImageUrl) {
       ;({ generatedUrl } = await callImageGenModel({
         model: mdl,
@@ -969,6 +1003,19 @@ export const generateFromAngle = internalAction({
         imageUrls: [generation.productImageUrl],
         aspectRatio,
       }))
+    }
+
+    // Charge credits after model success only.
+    if (generation.userId) {
+      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeCreditsInternal, {
+        userId: generation.userId,
+        modelKey: angleModelKey,
+        note: 'generateFromAngle',
+      })
+    } else {
+      console.error(
+        `[generateFromAngle] uncharged: generation ${generationId} has no userId`,
+      )
     }
 
     const key = `studio/outputs/${generation.productId ?? 'angle'}/${generation.variationIndex}-${nanoid(6)}.png`
@@ -1139,12 +1186,37 @@ export const generateVariation = internalAction({
 
     const aspectRatio = gen.aspectRatio ?? '1:1'
 
+    const variationModel = (gen.model ?? 'nano-banana-2') as ImageEditModel
+    // Variations always use the edit endpoint.
+    const variationModelKey = variationModel === 'gpt-image-2' ? 'gpt-image-2-edit' : 'nano-banana-2'
+
+    // Guard: productImageUrl can be undefined on legacy rows; without this
+    // throw, fal.ai receives [string, undefined] and silently fails.
+    if (!gen.productImageUrl) {
+      throw new Error(
+        `generateVariation: generation ${generationId} has no productImageUrl`,
+      )
+    }
+
     const { generatedUrl } = await generateVariationImageCore({
-      model: (gen.model ?? 'nano-banana-2') as ImageEditModel,
+      model: variationModel,
       prompt: gen.dynamicPrompt,
       imageUrls: [gen.variationSource.sourceImageUrl, gen.productImageUrl],
       aspectRatio,
     })
+
+    // Charge credits after model success only.
+    if (gen.userId) {
+      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeCreditsInternal, {
+        userId: gen.userId,
+        modelKey: variationModelKey,
+        note: 'generateVariation',
+      })
+    } else {
+      console.error(
+        `[generateVariation] uncharged: generation ${generationId} has no userId`,
+      )
+    }
 
     const key = `studio/variations/${gen.productId}/${generationId}-${nanoid(6)}.png`
     const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
@@ -1261,8 +1333,9 @@ export const removeBackground = internalAction({
   args: {
     productId: v.id('products'),
     imageUrl: v.string(),
+    userId: v.optional(v.string()),
   },
-  handler: async (ctx, { productId, imageUrl }): Promise<{ outputUrl: string }> => {
+  handler: async (ctx, { productId, imageUrl, userId }): Promise<{ outputUrl: string }> => {
     // Test mode: return mock URL without calling AI
     if (isTestMode()) {
       await mockDelay(500)
@@ -1282,6 +1355,19 @@ export const removeBackground = internalAction({
     // Upload to our R2 bucket for persistence
     const key = `studio/products/${productId}/no-bg-${nanoid(6)}.png`
     const persistedUrl = await uploadFromUrl(outputUrl, key, 'image/png')
+
+    // Charge credits after model success only.
+    if (userId) {
+      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeCreditsInternal, {
+        userId,
+        modelKey: 'bria-rmbg',
+        note: 'removeBackground',
+      })
+    } else {
+      console.error(
+        `[removeBackground] uncharged: product ${productId} has no userId`,
+      )
+    }
 
     return { outputUrl: persistedUrl }
   },

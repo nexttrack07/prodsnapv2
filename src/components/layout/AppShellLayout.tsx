@@ -16,6 +16,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { Sidebar } from './Sidebar'
 import { Breadcrumbs } from './Breadcrumbs'
 import { LogoMark } from '../Logo'
+import { CreditsPill } from '../billing/CreditsPill'
 
 const SIDEBAR_WIDTH = 72
 const MOBILE_HEADER_HEIGHT = 56
@@ -92,7 +93,10 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
             <Box style={{ flex: 1, minWidth: 0 }}>
               <Breadcrumbs />
             </Box>
-            <Box id="page-header-actions" style={{ flexShrink: 0 }} />
+            <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
+              <Box id="page-header-actions" />
+              <CreditsPill />
+            </Group>
           </Group>
           <Box mt={isDenseRoute ? 'xs' : 'md'}>{children}</Box>
         </Box>

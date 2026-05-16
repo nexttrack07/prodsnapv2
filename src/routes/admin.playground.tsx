@@ -35,7 +35,6 @@ import {
 } from '@mantine/core'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import { ModelSelect } from '../components/ModelSelect'
 import {
   IconFlask2,
   IconClipboard,
@@ -831,9 +830,7 @@ function Stage2Generate({
   const [prodChecked, setProdChecked] = useState(true)
   const [lightboxOpen, { open: openLightbox, close: closeLightbox }] = useDisclosure(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [model, setModel] = useState<'nano-banana-2' | 'gpt-image-2'>(
-    () => ((run?.generatorParams as Record<string, unknown> | undefined)?.model as 'nano-banana-2' | 'gpt-image-2' | undefined) ?? 'nano-banana-2'
-  )
+  const model = 'nano-banana-2' as const
 
   const runGenerator = useAction(api.admin.playgroundActions.runGenerator)
 
@@ -935,12 +932,6 @@ function Stage2Generate({
                 </Stack>
               </Box>
             )}
-
-            {/* Model picker */}
-            <Box>
-              <Text size="xs" fw={500} c="dark.2" mb="xs">Model</Text>
-              <ModelSelect value={model} onChange={setModel} />
-            </Box>
 
             <Button
               color="brand"

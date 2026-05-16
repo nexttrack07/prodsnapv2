@@ -11,6 +11,7 @@ import {
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { CAPABILITIES, requireCapability } from './lib/billing'
+import { enforceGenerationRateLimit } from './products'
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -276,6 +277,8 @@ export const removeImageBackground = mutation({
 
     // Billing: capability check (no credit consumption in v1 for bg-removal).
     await requireCapability(ctx, CAPABILITIES.REMOVE_BACKGROUND, 'removeImageBackground')
+    // Rate limit: prevent a bot from spamming BG removal to burn fal.ai $.
+    await enforceGenerationRateLimit(ctx, userId, 'removeImageBackground')
 
     // Check if bg-removed version already exists
     const existing = await ctx.db
@@ -334,6 +337,7 @@ export const runImageBackgroundRemoval = internalAction({
       const result = await ctx.runAction(internal.ai.removeBackground, {
         productId: image.productId,
         imageUrl: sourceImageUrl,
+        userId: image.userId,
       })
 
       await ctx.runMutation(internal.productImages.saveImageEnhancement, {

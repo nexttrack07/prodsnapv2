@@ -19,6 +19,9 @@ export function StepPlan({ onBack }: { onBack: () => void }) {
         <Text c="dark.2" ta="center" maw={460}>
           7 days free. Cancel anytime — no charge during your trial.
         </Text>
+        <Text c="dark.3" size="sm" ta="center" maw={500}>
+          All plans include unlimited ad copy, brand kits, and product analysis. Image generations are credit-metered.
+        </Text>
       </Stack>
 
       <Box>

@@ -23,7 +23,6 @@ export const CAPABILITIES = {
   GENERATE_VARIATIONS: 'variations',
   REMOVE_BACKGROUND: 'background_removal',
   BATCH_GENERATION: 'batch_generation',
-  AD_COPY: 'ad_copy',
 } as const
 
 export type Capability = typeof CAPABILITIES[keyof typeof CAPABILITIES]

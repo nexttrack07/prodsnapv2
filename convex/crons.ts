@@ -18,4 +18,10 @@ crons.interval(
   {},
 )
 
+crons.daily(
+  'seed-credit-pricing',
+  { hourUTC: 0, minuteUTC: 0 },
+  internal.lib.billing.seedPricing.seedPricing,
+)
+
 export default crons

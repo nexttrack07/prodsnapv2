@@ -3,7 +3,7 @@
  * a BillingPlanResource passed from the parent (PricingPage uses
  * usePlans()).
  *
- * Volume limits (productLimit, monthlyCredits) are looked up by slug from
+ * Volume limits (productLimit, imageCredits) are looked up by slug from
  * the app's PLAN_CONFIG rather than from Clerk, because Clerk's plan
  * features don't carry scalar limits. If the slug isn't in PLAN_CONFIG
  * we silently omit those lines rather than rendering confusing data.
@@ -77,7 +77,7 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
     limits != null &&
     billingStatus?.signedIn &&
     billingStatus.creditsTotal > 0 &&
-    billingStatus.creditsUsed > limits.monthlyCredits
+    billingStatus.creditsUsed > limits.imageCredits
 
   const needsDowngradeWarning = isProductOverLimit || isCreditsDowngrade
 
@@ -162,7 +162,19 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
                 {limits.productLimit === 1 ? '' : 's'}
               </List.Item>
               <List.Item>
-                <strong>{limits.monthlyCredits}</strong> generations per month
+                <strong>{limits.imageCredits}</strong> credits / month
+                <Text
+                  component="span"
+                  display="block"
+                  size="xs"
+                  c="dark.3"
+                  fs="italic"
+                >
+                  ≈ {Math.floor(limits.imageCredits / 10)} image generations
+                </Text>
+              </List.Item>
+              <List.Item>
+                Unlimited ad copy, brand kits &amp; product analysis
               </List.Item>
             </List>
           )}
@@ -223,13 +235,13 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
               <>
                 You've already used <strong>{billingStatus.creditsUsed} credits</strong>{' '}
                 this billing period, which exceeds {plan.name}'s limit of{' '}
-                <strong>{limits.monthlyCredits}</strong>. Generation will be blocked until
+                <strong>{limits.imageCredits}</strong>. Generation will be blocked until
                 your next billing period.
               </>
             )}
             {isProductOverLimit && isCreditsDowngrade && limits && billingStatus && (
               <>{' '}You've also used <strong>{billingStatus.creditsUsed} credits</strong>{' '}
-              this period, above {plan.name}'s {limits.monthlyCredits}-credit limit.</>
+              this period, above {plan.name}'s {limits.imageCredits}-credit limit.</>
             )}
           </Text>
           <Group justify="flex-end" gap="sm">

@@ -86,8 +86,9 @@ import {
 } from '../components/product/ImageEnhancerModal'
 import { PageHeaderActions } from '../components/layout/PageHeaderActions'
 import { CreditsIndicator } from '../components/billing/CreditsIndicator'
-import { ModelSelect } from '../components/ModelSelect'
 import { mapGenerationError } from '../lib/billing/mapBillingError'
+import { OutOfCreditsModal } from '../components/billing/OutOfCreditsModal'
+import { ConvexError } from 'convex/values'
 import { fetchDownloadAsset } from '../utils/downloads'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 import type { TemplateFilters } from '../components/product/types'
@@ -1512,6 +1513,7 @@ function ImageGallerySection({
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [deleteTarget, setDeleteTarget] = useState<{ imageId: Id<'productImages'>; isLast: boolean } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [oocOpen, setOocOpen] = useState(false)
 
   // Fetch product images
   const { data: productImages, isLoading } = useQuery(
@@ -1578,11 +1580,15 @@ function ImageGallerySection({
       await removeBgMutation.mutateAsync({ imageId })
       notifications.show({ title: 'Processing', message: 'Removing background...', color: 'blue' })
     } catch (err) {
-      notifications.show({
-        title: 'Error',
-        message: err instanceof Error ? err.message : 'Failed to start',
-        color: 'red',
-      })
+      if (err instanceof ConvexError && (err.data as { code?: string })?.code === 'CREDITS_EXHAUSTED') {
+        setOocOpen(true)
+      } else {
+        notifications.show({
+          title: 'Error',
+          message: err instanceof Error ? err.message : 'Failed to start',
+          color: 'red',
+        })
+      }
     }
   }
 
@@ -1665,6 +1671,8 @@ function ImageGallerySection({
   }
 
   return (
+    <>
+    <OutOfCreditsModal opened={oocOpen} onClose={() => setOocOpen(false)} />
     <Box mb="xl">
       <Group justify="space-between" mb="md">
         <Box>
@@ -1818,6 +1826,7 @@ function ImageGallerySection({
         </Group>
       </Modal>
     </Box>
+    </>
   )
 }
 
@@ -2329,8 +2338,8 @@ function VariationDrawer({
   const [changeIcons, setChangeIcons] = useState(false)
   const [changeColors, setChangeColors] = useState(false)
   const [variationCount, setVariationCount] = useState('2')
-  const [model, setModel] = useState<'nano-banana-2' | 'gpt-image-2'>('nano-banana-2')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [oocOpen, setOocOpen] = useState(false)
 
   // Reset state when drawer opens
   useEffect(() => {
@@ -2339,7 +2348,6 @@ function VariationDrawer({
       setChangeIcons(false)
       setChangeColors(false)
       setVariationCount('2')
-      setModel('nano-banana-2')
     }
   }, [opened])
 
@@ -2365,26 +2373,32 @@ function VariationDrawer({
         changeIcons,
         changeColors,
         variationCount: parseInt(variationCount, 10),
-        model,
+        model: 'nano-banana-2',
       })
       notifications.show({ title: 'Success', message: 'Variations started!', color: 'green' })
       onComplete()
     } catch (err) {
-      const info = mapGenerationError(err)
-      notifications.show({
-        title: info.title,
-        message: info.action ? (
-          <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
-        ) : info.message,
-        color: 'red',
-        autoClose: 8000,
-      })
+      if (err instanceof ConvexError && (err.data as { code?: string })?.code === 'CREDITS_EXHAUSTED') {
+        setOocOpen(true)
+      } else {
+        const info = mapGenerationError(err)
+        notifications.show({
+          title: info.title,
+          message: info.action ? (
+            <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
+          ) : info.message,
+          color: 'red',
+          autoClose: 8000,
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
+    <>
+    <OutOfCreditsModal opened={oocOpen} onClose={() => setOocOpen(false)} />
     <Drawer
       opened={opened}
       onClose={onClose}
@@ -2495,28 +2509,49 @@ function VariationDrawer({
             />
           </Box>
 
-          {/* Model picker */}
-          <Box>
-            <Text size="sm" fw={500} c="white" mb="sm">Model</Text>
-            <ModelSelect value={model} onChange={setModel} />
-          </Box>
-
           {/* Generate button */}
-          <Button
-            fullWidth
-            size="md"
-            fz="sm"
-            color="brand"
-            onClick={handleGenerate}
-            disabled={!hasSelection || creditsExhausted}
-            loading={isSubmitting}
-            leftSection={!isSubmitting && <IconSparkles size={18} />}
-          >
-            {isSubmitting ? 'Starting...' : `Generate ${variationCount} Variation${parseInt(variationCount, 10) > 1 ? 's' : ''}`}
-          </Button>
+          {(() => {
+            const count = parseInt(variationCount, 10)
+            const required = count * 10
+            const balance = creditsExhausted ? 0 : undefined
+            const notEnough = creditsExhausted
+            const label = isSubmitting
+              ? 'Starting...'
+              : `Generate ${count} Variation${count > 1 ? 's' : ''} — ${required} credits`
+            return notEnough ? (
+              <Tooltip label="Not enough credits — buy more or upgrade" position="top">
+                <Button
+                  fullWidth
+                  size="md"
+                  fz="sm"
+                  color="brand"
+                  onClick={handleGenerate}
+                  disabled
+                  loading={isSubmitting}
+                  leftSection={!isSubmitting && <IconSparkles size={18} />}
+                >
+                  {label}
+                </Button>
+              </Tooltip>
+            ) : (
+              <Button
+                fullWidth
+                size="md"
+                fz="sm"
+                color="brand"
+                onClick={handleGenerate}
+                disabled={!hasSelection}
+                loading={isSubmitting}
+                leftSection={!isSubmitting && <IconSparkles size={18} />}
+              >
+                {label}
+              </Button>
+            )
+          })()}
         </Stack>
       )}
     </Drawer>
+    </>
   )
 }
 
@@ -2924,8 +2959,8 @@ function GenerateWizard({
   const [mode, setMode] = useState<Mode>('exact')
   const [colorAdapt, setColorAdapt] = useState(false)
   const [variationsPerTemplate, setVariationsPerTemplate] = useState('2')
-  const [wizardModel, setWizardModel] = useState<'nano-banana-2' | 'gpt-image-2'>('nano-banana-2')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [oocOpen, setOocOpen] = useState(false)
 
   // ── Per-segment state (all preserved regardless of active segment) ─────────
   const [prompt, setPrompt] = useState('')
@@ -3010,9 +3045,6 @@ function GenerateWizard({
     }
     if (typeof prefillAd.colorAdapt === 'boolean') {
       setColorAdapt(prefillAd.colorAdapt)
-    }
-    if (prefillAd.model) {
-      setWizardModel(prefillAd.model)
     }
     setVariationsPerTemplate('1')
     setPrefillApplied(true)
@@ -3294,7 +3326,7 @@ function GenerateWizard({
           colorAdapt,
           variationsPerTemplate: variationsCount,
           aspectRatio,
-          model: wizardModel,
+          model: 'nano-banana-2',
           productImageId: sourceImageId ?? undefined,
         })
         notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
@@ -3304,7 +3336,7 @@ function GenerateWizard({
           prompt: prompt.trim(),
           aspectRatio,
           count: variationsCount,
-          model: wizardModel,
+          model: 'nano-banana-2',
           productImageId: includeSourceImage && !prefillEditAdId ? (sourceImageId ?? undefined) : undefined,
           sourceAdId: includeSourceImage && prefillEditAdId ? prefillEditAdId : undefined,
           useSourceImage: includeSourceImage,
@@ -3320,7 +3352,7 @@ function GenerateWizard({
           angleIndex: selectedAngleIndex!,
           aspectRatio,
           count: variationsCount,
-          model: wizardModel,
+          model: 'nano-banana-2',
           productImageId: sourceImageId ?? undefined,
         })
         const angleTitle = product.marketingAngles?.[selectedAngleIndex!]?.title ?? 'angle'
@@ -3332,15 +3364,19 @@ function GenerateWizard({
       }
       onComplete()
     } catch (err) {
-      const info = mapGenerationError(err)
-      notifications.show({
-        title: info.title,
-        message: info.action ? (
-          <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
-        ) : info.message,
-        color: 'red',
-        autoClose: 8000,
-      })
+      if (err instanceof ConvexError && (err.data as { code?: string })?.code === 'CREDITS_EXHAUSTED') {
+        setOocOpen(true)
+      } else {
+        const info = mapGenerationError(err)
+        notifications.show({
+          title: info.title,
+          message: info.action ? (
+            <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
+          ) : info.message,
+          color: 'red',
+          autoClose: 8000,
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -3350,13 +3386,16 @@ function GenerateWizard({
   function getGenerateLabel(): string {
     if (isSubmitting) return 'Starting...'
     if (!canGenerate) return 'Generate'
-    return `Generate ${totalCount} Image${totalCount !== 1 ? 's' : ''}`
+    const cost = totalCount * 10
+    return `Generate ${totalCount} Image${totalCount !== 1 ? 's' : ''} — ${cost} credits`
   }
 
   // ── Marketing angles surfaced as chips inside the Custom segment ──────────
   const angles = product.marketingAngles ?? []
 
   return (
+    <>
+    <OutOfCreditsModal opened={oocOpen} onClose={() => setOocOpen(false)} />
     <Box>
       {/* Wizard Header */}
       <Group
@@ -4272,12 +4311,6 @@ function GenerateWizard({
             )}
           </Box>
 
-          {/* Model */}
-          <Box mb="md">
-            <Text size="sm" fw={500} c="white" mb="xs">Model</Text>
-            <ModelSelect value={wizardModel} onChange={setWizardModel} />
-          </Box>
-
           {/* Summary & Submit */}
           <Box pt="lg" mt="lg" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
             {!canGenerate ? (
@@ -4299,6 +4332,11 @@ function GenerateWizard({
                 </Text>
               </Paper>
             )}
+            <Tooltip
+              label="Not enough credits — buy more or upgrade"
+              disabled={!creditsExhausted}
+              position="top"
+            >
             <Button
               fullWidth
               color="brand"
@@ -4315,10 +4353,12 @@ function GenerateWizard({
             >
               {getGenerateLabel()}
             </Button>
+            </Tooltip>
           </Box>
         </Paper>
       </Box>
     </Box>
+    </>
   )
 }
 

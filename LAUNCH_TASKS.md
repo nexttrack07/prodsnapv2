@@ -4,6 +4,21 @@ Single source-of-truth checklist for shipping ProdSnap to real users. Every item
 
 > Note: kept under the name `LAUNCH_TASKS.md` (lowercase `tasks.md` would clobber the existing `TASKS.md` on macOS's case-insensitive filesystem). `TASKS.md` continues to track features/dev-work; this file tracks launch readiness.
 
+## Session log — 2026-05-16
+
+Cleared the engineering blocker sprint from the audit. Net delta: tests still 72/72, build green, **zero dependency vulnerabilities** (was 4: 1 critical, 2 high, 1 moderate).
+
+- ✅ **Credit system shipped end-to-end** (`creditBalances` + `creditPricing` tables, `chargeCredits`/`grantPlanCredits`/`upgradeAdjustCredits` helpers, header pill, out-of-credits modal, webhook integration, daily seed cron). 12 unit tests at `convex/lib/billing/__tests__/credits.test.ts`. Tiers locked: Lite 500cr/$29.99, Pro 1500cr/$59.99, Max 4000cr/$129. Per-action: image gen = 10 credits, BG removal = 2 credits. No premium UI toggle. All Gemini ops unmetered.
+- ✅ **Dep upgrades** — `@clerk/react` 6.4.2 → 6.6.4 (auth-bypass CVE patched), `@tanstack/react-router` → 1.170.1 (malware advisory cleared), `@aws-sdk/client-s3` + `s3-request-presigner` → 3.1048.0 (fast-xml-builder vuln patched).
+- ✅ **Auth holes closed** — `convex/r2.ts:getUploadUrl` + `uploadProductImage` now require auth (anonymous R2 access was wide open); `convex/studio.ts:getRun` + `getGenerations` now enforce ownership (was IDOR via guessed runId); `convex/prompts.ts:get/update/resetPromptConfig` now require `requireAdminIdentity` (was `requireAuth` — any signed-in user could rewrite the system prompt for all users).
+- ✅ **Landing tier alignment** — `src/routes/index.tsx` `PricingSection` now derives from `PLAN_CONFIG`; tiers/prices/gen counts cannot drift from code anymore. (Closes **C1**.)
+- ✅ **`BILLING_ENABLED` fail-closed default** — `convex/lib/billing/index.ts:34` now returns `process.env.BILLING_ENABLED !== 'false'`. Forgotten env var enforces billing instead of silently bypassing it. (Partially closes **B2** — you should still set it explicitly.)
+- ✅ **Wallet-protection guards in `convex/ai.ts`** — throws if `productImageUrl` missing (was: silent fal.ai error on `[string, undefined]`); logs `console.error` at 4 sites when `userId` missing (was: silent revenue leak on legacy rows).
+- ✅ **Rate limits added** to `removeProductBackground` + `removeImageBackground` (was: only image-gen + ad-copy + URL-imports were rate-limited).
+- ✅ **Coin icon** in header pill + sidebar.
+
+Items below updated accordingly. New entries added for security findings the prior audit caught.
+
 ## Severity legend
 
 - **BLOCKER** — cannot launch; first user hits the issue
@@ -63,8 +78,8 @@ Single source-of-truth checklist for shipping ProdSnap to real users. Every item
   - Evidence: `.env.local:2 CONVEX_DEPLOYMENT=dev:kindred-swan-491`, `.env.local:4 VITE_CONVEX_URL=https://kindred-swan-491.convex.cloud`. Source code is correctly env-driven (`src/router.tsx:23-27`); no hardcoded URLs.
   - You provide: provision a prod Convex deployment via `npx convex deploy`. Swap URLs in `.env.local` and Netlify env vars to the new prod slug.
 
-- [ ] **B2 — BLOCKER — Server-side `BILLING_ENABLED` defaults OFF** `NEEDS-USER-INPUT`
-  - Why: Without `BILLING_ENABLED=true` in prod Convex env, the gates at `convex/lib/billing/index.ts:31` short-circuit → every paid feature is **un-gated server-side** (auth still required, but no plan/credit/capability checks).
+- [ ] **B2 — HIGH — Server-side `BILLING_ENABLED` explicitly set in prod** `NEEDS-USER-INPUT` (severity downgraded from BLOCKER)
+  - Why: As of 2026-05-16, the gate at `convex/lib/billing/index.ts:34` is now **fail-closed**: enforcement is ON unless `BILLING_ENABLED='false'` is explicitly set. So a forgotten env var no longer silently grants everyone the app for free. **However**, you should still set it explicitly in prod so the intent is documented + the value can't be flipped accidentally via `--prod BILLING_ENABLED=false`.
   - You provide: `npx convex env set --prod BILLING_ENABLED true` (after B5 plan slugs are confirmed).
 
 - [ ] **B3 — HIGH — Prod R2 / fal.ai / Firecrawl credentials not set** `NEEDS-USER-INPUT`
@@ -84,10 +99,8 @@ Single source-of-truth checklist for shipping ProdSnap to real users. Every item
 
 ## Category: Billing (Clerk Billing on top of Stripe)
 
-- [ ] **C1 — BLOCKER — Plan slug mismatch: landing says solo/studio/agency, code knows basic/pro** `OPEN`
-  - Why: Landing advertises `solo` ($39, 200 gens, 2 brand kits), `studio` ($79, 1000 gens, 8 kits), `agency` ($199, 5000 gens, unlimited). `convex/lib/billing/planConfig.ts:34-56` only defines `basic` and `pro`. If Clerk dashboard plans use the landing slugs, `syncPlan.ts:108-121` falls into the `unknown-plan-slug` branch → user pays, gets denied. If Clerk uses code slugs, landing UX is a lie.
-  - Evidence: `src/routes/index.tsx:1424-1473` (landing tiers); `convex/lib/billing/planConfig.ts:34-56` (code-known plans)
-  - Fix: pick canonical tier shape (recommend solo/studio/agency to match landing). Update `PLAN_CONFIG` with `solo|studio|agency` keys including `productLimit`, `monthlyCredits`, `capabilities`, plus a NEW `brandKitLimit` field. Mirror in Clerk dashboard. Run `npx convex run billing/syncPlan:assertPlanConfigMatchesClerk` to confirm.
+- [x] **C1 — BLOCKER — Plan slug mismatch resolved** `DONE` (2026-05-16) — Tiers are now `lite` / `pro` / `max` everywhere. Landing's `PricingSection` (`src/routes/index.tsx:1423-1480`) derives `price`, `imageCredits / 10` (image-gen count), and `brandKitLimit` directly from `PLAN_CONFIG`. Cannot drift.
+  - Still NEEDS-USER-INPUT: confirm Clerk dashboard plans use slugs `lite`, `pro`, `max` (not the old solo/studio/agency). If they don't, rename them in Clerk.
 
 - [ ] **C2 — BLOCKER — Brand-kit limit has zero server-side enforcement** `OPEN`
   - Why: Landing advertises 2/8/unlimited brand kits per tier. `convex/brandKits.ts` has no `requireBrandKitLimit` gate. Solo users can create unlimited kits → revenue leakage.

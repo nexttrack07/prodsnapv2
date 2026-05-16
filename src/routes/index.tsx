@@ -3,6 +3,7 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMediaQuery } from '@mantine/hooks'
 import { LogoMark } from '~/components/Logo'
 import { seo } from '~/utils/seo'
+import { PLAN_CONFIG } from '../../convex/lib/billing/planConfig'
 
 // Single layout context — replaces 12 per-section useMediaQuery listeners.
 // `getInitialValueInEffect: false` makes Mantine read matchMedia synchronously
@@ -1420,15 +1421,20 @@ function FeatureGrid() {
 // ============================================================
 
 function PricingSection() {
+  /**
+   * Numeric values (price, allowances) MUST come from PLAN_CONFIG so the
+   * landing and code never drift again. Marketing copy + feature checkmarks
+   * stay local because they're sales-y, not contractual.
+   */
   const plans = [
     {
-      tier: 'solo',
-      sub: 'one buyer, one or two brands',
-      price: 39,
+      tier: 'lite',
+      sub: 'one buyer, getting started',
+      price: PLAN_CONFIG.lite.monthlyPriceCents / 100,
       features: [
-        { label: 'Up to 2 brand kits', on: true },
-        { label: '200 generations / month', on: true },
-        { label: 'All AI image models', on: true },
+        { label: `${PLAN_CONFIG.lite.brandKitLimit} brand kits`, on: true },
+        { label: `${PLAN_CONFIG.lite.imageCredits / 10} image generations / month`, on: true },
+        { label: 'nano-banana AI image model', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },
@@ -1438,14 +1444,14 @@ function PricingSection() {
       ] as PricingFeature[],
     },
     {
-      tier: 'studio',
+      tier: 'pro',
       sub: 'multi-brand performance creative',
-      price: 79,
+      price: PLAN_CONFIG.pro.monthlyPriceCents / 100,
       popular: true,
       features: [
-        { label: 'Up to 8 brand kits', on: true },
-        { label: '1,000 generations / month', on: true },
-        { label: 'All AI image models', on: true },
+        { label: `${PLAN_CONFIG.pro.brandKitLimit} brand kits`, on: true },
+        { label: `${PLAN_CONFIG.pro.imageCredits / 10} image generations / month`, on: true },
+        { label: 'nano-banana AI image model', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },
@@ -1455,13 +1461,13 @@ function PricingSection() {
       ] as PricingFeature[],
     },
     {
-      tier: 'agency',
-      sub: 'agencies running 10+ brands',
-      price: 199,
+      tier: 'max',
+      sub: 'agencies and power users',
+      price: PLAN_CONFIG.max.monthlyPriceCents / 100,
       features: [
         { label: 'Unlimited brand kits', on: true },
-        { label: '5,000 generations / month', on: true },
-        { label: 'All AI image models', on: true },
+        { label: `${PLAN_CONFIG.max.imageCredits / 10} image generations / month`, on: true },
+        { label: 'nano-banana AI image model', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },

@@ -12,9 +12,7 @@ import { workflow } from './studio'
 import { enforceGenerationRateLimit } from './products'
 import {
   CAPABILITIES,
-  recordCreditUse,
   requireCapability,
-  requireCredit,
 } from './lib/billing'
 
 const aspectRatio = v.union(
@@ -108,12 +106,11 @@ export const submitPromptGeneration = mutation({
       }
     }
 
-    // Billing gates: capability, batch guard, credit reservation.
-    const billing = await requireCapability(ctx, CAPABILITIES.GENERATE_VARIATIONS, 'submitPromptGeneration')
+    // Billing gates: capability, batch guard.
+    await requireCapability(ctx, CAPABILITIES.GENERATE_VARIATIONS, 'submitPromptGeneration')
     if (count > 2) {
       await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitPromptGeneration')
     }
-    await requireCredit(ctx, 'submitPromptGeneration', count)
 
     // Insert one row per requested variation, then start a workflow per row.
     for (let i = 0; i < count; i++) {
@@ -130,7 +127,6 @@ export const submitPromptGeneration = mutation({
         status: 'queued',
         model: model ?? 'nano-banana-2',
       })
-      await recordCreditUse(ctx, billing, 'submitPromptGeneration', CAPABILITIES.GENERATE_VARIATIONS)
       await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, {
         generationId,
       })

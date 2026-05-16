@@ -282,6 +282,22 @@ const schema = defineSchema({
       v.object({ receivedSlug: v.string(), preservedPlan: v.string() }),
       // clerk-api-error: Clerk API threw a network/5xx error
       v.object({ error: v.string(), preservedPlan: v.string() }),
+      // credit-charge: mc deducted for an AI operation
+      v.object({
+        kind: v.literal('credit'),
+        modelKey: v.string(),
+        creditsMc: v.number(),
+        planUsedDeltaMc: v.number(),
+        topupDeltaMc: v.number(),
+        note: v.optional(v.string()),
+      }),
+      // credit-grant: mc granted at period renewal
+      v.object({
+        kind: v.literal('credit-grant'),
+        planSlug: v.string(),
+        allowanceMc: v.number(),
+        previousPlanSlug: v.optional(v.string()),
+      }),
     )),
     context: v.optional(
       v.union(
@@ -295,6 +311,8 @@ const schema = defineSchema({
         v.literal('rate-limited'),
         v.literal('period-fallback'),       // periodStart missing → calendar-month used
         v.literal('stale-period-fallback'), // periodEnd < now and Layer 3 scheduler fired
+        v.literal('credit-charge'),         // mc deducted for an AI operation
+        v.literal('credit-grant'),          // mc granted at period renewal
       ),
     ),
   })
@@ -478,6 +496,32 @@ const schema = defineSchema({
   })
     .index('by_nextAttemptAt', ['nextAttemptAt'])
     .index('by_eventId', ['eventId']),
+
+  // ─── Credit balances (one per user, tracks allowance + top-up) ──────────
+  // Stores milliCredits (mc): 1 credit = 1000 mc. planAllowanceMc is the
+  // monthly budget granted by the plan; topupBalanceMc is purchased on top.
+  creditBalances: defineTable({
+    userId: v.string(),
+    planAllowanceMc: v.number(),    // mc granted by current plan for this period
+    planUsedMc: v.number(),         // mc consumed against planAllowanceMc
+    topupBalanceMc: v.number(),     // mc purchased via top-up; carries over
+    periodStart: v.number(),        // Unix ms — start of current billing period
+    periodEnd: v.number(),          // Unix ms — end of current billing period
+    version: v.number(),            // optimistic-concurrency token
+    lastGrantedPeriodStart: v.optional(v.number()), // last period we granted allowance for
+    lastGrantedPlanSlug: v.optional(v.string()),     // plan slug at last grant time
+    updatedAt: v.number(),
+  }).index('by_userId', ['userId']),
+
+  // ─── Credit pricing (per-model cost table) ────────────────────────────────
+  // Stores the milliCredit cost per image generation or enhancement call.
+  // Seeded by convex/lib/billing/seedPricing:seedPricing internalMutation.
+  creditPricing: defineTable({
+    modelKey: v.string(),       // e.g. 'nano-banana-2', 'bria-rmbg'
+    creditsMc: v.number(),      // cost in milliCredits per call
+    active: v.boolean(),        // false = soft-disabled (no new charges)
+    updatedAt: v.number(),
+  }).index('by_modelKey', ['modelKey']),
 
   // ─── Admin audit log ─────────────────────────────────────────────────────
   adminAuditEvents: defineTable({

@@ -1,7 +1,8 @@
 import { v } from 'convex/values'
 import { internalAction, internalMutation, internalQuery } from '../_generated/server'
-import type { ActionCtx } from '../_generated/server'
+import type { ActionCtx, MutationCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
+import { grantPlanCredits, upgradeAdjustCredits } from '../lib/billing/credits'
 
 // Retry tunables — kept module-local so cron + enqueue path agree.
 const RETRY_BASE_MS = 60_000
@@ -157,8 +158,129 @@ async function processWebhookPayload(
     userId,
     clerkUserId,
   })
+
+  // Only apply credits for subscription events, not user.updated.
+  if (eventType.startsWith('subscription.') || eventType.startsWith('subscriptionItem.')) {
+    await ctx.runMutation(internal.billing.webhookHandler.applyCreditsFromPlan, { userId })
+  }
+
   return { ok: true }
 }
+
+// ─── Credit slug helpers ──────────────────────────────────────────────────────
+
+type CreditPlanSlug = 'free' | 'lite' | 'pro' | 'max'
+
+/** Map userPlans.plan slug → credit helper slug. Returns null for unknown/empty plans. */
+function toCreditSlug(plan: string): CreditPlanSlug | null {
+  if (plan === 'free_user' || plan === '') return 'free'
+  if (plan === 'lite' || plan === 'pro' || plan === 'max') return plan
+  return null
+}
+
+/**
+ * Internal mutation — called after the plan sync on every subscription event.
+ * Reads the freshly-written userPlans row and applies the matching credit grant.
+ *
+ * Mid-period upgrade: if the user already has a balance for this period but
+ * the plan slug changed, calls upgradeAdjustCredits (delta only).
+ * New period / first grant: calls grantPlanCredits (idempotent on periodStart+planSlug).
+ */
+export const applyCreditsFromPlan = internalMutation({
+  args: { userId: v.string() },
+  returns: v.null(),
+  handler: async (ctx: MutationCtx, { userId }) => {
+    // 1. Read the freshly-synced userPlans row.
+    const planRow = await ctx.db
+      .query('userPlans')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+
+    if (!planRow) return null
+
+    const { plan, periodStart, periodEnd } = planRow
+
+    // 2. Map plan slug to credit helper slug.
+    const planSlug = toCreditSlug(plan)
+    if (planSlug === null) {
+      await ctx.db.insert('billingEvents', {
+        userId,
+        mutationName: 'billing/webhookHandler:applyCreditsFromPlan',
+        allowed: true,
+        claimedPlan: plan || undefined,
+        timestamp: Date.now(),
+        context: 'unknown-plan-slug',
+        metadata: { receivedSlug: plan || '(empty)', preservedPlan: plan || '' },
+      })
+      return null
+    }
+
+    // 3. Require valid period boundaries — don't grant against missing anchors.
+    if (periodStart === undefined || periodEnd === undefined) {
+      await ctx.db.insert('billingEvents', {
+        userId,
+        mutationName: 'billing/webhookHandler:applyCreditsFromPlan',
+        allowed: true,
+        claimedPlan: plan || undefined,
+        timestamp: Date.now(),
+        context: 'period-fallback',
+        metadata: { receivedSlug: plan, preservedPlan: plan },
+      })
+      return null
+    }
+
+    // 4. Read existing credit balance.
+    const balance = await ctx.db
+      .query('creditBalances')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+
+    // 4a. Cancellation / downgrade-to-free: hard-zero plan allowance immediately
+    // instead of letting the user keep Pro credits until period rollover.
+    if (planSlug === 'free' && balance && balance.lastGrantedPlanSlug !== 'free') {
+      await ctx.db.patch(balance._id, {
+        planAllowanceMc: 0,
+        planUsedMc: 0,
+        lastGrantedPlanSlug: 'free',
+        version: balance.version + 1,
+        updatedAt: Date.now(),
+      })
+      await ctx.db.insert('billingEvents', {
+        userId,
+        mutationName: 'applyCreditsFromPlan',
+        allowed: true,
+        claimedPlan: 'free',
+        timestamp: Date.now(),
+        context: 'credit-grant',
+        metadata: { kind: 'credit-grant' as const, planSlug: 'free', allowanceMc: 0, previousPlanSlug: balance.lastGrantedPlanSlug },
+      })
+      return null
+    }
+
+    // 5. Mid-period plan change: same period, different plan slug.
+    if (
+      balance &&
+      balance.lastGrantedPeriodStart === periodStart &&
+      balance.lastGrantedPlanSlug !== undefined &&
+      balance.lastGrantedPlanSlug !== planSlug
+    ) {
+      const oldSlug = balance.lastGrantedPlanSlug as CreditPlanSlug
+      await upgradeAdjustCredits(ctx, {
+        userId,
+        oldPlanSlug: oldSlug,
+        newPlanSlug: planSlug,
+        periodStart,
+      })
+      // Stamp the new slug so subsequent re-deliveries don't re-trigger the delta.
+      await ctx.db.patch(balance._id, { lastGrantedPlanSlug: planSlug })
+      return null
+    }
+
+    // 6. New period or no balance yet — idempotent grant.
+    await grantPlanCredits(ctx, { userId, planSlug, periodStart, periodEnd })
+    return null
+  },
+})
 
 /**
  * Internal action — dispatched by the HTTP handler after recording the event.

@@ -172,7 +172,12 @@ export const uploadProductImage = action({
     contentType: v.string(),
     base64: v.string(),
   },
-  handler: async (_ctx, { name, contentType, base64 }) => {
+  handler: async (ctx, { name, contentType, base64 }) => {
+    // Security: require auth — same threat model as getUploadUrl; anonymous
+    // callers must not be able to fill our R2 bucket.
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+
     // Security: Validate content-type is an allowed image type
     validateContentType(contentType)
 
@@ -202,8 +207,14 @@ export const getUploadUrl = action({
     name: v.string(),
     contentType: v.string(),
   },
-  handler: async (_ctx, { name, contentType }) => {
+  handler: async (ctx, { name, contentType }) => {
     try {
+      // Security: require auth so anonymous callers can't mint signed R2
+      // upload URLs and fill the bucket / host arbitrary content under our
+      // domain.
+      const identity = await ctx.auth.getUserIdentity()
+      if (!identity) throw new Error('Not authenticated')
+
       // Security: Validate content-type is an allowed image type
       validateContentType(contentType)
 
