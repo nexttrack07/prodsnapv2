@@ -42,7 +42,7 @@ Items below updated accordingly. New entries added for security findings the pri
 - [x] **NEW-2 — VERIFY — Sign-out returns to landing** `DONE` — verified `afterSignOutUrl="/"` at `src/router.tsx:60`; grep confirms zero direct `signOut()` bypass calls in `src/`
   - Why: User-stated requirement. `afterSignOutUrl="/"` is already set at `src/router.tsx:60`. Need to verify every sign-out invocation actually triggers it (no direct `signOut()` calls bypass).
 
-- [ ] **A1 — BLOCKER — Clerk is on Dev keys** `NEEDS-USER-INPUT`
+- [x] **A1 — BLOCKER — Clerk is on Dev keys** `DONE` (2026-05-16) — prod Clerk keys configured (Netlify VITE_CLERK_PUBLISHABLE_KEY + Convex CLERK_SECRET_KEY + CLERK_JWT_ISSUER_DOMAIN)
   - Why: `.env.local:9-11` ships `pk_test_...` / `sk_test_...` against `tight-bonefish-24.clerk.accounts.dev`. Real users can't sign up against a Dev instance once Dev quota is hit, and account data won't survive the cutover.
   - Evidence: `.env.local:9,10,11`; consumed at `src/router.tsx:16`; Convex JWT issuer at `convex/auth.config.ts:7`
   - You provide: prod Clerk publishable key, secret key, JWT issuer domain. Then update `.env.local` (and Netlify env vars `VITE_CLERK_PUBLISHABLE_KEY`) and `npx convex env set --prod CLERK_SECRET_KEY ... CLERK_JWT_ISSUER_DOMAIN ...`
@@ -52,7 +52,7 @@ Items below updated accordingly. New entries added for security findings the pri
   - Evidence: `src/router.tsx:57-58`; `find src/routes -name "sign*"` returns nothing; `OnboardingGuard.tsx:19-20` references both routes as public bypass paths
   - Fix: add `src/routes/sign-in.tsx` and `src/routes/sign-up.tsx` rendering Clerk `<SignIn />` / `<SignUp />` components (~20 LoC each)
 
-- [ ] **A3 — BLOCKER — Prod Clerk webhook endpoint not wired** `NEEDS-USER-INPUT`
+- [x] **A3 — BLOCKER — Prod Clerk webhook endpoint not wired** `DONE` (2026-05-16) — Clerk prod webhook subscribed + `CLERK_WEBHOOK_SECRET` set on Convex prod
   - Why: `CLERK_WEBHOOK_SECRET` referenced at `convex/http.ts:12` is unset in prod Convex env. Without this, no plan changes from Clerk reach the app.
   - Evidence: `convex/http.ts:12-16`; webhook handler is production-grade with Svix signature verify + idempotency dedup at `convex/billing/webhookHandler.ts:36-58`
   - You provide: in Clerk prod dashboard, create webhook pointing to `<prod-convex-slug>.convex.site/webhooks/clerk` subscribed to `subscription.*`, `subscriptionItem.*`, `user.updated`, **and add `user.deleted`** (see G3). Copy the Svix signing secret. Then `npx convex env set --prod CLERK_WEBHOOK_SECRET whsec_...`
@@ -73,7 +73,7 @@ Items below updated accordingly. New entries added for security findings the pri
 
 ## Category: Backend / Convex
 
-- [ ] **B1 — BLOCKER — Convex deployment is on Dev** `NEEDS-USER-INPUT`
+- [x] **B1 — BLOCKER — Convex deployment is on Dev** `DONE` (2026-05-16) — prod Convex deployment live; Netlify VITE_CONVEX_URL points at prod slug
   - Why: `.env.local:2,4,6` point at `dev:kindred-swan-491`. Dev tier rate-limits aggressively and shares storage.
   - Evidence: `.env.local:2 CONVEX_DEPLOYMENT=dev:kindred-swan-491`, `.env.local:4 VITE_CONVEX_URL=https://kindred-swan-491.convex.cloud`. Source code is correctly env-driven (`src/router.tsx:23-27`); no hardcoded URLs.
   - You provide: provision a prod Convex deployment via `npx convex deploy`. Swap URLs in `.env.local` and Netlify env vars to the new prod slug.
@@ -82,7 +82,7 @@ Items below updated accordingly. New entries added for security findings the pri
   - Why: As of 2026-05-16, the gate at `convex/lib/billing/index.ts:34` is now **fail-closed**: enforcement is ON unless `BILLING_ENABLED='false'` is explicitly set. So a forgotten env var no longer silently grants everyone the app for free. **However**, you should still set it explicitly in prod so the intent is documented + the value can't be flipped accidentally via `--prod BILLING_ENABLED=false`.
   - You provide: `npx convex env set --prod BILLING_ENABLED true` (after B5 plan slugs are confirmed).
 
-- [ ] **B3 — HIGH — Prod R2 / fal.ai / Firecrawl credentials not set** `NEEDS-USER-INPUT`
+- [x] **B3 — HIGH — Prod R2 / fal.ai / Firecrawl credentials not set** `DONE` (2026-05-16) — all R2 + FAL_KEY + FIRECRAWL_API_KEY env vars set on Convex prod
   - Why: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`, `FAL_KEY`, `FIRECRAWL_API_KEY` are all referenced in `convex/**` but not currently set in prod env. Every upload, image gen, and URL-import action throws on first call.
   - Evidence: `convex/r2.ts:79-103,210-211,326`, `convex/ai.ts:21`, `convex/urlImportsActions.ts:114`
   - You provide: prod Cloudflare R2 bucket creds, prod fal.ai key, prod Firecrawl key (only if URL-import is in v1 launch). Each via `npx convex env set --prod ...`
@@ -107,7 +107,7 @@ Items below updated accordingly. New entries added for security findings the pri
   - Evidence: `convex/brandKits.ts` (no enforcement); `convex/lib/billing/planConfig.ts:19-24` (no `brandKitLimit` field)
   - Fix: add `brandKitLimit?: number` to `PlanConfig`; add `requireBrandKitLimit(ctx)` to `convex/lib/billing/index.ts`; call it from `createBrandKit` in `convex/brandKits.ts`.
 
-- [ ] **C3 — BLOCKER — Trial period not configured per Clerk plan** `NEEDS-USER-INPUT`
+- [x] **C3 — BLOCKER — Trial period not configured per Clerk plan** `DONE` (2026-05-16) — `trial_period_days = 7` confirmed on each Clerk plan
   - Why: Landing FAQ at `src/routes/index.tsx:1605` and every CTA promises "7-day free trial". `PlanCard.tsx:52,148-152` reads `freeTrialDays` from Clerk plan data via `usePlans()`. If Clerk plans don't have `trial_period_days = 7`, **users are charged immediately at checkout despite the landing promise.**
   - You provide: in Clerk prod dashboard, set `trial_period_days = 7` on each paid plan. Verify with a real test card before launch.
 
@@ -202,7 +202,7 @@ Items below updated accordingly. New entries added for security findings the pri
 
 ## Category: Domain / DNS
 
-- [ ] **D1 — BLOCKER — Production domain decided & DNS configured** `NEEDS-USER-INPUT`
+- [x] **D1 — BLOCKER — Production domain decided & DNS configured** `DONE` (2026-05-16) — prod hostname live; DNS + SSL configured via Netlify
   - You provide: pick the prod hostname (e.g., `app.prodsnap.io`). Configure DNS in Netlify, set up SSL, decide www→apex (or apex→www) redirect.
 
 ---
