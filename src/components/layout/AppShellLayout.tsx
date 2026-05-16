@@ -61,8 +61,8 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
       }}
     >
       <AppShell.Header hiddenFrom="sm">
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="md">
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group gap="md" wrap="nowrap">
             <Burger
               opened={opened}
               onClick={toggle}
@@ -74,6 +74,7 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
               <LogoMark size="sm" />
             </Anchor>
           </Group>
+          <CreditsPill />
         </Group>
       </AppShell.Header>
 
@@ -95,7 +96,10 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
             </Box>
             <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
               <Box id="page-header-actions" />
-              <CreditsPill />
+              {/* CreditsPill is shown in the mobile header on small screens */}
+              <Box visibleFrom="sm">
+                <CreditsPill />
+              </Box>
             </Group>
           </Group>
           <Box mt={isDenseRoute ? 'xs' : 'md'}>{children}</Box>

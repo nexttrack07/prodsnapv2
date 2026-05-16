@@ -129,7 +129,7 @@ function LibraryPage() {
             clearable
             searchable
             size="sm"
-            w={220}
+            style={{ flex: '1 1 180px', maxWidth: 280 }}
             styles={{
               input: {
                 backgroundColor: 'var(--mantine-color-dark-6)',

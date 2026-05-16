@@ -623,11 +623,12 @@ function NewProductPage() {
         </Stack>
 
         {/* Footer */}
-        <Group justify="flex-end" pt="md">
+        <Group justify="flex-end" pt="md" wrap="wrap" gap="sm">
           <Button
             variant="subtle"
             color="dark"
             size="md"
+            fullWidth={false}
             onClick={async () => {
               // If a URL import populated the form but the user hasn't
               // saved, clean up the import row + its R2 objects before

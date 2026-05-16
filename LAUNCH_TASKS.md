@@ -370,8 +370,14 @@ Items below updated accordingly. New entries added for security findings the pri
 
 ## Cross-cutting (already on TASKS.md)
 
-- [ ] **X1 — BLOCKER — Mobile responsiveness gap** `OPEN`
-  - Per existing TASKS.md top-priority entry. Cross-cutting; not re-audited.
+- [x] **X1 — BLOCKER — Mobile responsiveness gap** `DONE` (2026-05-16)
+  - Audit pass at 390px (iPhone 14/15 Pro) found most surfaces already responsive thanks to Mantine's `cols={{ base, sm, md }}` API + the recent landing rebuild's `useIsMobile()` usage. Four targeted fixes shipped:
+    - `AppShellLayout.tsx`: `CreditsPill` added to mobile header; desktop breadcrumb-area pill hidden on mobile via `visibleFrom="sm"` to prevent duplication
+    - `library.tsx`: fixed-width `Select w={220}` → `flex: '1 1 180px'` so filter doesn't overflow at 390px
+    - `products.new.tsx`: footer Group wraps now (`wrap="wrap"`) so Cancel+Save buttons reflow vertically on narrow viewports
+    - `studio.$productId.tsx`: images grid clips correctly (`width: '100%'`); wizard badge row wraps now (`wrap="wrap"`)
+  - Net delta: +17/-9 LOC across 4 files. tsc clean, 72/72 tests, build green.
+  - Not blocking — but pending: real-device test pass on a physical iPhone/Android, polish-level refinements that emerge from actual usage.
 
 ---
 

@@ -1686,6 +1686,7 @@ function ImageGallerySection({
           display: 'grid',
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : `repeat(${Math.min(allImages.length + 2, 4)}, 1fr)`,
           gap: 'var(--mantine-spacing-md)',
+          width: '100%',
           maxWidth: '800px',
         }}
       >
@@ -3403,6 +3404,8 @@ function GenerateWizard({
         mb="md"
         py="sm"
         px="md"
+        wrap="wrap"
+        gap="xs"
         style={{ borderBottom: '1px solid var(--mantine-color-dark-6)' }}
       >
         <Group gap="md">
@@ -3426,19 +3429,19 @@ function GenerateWizard({
           </Anchor>
           <Text fw={600} size="lg" c="white">Create ad</Text>
         </Group>
-        <Group gap="sm">
+        <Group gap="xs" wrap="wrap">
           {hasTemplates && (
-            <Badge size="md" variant="light" color="brand" radius="md">
+            <Badge size="sm" variant="light" color="brand" radius="md">
               {pickedIds.length}/3 templates
             </Badge>
           )}
           {hasPrompt && (
-            <Badge size="md" variant="light" color="grape" radius="md">
+            <Badge size="sm" variant="light" color="grape" radius="md">
               Prompt ({prompt.trim().length} chars)
             </Badge>
           )}
           {hasAngle && !hasPrompt && (
-            <Badge size="md" variant="light" color="teal" radius="md">
+            <Badge size="sm" variant="light" color="teal" radius="md">
               {angles[selectedAngleIndex!]?.title ?? 'Angle'}
             </Badge>
           )}
