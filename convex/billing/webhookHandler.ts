@@ -164,6 +164,16 @@ async function processWebhookPayload(
     await ctx.runMutation(internal.billing.webhookHandler.applyCreditsFromPlan, { userId })
   }
 
+  // Transactional-email triggers. Clerk emits both `subscription.past_due`
+  // and `subscriptionItem.past_due` depending on subscription shape; the
+  // notification action itself is idempotent per billing period, so it's
+  // safe to schedule on either subtype.
+  if (eventType.endsWith('.past_due')) {
+    await ctx.scheduler.runAfter(0, internal.billing.notifications.notifyPaymentFailed, {
+      clerkUserId,
+    })
+  }
+
   return { ok: true }
 }
 

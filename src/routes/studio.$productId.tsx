@@ -3007,12 +3007,12 @@ function GenerateWizard({
 
   // ── Prefill from ad ────────────────────────────────────────────────────────
   const [prefillApplied, setPrefillApplied] = useState(false)
-  const { data: prefillAd } = useQuery({
-    ...convexQuery(api.templateGenerations.getAdById, {
-      adId: prefillFromAdId as Id<'templateGenerations'>,
-    }),
-    enabled: !!prefillFromAdId,
-  })
+  const { data: prefillAd } = useQuery(
+    convexQuery(
+      api.templateGenerations.getAdById,
+      prefillFromAdId ? { adId: prefillFromAdId } : 'skip',
+    ),
+  )
 
   useEffect(() => {
     if (prefillApplied || !prefillAd) return
@@ -3074,12 +3074,12 @@ function GenerateWizard({
   }, [prefillAngleIndex, product.marketingAngles, anglePrefillApplied, prefillTemplateId, prefillFromAdId])
 
   // ── Source ad for "Edit with custom prompt" ───────────────────────────────
-  const { data: editSourceAd } = useQuery({
-    ...convexQuery(api.templateGenerations.getById, {
-      generationId: prefillEditAdId as Id<'templateGenerations'>,
-    }),
-    enabled: !!prefillEditAdId,
-  })
+  const { data: editSourceAd } = useQuery(
+    convexQuery(
+      api.templateGenerations.getById,
+      prefillEditAdId ? { generationId: prefillEditAdId } : 'skip',
+    ),
+  )
 
   // ── "Include source image" checkbox (edit + normal flows) ─────────────────
   const [includeSourceImage, setIncludeSourceImage] = useState(true)

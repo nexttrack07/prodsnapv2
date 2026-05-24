@@ -258,6 +258,10 @@ const schema = defineSchema({
     // Set when the user schedules a cancellation; cleared when reactivated.
     // Used to render "cancellation scheduled" UI without re-querying Clerk.
     cancelScheduledAt: v.optional(v.number()),
+    // Idempotency stamps for transactional emails. Stamped once per
+    // period so retried webhooks / daily cron sweeps don't re-email.
+    notifiedTrialEndingForPeriodStart: v.optional(v.number()),
+    notifiedPaymentFailedForPeriodStart: v.optional(v.number()),
   })
     .index('by_userId', ['userId'])
     .index('by_clerkUserId', ['clerkUserId']),

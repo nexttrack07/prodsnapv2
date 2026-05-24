@@ -34,7 +34,7 @@ function TermsOfService() {
             Service description
           </Title>
           <Text c="dark.1">
-            ProdSnap is an AI-powered product photography service. We generate photo variations from
+            ProdSnap is an AI-powered product photography service operated by Nexttrack, Inc. We generate photo variations from
             images you upload. We do not guarantee the quality, accuracy, or commercial suitability
             of any generated image. Results may vary.
           </Text>
@@ -119,7 +119,7 @@ function TermsOfService() {
             Governing law
           </Title>
           <Text c="dark.1">
-            These terms are governed by the laws of the United States, without regard to conflict of
+            These terms are governed by the laws of the State of Texas, without regard to conflict of
             law principles.
           </Text>
         </div>

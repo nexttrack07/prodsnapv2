@@ -27,6 +27,10 @@ function PrivacyPolicy() {
           </Text>
         </div>
 
+        <Text c="dark.1">
+          This privacy policy describes how Nexttrack, Inc. (operating as ProdSnap) collects, uses, and protects your data.
+        </Text>
+
         <Divider color="dark.5" />
 
         <div>
