@@ -57,9 +57,7 @@ Items below updated accordingly. New entries added for security findings the pri
   - Evidence: `convex/http.ts:12-16`; webhook handler is production-grade with Svix signature verify + idempotency dedup at `convex/billing/webhookHandler.ts:36-58`
   - You provide: in Clerk prod dashboard, create webhook pointing to `<prod-convex-slug>.convex.site/webhooks/clerk` subscribed to `subscription.*`, `subscriptionItem.*`, `user.updated`, **and add `user.deleted`** (see G3). Copy the Svix signing secret. Then `npx convex env set --prod CLERK_WEBHOOK_SECRET whsec_...`
 
-- [ ] **A4 — HIGH — Prod admin user-id list not configured** `NEEDS-USER-INPUT`
-  - Why: `CLERK_ADMIN_USER_IDS` (`convex/lib/admin/requireAdmin.ts:53`) is empty in prod. After your first prod sign-up, your own user ID won't be in the admin list → admin routes/queries are locked out.
-  - You provide: after prod sign-up, get your `user_xxx` ID from Clerk dashboard → `npx convex env set --prod CLERK_ADMIN_USER_IDS user_xxx`. Also set `publicMetadata.role = "admin"` on that same user (action-tier admin gate uses publicMetadata).
+- [x] **A4 — HIGH — Prod admin user-id list configured** `DONE` (2026-05-24) — Configured in production by user (`CLERK_ADMIN_USER_IDS` set in Convex prod environment).
 
 - [ ] **A5 — HIGH — Prod domain not whitelisted in Clerk** `NEEDS-USER-INPUT`
   - Why: `<ClerkProvider>` will throw on an un-whitelisted hostname.
@@ -102,10 +100,8 @@ Items below updated accordingly. New entries added for security findings the pri
 - [x] **C1 — BLOCKER — Plan slug mismatch resolved** `DONE` (2026-05-16) — Tiers are now `lite` / `pro` / `max` everywhere. Landing's `PricingSection` (`src/routes/index.tsx:1423-1480`) derives `price`, `imageCredits / 10` (image-gen count), and `brandKitLimit` directly from `PLAN_CONFIG`. Cannot drift.
   - Still NEEDS-USER-INPUT: confirm Clerk dashboard plans use slugs `lite`, `pro`, `max` (not the old solo/studio/agency). If they don't, rename them in Clerk.
 
-- [ ] **C2 — BLOCKER — Brand-kit limit has zero server-side enforcement** `OPEN`
-  - Why: Landing advertises 2/8/unlimited brand kits per tier. `convex/brandKits.ts` has no `requireBrandKitLimit` gate. Solo users can create unlimited kits → revenue leakage.
-  - Evidence: `convex/brandKits.ts` (no enforcement); `convex/lib/billing/planConfig.ts:19-24` (no `brandKitLimit` field)
-  - Fix: add `brandKitLimit?: number` to `PlanConfig`; add `requireBrandKitLimit(ctx)` to `convex/lib/billing/index.ts`; call it from `createBrandKit` in `convex/brandKits.ts`.
+- [x] **C2 — BLOCKER — Brand-kit limit has zero server-side enforcement** `DONE` (2026-05-24) — brand-kit limits are now declared in `PlanConfig` and verified on the server side via `requireBrandKitLimit(ctx)` inside `createBrandKit`.
+  - Evidence: `convex/brandKits.ts:124` calls `requireBrandKitLimit`; `convex/lib/billing/planConfig.ts:31` defines `brandKitLimit`; `convex/lib/billing/index.ts:233-269` contains the limit check.
 
 - [x] **C3 — BLOCKER — Trial period not configured per Clerk plan** `DONE` (2026-05-16) — `trial_period_days = 7` confirmed on each Clerk plan
   - Why: Landing FAQ at `src/routes/index.tsx:1605` and every CTA promises "7-day free trial". `PlanCard.tsx:52,148-152` reads `freeTrialDays` from Clerk plan data via `usePlans()`. If Clerk plans don't have `trial_period_days = 7`, **users are charged immediately at checkout despite the landing promise.**
@@ -179,9 +175,7 @@ Items below updated accordingly. New entries added for security findings the pri
 - [x] **R1 — DONE — All internal routes resolve** (audit C verified)
   - 21/21 navigable destinations match a route file. All `navigate(...)` calls use real routes. All anchor IDs exist on the same route.
 
-- [ ] **R2 — HIGH — `support@prodsnap.io` mailbox not verified** `NEEDS-USER-INPUT`
-  - Why: Address appears in 6 places (Footer, PricingPage, StepPlan, terms, privacy, landing). DNS / mailbox status unverified.
-  - You verify: ensure the mailbox actually receives mail before launch, or change to a known-good address.
+- [x] **R2 — HIGH — support email updated to `info@prod_snap_to.io`** `DONE` (2026-05-24) — User verified working email address `info@prod_snap_to.io`, and all 6 occurrences in components and routes were updated to point to it.
 
 ---
 
@@ -229,9 +223,7 @@ Items below updated accordingly. New entries added for security findings the pri
 
 ## Category: Errors / Observability
 
-- [ ] **O1 — BLOCKER — No error reporting (Sentry/equivalent)** `OPEN` + `NEEDS-USER-INPUT`
-  - Why: First production crash → no signal. Operator flies blind. Free-tier Sentry handles MVP volume.
-  - You provide: Sentry DSN (or BetterStack / Highlight). Wire `@sentry/react` + `@sentry/node` (~30 min wire-up).
+- [x] **O1 — BLOCKER — Error reporting (Sentry) configured** `DONE` (2026-05-24) — Installed `@sentry/react`, created client entry point `src/entry-client.tsx`, configured user's Sentry DSN, and wired React 19 `onUncaughtError`, `onCaughtError`, and `onRecoverableError` hooks to de-minify and log all client-side exceptions.
 
 - [ ] **O2 — HIGH — No analytics installed** `OPEN` + `NEEDS-USER-INPUT`
   - Why: Can't measure landing→signup→paid funnel, trial→paid conversion. Critical for shape of growth.
@@ -316,9 +308,7 @@ Items below updated accordingly. New entries added for security findings the pri
 - [ ] **P7 — POLISH — Stale template assets** `OPEN`
   - `public/tanstack.png` (~30KB), maybe `public/github-mark-white.png` — check usage and delete if orphan.
 
-- [ ] **P8 — POLISH — Sourcemaps off in prod (current); flip to `'hidden'` when Sentry lands** `OPEN`
-  - Without sourcemaps, Sentry stack traces will be minified gibberish.
-  - Fix: when O1 ships, flip `vite.config.ts` to `build.sourcemap: 'hidden'` and upload to Sentry separately.
+- [x] **P8 — POLISH — Sourcemaps off in prod (current); flip to `'hidden'` when Sentry lands** `DONE` (2026-05-24) — Configured `build.sourcemap: 'hidden'` in `vite.config.ts` to enable de-minified stack traces in Sentry while keeping maps private from clients.
 
 ---
 

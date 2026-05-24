@@ -83,13 +83,13 @@ export function Footer() {
               Support
             </Text>
             <Anchor
-              href="mailto:support@prodsnap.io"
+              href="mailto:info@prod_snap_to.io"
               fz="xs"
               c="dark.2"
               underline="never"
               styles={{ root: { '&:hover': { color: 'var(--mantine-color-brand-4)' } } }}
             >
-              support@prodsnap.io
+              info@prod_snap_to.io
             </Anchor>
             <Text fz="xs" c="dark.3" mt="xs">
               © 2026 ProdSnap

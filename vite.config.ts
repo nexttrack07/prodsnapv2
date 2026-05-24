@@ -14,7 +14,7 @@ export default defineConfig({
     postcss: './postcss.config.cjs',
   },
   build: {
-    sourcemap: false,
+    sourcemap: 'hidden',
     minify: 'esbuild',
   },
   plugins: [tanstackStart(), netlify(), viteReact()],

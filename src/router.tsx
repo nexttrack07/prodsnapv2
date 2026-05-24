@@ -80,6 +80,8 @@ export function getRouter() {
     ),
     scrollRestoration: true,
   })
+
+
   setupRouterSsrQueryIntegration({
     router,
     queryClient,

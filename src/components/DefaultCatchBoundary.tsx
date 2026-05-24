@@ -24,7 +24,7 @@ export function DefaultCatchBoundary({ error }: ErrorComponentProps) {
         </Title>
         <Text c="dark.2" ta="center">
           We've been notified. Try again in a moment, or email{' '}
-          <Anchor href="mailto:support@prodsnap.io">support@prodsnap.io</Anchor>{' '}
+          <Anchor href="mailto:info@prod_snap_to.io">info@prod_snap_to.io</Anchor>{' '}
           if it keeps happening.
         </Text>
         {import.meta.env.DEV && error?.message && (

@@ -130,8 +130,8 @@ function TermsOfService() {
           </Title>
           <Text c="dark.1">
             Questions about these terms?{' '}
-            <Anchor href="mailto:support@prodsnap.io" c="brand.4">
-              support@prodsnap.io
+            <Anchor href="mailto:info@prod_snap_to.io" c="brand.4">
+              info@prod_snap_to.io
             </Anchor>
           </Text>
         </div>

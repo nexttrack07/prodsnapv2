@@ -3,6 +3,7 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMediaQuery } from '@mantine/hooks'
 import { LogoMark } from '~/components/Logo'
 import { seo } from '~/utils/seo'
+import * as Sentry from '@sentry/react'
 import { PLAN_CONFIG } from '../../convex/lib/billing/planConfig'
 
 // Single layout context — replaces 12 per-section useMediaQuery listeners.
@@ -1391,7 +1392,7 @@ function FeatureGrid() {
           {[
             { tag: 'BRANDS', t: 'Multi-brand kits', d: 'Per-product colors, fonts, voice. Run 10 client brands without mixing them up.' },
             { tag: 'LIBRARY', t: 'Cross-product winners', d: '/library shows every gen, every brand. Filter by ★. Build on what works.' },
-            { tag: 'MODELS', t: 'Two image models', d: 'nano-banana-2 (fast, default). gpt-image-2 (slower, higher fidelity).' },
+            { tag: 'MODELS', t: 'Premium image generation', d: 'ProdSnap Fast (fast, default) and ProdSnap Pro (slower, higher fidelity) AI models.' },
             { tag: 'RATIOS', t: 'Every Meta ratio', d: '1:1 / 4:5 / 9:16 in one batch. No Canva detour.' },
             { tag: 'OUTPUT', t: 'PNG / WebP / JPG', d: 'Per ad, per ratio. Ready for Ads Manager.' },
             { tag: 'COPY', t: 'Optional ad copy', d: 'Headlines, primary texts, CTAs following Meta best practices. Opt-in.' },
@@ -1434,12 +1435,12 @@ function PricingSection() {
       features: [
         { label: `${PLAN_CONFIG.lite.brandKitLimit} brand kits`, on: true },
         { label: `${PLAN_CONFIG.lite.imageCredits / 10} image generations / month`, on: true },
-        { label: 'nano-banana AI image model', on: true },
+        { label: 'ProdSnap Fast & Pro image models', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },
-        { label: 'Surgical iteration', on: false },
-        { label: 'Cross-product library', on: false },
+        { label: 'Surgical iteration', on: true },
+        { label: 'Cross-product library', on: true },
         { label: 'Priority support', on: false },
       ] as PricingFeature[],
     },
@@ -1451,7 +1452,7 @@ function PricingSection() {
       features: [
         { label: `${PLAN_CONFIG.pro.brandKitLimit} brand kits`, on: true },
         { label: `${PLAN_CONFIG.pro.imageCredits / 10} image generations / month`, on: true },
-        { label: 'nano-banana AI image model', on: true },
+        { label: 'ProdSnap Fast & Pro image models', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },
@@ -1467,7 +1468,7 @@ function PricingSection() {
       features: [
         { label: 'Unlimited brand kits', on: true },
         { label: `${PLAN_CONFIG.max.imageCredits / 10} image generations / month`, on: true },
-        { label: 'nano-banana AI image model', on: true },
+        { label: 'ProdSnap Fast & Pro image models', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },
@@ -1772,7 +1773,7 @@ function LandingFooter() {
           {/* Links — only functional ones rendered. Add more as the public
               pages they point to ship. */}
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-            <a href="mailto:support@prodsnap.io" style={linkStyle}>support@prodsnap.io</a>
+            <a href="mailto:info@prod_snap_to.io" style={linkStyle}>info@prod_snap_to.io</a>
             <Link to="/privacy" style={linkStyle}>Privacy</Link>
             <Link to="/terms" style={linkStyle}>Terms</Link>
           </div>
@@ -1789,6 +1790,61 @@ function LandingFooter() {
 // PAGE (route component)
 // ============================================================
 
+function ErrorButton() {
+  return (
+    <div style={{ padding: '24px 0', borderTop: `1px solid ${T.border}`, textAlign: 'center', background: T.bgElev }}>
+      <MonoLabel style={{ display: 'block', marginBottom: 12 }}>Sentry Integration Test Tool</MonoLabel>
+      <button
+        onClick={() => {
+          console.log('[ErrorButton] onClick triggered');
+          
+          try {
+            if (Sentry.logger) {
+              Sentry.logger.info('User triggered test error', {
+                action: 'test_error_button_click',
+              });
+              console.log('[ErrorButton] Sentry.logger call succeeded');
+            } else {
+              console.warn('[ErrorButton] Sentry.logger is undefined in this SDK version');
+            }
+          } catch (err) {
+            console.error('[ErrorButton] Failed to call Sentry.logger:', err);
+          }
+
+          try {
+            if (Sentry.metrics) {
+              Sentry.metrics.count('test_counter', 1);
+              console.log('[ErrorButton] Sentry.metrics call succeeded');
+            } else {
+              console.warn('[ErrorButton] Sentry.metrics is undefined in this SDK version');
+            }
+          } catch (err) {
+            console.error('[ErrorButton] Failed to call Sentry.metrics:', err);
+          }
+
+          console.log('[ErrorButton] Displaying alert and throwing test error...');
+          alert('Click registered! Throwing test error to Sentry...');
+          throw new Error('This is your first error!');
+        }}
+        style={{
+          background: T.brand,
+          color: '#fff',
+          border: 'none',
+          padding: '10px 20px',
+          borderRadius: 8,
+          cursor: 'pointer',
+          fontFamily: fontDisplay,
+          fontWeight: 600,
+          fontSize: 14,
+          boxShadow: `0 4px 12px ${T.brand}aa`,
+        }}
+      >
+        Break the world
+      </button>
+    </div>
+  )
+}
+
 function Home() {
   const isMobile = useMediaQuery('(max-width: 768px)', false, { getInitialValueInEffect: false }) ?? false
   return (
@@ -1804,6 +1860,7 @@ function Home() {
         <PricingSection />
         <FAQSection />
         <FinalCTA />
+        <ErrorButton />
         <LandingFooter />
       </main>
     </LandingLayoutContext.Provider>
