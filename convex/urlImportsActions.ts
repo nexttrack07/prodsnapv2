@@ -196,13 +196,15 @@ export const runUrlImport = internalAction({
           // Disable it so the LLM sees every gallery thumbnail.
           onlyMainContent: false,
           // Trigger lazy-loaded gallery images by scrolling before snapshot.
-          // Most product galleries hydrate after the first scroll; one
-          // scroll plus a short settle keeps action time tight so the
-          // budget mostly goes to LLM extraction.
+          // Most product galleries hydrate after the first scroll; two
+          // scrolls plus a longer settle ensures lazy-loading candidates
+          // like data-original-image are present in the HTML snapshot.
           actions: [
             { type: 'wait', milliseconds: 1000 },
             { type: 'scroll', direction: 'down' },
-            { type: 'wait', milliseconds: 800 },
+            { type: 'wait', milliseconds: 1000 },
+            { type: 'scroll', direction: 'down' },
+            { type: 'wait', milliseconds: 1500 },
           ],
           // Default Firecrawl timeout is 30s for render + extraction.
           // Even with a slimmer schema, LLM extraction of 10 fields plus
@@ -263,19 +265,19 @@ export const runUrlImport = internalAction({
         //    sources miss)
         const markdownImages = extractMarkdownImageUrls(scrapePayload.data.markdown ?? '')
         const htmlImages = extractHtmlImageUrls(scrapePayload.data.html ?? '')
-        // Order matters — the first 5 (after dedup + upgrade) win:
-        //   1. HTML <img>/srcset: extractor picks LARGEST descriptor → highest-res candidates
-        //   2. Markdown: also direct image URLs, no srcset metadata
-        //   3. LLM-extracted: tends to grab whatever's visible-rendered, often the gallery
-        //      thumbnail variant on Shopify-style CDNs
-        //   4. og:image: usually a cropped 1200×630 social card, not the product photo
+        const shopifyImages = await fetchShopifyImages(importRow.sourceUrl)
+
+        // Order matters — we prioritize high-precision sources (Shopify API, LLM, og:image)
+        // then fall back to HTML-extracted candidates. uniqueValidImages
+        // handles the heavy lifting of ranking, deduping, and SVG cleanup.
         const rawImageUrls = [
-          ...htmlImages,
-          ...markdownImages,
+          ...shopifyImages,
           ...(extracted.productImageUrls ?? []),
           ...(fallbackImage ? [fallbackImage] : []),
+          ...htmlImages,
+          ...markdownImages,
         ]
-        const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 5)
+        const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 10)
         if (process.env.DEBUG_AI === 'true') {
           console.log(
             `[urlImport ${importId}] image urls: raw=${rawImageUrls.length} ` +
@@ -536,11 +538,13 @@ function extractMarkdownImageUrls(markdown: string): string[] {
 function extractHtmlImageUrls(html: string): string[] {
   if (!html) return []
   const out: string[] = []
-  const imgTagRe = /<img\b[^>]*>/gi
-  const attrRe = /\b(data-src|data-original|data-srcset|src|srcset)=["']([^"']+)["']/gi
-  let imgMatch: RegExpExecArray | null
-  while ((imgMatch = imgTagRe.exec(html)) !== null) {
-    const tag = imgMatch[0]
+  // Matches both <img> and <source> tags.
+  const tagRe = /<(?:img|source)\b[^>]*>/gi
+  // Matches standard and lazy-load attributes.
+  const attrRe = /\b(data-src|data-original|data-original-image|data-srcset|src|srcset)=["']([^"']+)["']/gi
+  let tagMatch: RegExpExecArray | null
+  while ((tagMatch = tagRe.exec(html)) !== null) {
+    const tag = tagMatch[0]
     let attrMatch: RegExpExecArray | null
     while ((attrMatch = attrRe.exec(tag)) !== null) {
       const attrName = attrMatch[1].toLowerCase()
@@ -584,7 +588,9 @@ function looksLikeImageUrl(u: string): boolean {
     return false
   }
   // Direct image file extension wins outright.
-  if (/\.(png|jpe?g|webp|gif|avif|svg)(?:$|\?)/i.test(parsed.pathname)) return true
+  // We exclude SVGs here because they are almost always icons, logos, or flags,
+  // not product photography.
+  if (/\.(png|jpe?g|webp|gif|avif)(?:$|\?)/i.test(parsed.pathname)) return true
   // Allowlisted image CDNs serve images at extensionless paths.
   const host = parsed.hostname.toLowerCase()
   if (IMAGE_CDN_HOSTS.some((cdn) => host === cdn || host.endsWith(`.${cdn}`))) return true
@@ -593,20 +599,41 @@ function looksLikeImageUrl(u: string): boolean {
 
 function uniqueValidImages(urls: string[]): string[] {
   const seen = new Set<string>()
-  const out: string[] = []
+  const scored: { url: string; score: number }[] = []
+
   for (const u of urls) {
     if (!u || typeof u !== 'string') continue
     if (!/^https?:\/\//i.test(u)) continue
     if (!looksLikeImageUrl(u)) continue
-    // Upgrade thumbnail/lazy-load preview URLs to their high-res variants
-    // BEFORE deduping, so two URLs that point at the same image at
-    // different resolutions collapse to one.
+
     const upgraded = upgradeToHighResImageUrl(u)
     if (seen.has(upgraded)) continue
     seen.add(upgraded)
-    out.push(upgraded)
+
+    // Baseline score
+    let score = 0
+    const lower = upgraded.toLowerCase()
+
+    // High signal: product images
+    if (lower.includes('product')) score += 10
+    if (lower.includes('files/')) score += 5 // common Shopify product path
+    if (lower.includes('gallery')) score += 5
+    if (/\d+x\d+/.test(lower)) score += 3 // dimensional tokens often mean images
+    if (lower.includes('master')) score += 5 // Shopify 'master' resolution
+
+    // Negative signal: icons and UI elements
+    if (lower.includes('icon')) score -= 20
+    if (lower.includes('logo')) score -= 20
+    if (lower.includes('flag')) score -= 20
+    if (lower.includes('placeholder')) score -= 20
+    if (lower.includes('avatar')) score -= 10
+    if (lower.includes('swatch')) score -= 5 // swatches are tiny, we want full shots
+
+    scored.push({ url: upgraded, score })
   }
-  return out
+
+  // Sort by score descending, then return the URLs.
+  return scored.sort((a, b) => b.score - a.score).map((s) => s.url)
 }
 
 function guessExtension(url: string): string {
@@ -626,6 +653,35 @@ async function safeReadText(res: Response): Promise<string> {
   } catch {
     return ''
   }
+}
+
+// Shopify stores provide a clean JSON representation of product data if you
+// append .js or .json to the URL. This reliably gives us every high-res
+// image URL in the carousel, bypassing the need for complex DOM scraping
+// or lazy-load attribute detection.
+async function fetchShopifyImages(url: string): Promise<string[]> {
+  try {
+    const parsed = new URL(url)
+    if (!parsed.pathname.includes('/products/')) return []
+
+    // Append .js to the base product URL (dropping query params)
+    const apiUrl = parsed.origin + parsed.pathname + '.js'
+    const res = await fetch(apiUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      },
+    })
+    if (!res.ok) return []
+    const json = (await res.json()) as { images?: string[] }
+    if (json && Array.isArray(json.images)) {
+      // Shopify JSON images are often protocol-relative (e.g. //cdn.shopify.com/...)
+      return json.images.map((img) => (img.startsWith('//') ? `https:${img}` : img))
+    }
+  } catch {
+    /* ignore */
+  }
+  return []
 }
 
 // ─── LLM distillation ─────────────────────────────────────────────────────
