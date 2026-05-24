@@ -2,6 +2,10 @@ import './instrument'
 import { hydrateRoot } from 'react-dom/client'
 import { StartClient } from '@tanstack/react-start/client'
 import * as Sentry from '@sentry/react'
+import { getDataFast } from './lib/datafast'
+
+// Initialize DataFast analytics on startup
+getDataFast()
 
 hydrateRoot(
   document,

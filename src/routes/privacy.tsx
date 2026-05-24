@@ -104,8 +104,8 @@ function PrivacyPolicy() {
           </Title>
           <Text c="dark.1">
             Questions about this policy?{' '}
-            <Anchor href="mailto:info@prod_snap_to.io" c="brand.4">
-              info@prod_snap_to.io
+            <Anchor href="mailto:info@prodsnap.io" c="brand.4">
+              info@prodsnap.io
             </Anchor>
           </Text>
         </div>

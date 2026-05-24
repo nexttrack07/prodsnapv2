@@ -1773,7 +1773,7 @@ function LandingFooter() {
           {/* Links — only functional ones rendered. Add more as the public
               pages they point to ship. */}
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-            <a href="mailto:info@prod_snap_to.io" style={linkStyle}>info@prod_snap_to.io</a>
+            <a href="mailto:info@prodsnap.io" style={linkStyle}>info@prodsnap.io</a>
             <Link to="/privacy" style={linkStyle}>Privacy</Link>
             <Link to="/terms" style={linkStyle}>Terms</Link>
           </div>
@@ -1790,61 +1790,6 @@ function LandingFooter() {
 // PAGE (route component)
 // ============================================================
 
-function ErrorButton() {
-  return (
-    <div style={{ padding: '24px 0', borderTop: `1px solid ${T.border}`, textAlign: 'center', background: T.bgElev }}>
-      <MonoLabel style={{ display: 'block', marginBottom: 12 }}>Sentry Integration Test Tool</MonoLabel>
-      <button
-        onClick={() => {
-          console.log('[ErrorButton] onClick triggered');
-          
-          try {
-            if (Sentry.logger) {
-              Sentry.logger.info('User triggered test error', {
-                action: 'test_error_button_click',
-              });
-              console.log('[ErrorButton] Sentry.logger call succeeded');
-            } else {
-              console.warn('[ErrorButton] Sentry.logger is undefined in this SDK version');
-            }
-          } catch (err) {
-            console.error('[ErrorButton] Failed to call Sentry.logger:', err);
-          }
-
-          try {
-            if (Sentry.metrics) {
-              Sentry.metrics.count('test_counter', 1);
-              console.log('[ErrorButton] Sentry.metrics call succeeded');
-            } else {
-              console.warn('[ErrorButton] Sentry.metrics is undefined in this SDK version');
-            }
-          } catch (err) {
-            console.error('[ErrorButton] Failed to call Sentry.metrics:', err);
-          }
-
-          console.log('[ErrorButton] Displaying alert and throwing test error...');
-          alert('Click registered! Throwing test error to Sentry...');
-          throw new Error('This is your first error!');
-        }}
-        style={{
-          background: T.brand,
-          color: '#fff',
-          border: 'none',
-          padding: '10px 20px',
-          borderRadius: 8,
-          cursor: 'pointer',
-          fontFamily: fontDisplay,
-          fontWeight: 600,
-          fontSize: 14,
-          boxShadow: `0 4px 12px ${T.brand}aa`,
-        }}
-      >
-        Break the world
-      </button>
-    </div>
-  )
-}
-
 function Home() {
   const isMobile = useMediaQuery('(max-width: 768px)', false, { getInitialValueInEffect: false }) ?? false
   return (
@@ -1860,7 +1805,6 @@ function Home() {
         <PricingSection />
         <FAQSection />
         <FinalCTA />
-        <ErrorButton />
         <LandingFooter />
       </main>
     </LandingLayoutContext.Provider>

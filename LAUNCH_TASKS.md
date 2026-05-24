@@ -175,7 +175,7 @@ Items below updated accordingly. New entries added for security findings the pri
 - [x] **R1 — DONE — All internal routes resolve** (audit C verified)
   - 21/21 navigable destinations match a route file. All `navigate(...)` calls use real routes. All anchor IDs exist on the same route.
 
-- [x] **R2 — HIGH — support email updated to `info@prod_snap_to.io`** `DONE` (2026-05-24) — User verified working email address `info@prod_snap_to.io`, and all 6 occurrences in components and routes were updated to point to it.
+- [x] **R2 — HIGH — support email updated to `info@prodsnap.io`** `DONE` (2026-05-24) — User verified working email address `info@prodsnap.io`, and all occurrences in components and routes were updated to point to it.
 
 ---
 

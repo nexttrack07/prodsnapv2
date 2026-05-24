@@ -16,15 +16,30 @@
  */
 import { useCallback, useEffect, useRef } from 'react'
 import { useAction, useQuery } from 'convex/react'
+import { useUser } from '@clerk/react'
 import { api } from '../../../convex/_generated/api'
+import { getDataFast } from '../../lib/datafast'
 
 const DEBOUNCE_MS = 30_000
 
 export function BillingSync() {
+  const { user } = useUser()
   const syncPlan = useAction(api.billing.syncPlan.syncUserPlan)
   const billingStatus = useQuery(api.billing.syncPlan.getBillingStatus)
   const hasSynced = useRef(false)
   const lastSyncAt = useRef(0)
+
+  // Identify user in DataFast analytics
+  useEffect(() => {
+    if (user) {
+      getDataFast()?.then((df) => {
+        df.identify(user.id, {
+          email: user.primaryEmailAddress?.emailAddress || undefined,
+          fullName: user.fullName || undefined,
+        })
+      })
+    }
+  }, [user])
 
   const runSync = useCallback(
     (reason: string) => {

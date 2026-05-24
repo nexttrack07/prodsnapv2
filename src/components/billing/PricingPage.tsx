@@ -61,7 +61,7 @@ export function PricingPage() {
         </Group>
       ) : !plans || plans.length === 0 ? (
         <Text c="dark.2" ta="center" py={64}>
-          Plans aren't loading — please <Anchor href="mailto:info@prod_snap_to.io">email info@prod_snap_to.io</Anchor>.
+          Plans aren't loading — please <Anchor href="mailto:info@prodsnap.io">email info@prodsnap.io</Anchor>.
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
