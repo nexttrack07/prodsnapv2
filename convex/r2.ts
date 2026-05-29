@@ -153,9 +153,24 @@ export async function uploadFromUrl(
       `fetch ${sourceUrl} returned non-image content-type "${ct}" (likely a hotlink block or anti-bot page)`,
     )
   }
+  // Cap the download size. Buffering an unbounded body (a giant PNG from a
+  // model output or a malicious URL) into memory can OOM / time out the action.
+  // 25 MB comfortably covers high-res generations while bounding worst case.
+  const MAX_BYTES = 25 * 1024 * 1024
+  const contentLength = Number(res.headers.get('content-length') ?? '')
+  if (Number.isFinite(contentLength) && contentLength > MAX_BYTES) {
+    throw new Error(
+      `fetch ${sourceUrl} body too large (${contentLength} bytes > ${MAX_BYTES})`,
+    )
+  }
   const buf = Buffer.from(await res.arrayBuffer())
   if (buf.length === 0) {
     throw new Error(`fetch ${sourceUrl} returned empty body`)
+  }
+  if (buf.length > MAX_BYTES) {
+    throw new Error(
+      `fetch ${sourceUrl} body too large (${buf.length} bytes > ${MAX_BYTES})`,
+    )
   }
   return uploadToR2(buf, key, ct)
 }

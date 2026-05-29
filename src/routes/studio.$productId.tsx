@@ -1511,6 +1511,7 @@ function ImageGallerySection({
   legacyImageUrl?: string
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
+  const navigate = useNavigate()
   const [deleteTarget, setDeleteTarget] = useState<{ imageId: Id<'productImages'>; isLast: boolean } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [oocOpen, setOocOpen] = useState(false)
@@ -1629,8 +1630,8 @@ function ImageGallerySection({
     try {
       await deleteMutation.mutateAsync({ imageId: deleteTarget.imageId, confirmDeleteProduct: true })
       notifications.show({ title: 'Success', message: 'Product deleted', color: 'green' })
-      // Navigate back to products list
-      window.location.href = '/studio'
+      // In-app navigation back to the dashboard (avoids a full page reload).
+      navigate({ to: '/home' })
     } catch (err) {
       notifications.show({
         title: 'Error',

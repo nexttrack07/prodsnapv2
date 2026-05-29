@@ -7,6 +7,7 @@ import { action, internalAction } from './_generated/server'
 import { internal } from './_generated/api'
 import { uploadFromUrl } from './r2'
 import { nanoid } from 'nanoid'
+import { requireAdmin } from './lib/admin/requireAdmin'
 import {
   isTestMode,
   mockVisionResponse,
@@ -803,9 +804,15 @@ export const generateFromTemplate = internalAction({
       aspectRatio,
     })
 
-    // Charge credits after model success only.
+    const key = `studio/outputs/${generation.runId ?? generation.productId}/${generation.variationIndex}-${nanoid(6)}.png`
+    const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
+
+    // Charge AFTER the output is durably uploaded, idempotently per generation.
+    // Charging post-upload means a failed upload never bills the user; the
+    // creditCharged flag means a workflow retry of this action can't re-bill.
     if (generation.userId) {
-      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeCreditsInternal, {
+      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeForGenerationInternal, {
+        generationId,
         userId: generation.userId,
         modelKey: mdlKey,
         note: 'generateFromTemplate',
@@ -817,8 +824,6 @@ export const generateFromTemplate = internalAction({
       )
     }
 
-    const key = `studio/outputs/${generation.runId ?? generation.productId}/${generation.variationIndex}-${nanoid(6)}.png`
-    const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
     return { outputUrl }
   },
 })
@@ -1005,9 +1010,13 @@ export const generateFromAngle = internalAction({
       }))
     }
 
-    // Charge credits after model success only.
+    const key = `studio/outputs/${generation.productId ?? 'angle'}/${generation.variationIndex}-${nanoid(6)}.png`
+    const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
+
+    // Charge AFTER the output is durably uploaded, idempotently per generation.
     if (generation.userId) {
-      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeCreditsInternal, {
+      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeForGenerationInternal, {
+        generationId,
         userId: generation.userId,
         modelKey: angleModelKey,
         note: 'generateFromAngle',
@@ -1018,8 +1027,6 @@ export const generateFromAngle = internalAction({
       )
     }
 
-    const key = `studio/outputs/${generation.productId ?? 'angle'}/${generation.variationIndex}-${nanoid(6)}.png`
-    const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
     return { outputUrl }
   },
 })
@@ -1205,9 +1212,13 @@ export const generateVariation = internalAction({
       aspectRatio,
     })
 
-    // Charge credits after model success only.
+    const key = `studio/variations/${gen.productId}/${generationId}-${nanoid(6)}.png`
+    const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
+
+    // Charge AFTER the output is durably uploaded, idempotently per generation.
     if (gen.userId) {
-      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeCreditsInternal, {
+      await ctx.runMutation(internal.lib.billing.chargeMutation.chargeForGenerationInternal, {
+        generationId,
         userId: gen.userId,
         modelKey: variationModelKey,
         note: 'generateVariation',
@@ -1218,8 +1229,6 @@ export const generateVariation = internalAction({
       )
     }
 
-    const key = `studio/variations/${gen.productId}/${generationId}-${nanoid(6)}.png`
-    const outputUrl = await uploadFromUrl(generatedUrl, key, 'image/png')
     return { outputUrl }
   },
 })
@@ -1230,7 +1239,8 @@ export const enhancePrompt = action({
     original: v.string(),
     instructions: v.string(),
   },
-  handler: async (_ctx, { original, instructions }) => {
+  handler: async (ctx, { original, instructions }) => {
+    await requireAdmin(ctx)
     const trimmedInstructions = instructions.trim()
     if (!trimmedInstructions) throw new Error('Describe what to change')
     if (!original.trim()) throw new Error('Original prompt is empty')

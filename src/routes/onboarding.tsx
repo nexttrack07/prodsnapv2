@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth, SignInButton } from '@clerk/react'
-import { useQuery } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 import {
   Box,
   Button,
@@ -18,13 +18,18 @@ import { StepRole } from '~/components/onboarding/StepRole'
 import { StepBusiness } from '~/components/onboarding/StepBusiness'
 import { StepPlan } from '~/components/onboarding/StepPlan'
 
-type OnboardingSearch = { step?: number }
+type OnboardingSearch = { step?: number; subscribed?: boolean }
 
 export const Route = createFileRoute('/onboarding')({
   validateSearch: (search: Record<string, unknown>): OnboardingSearch => {
     const raw = Number(search.step)
     const step = Number.isFinite(raw) ? raw : undefined
-    return step && step >= 1 && step <= 3 ? { step } : {}
+    const subscribed =
+      search.subscribed === '1' || search.subscribed === 1 || search.subscribed === true
+    return {
+      ...(step && step >= 1 && step <= 3 ? { step } : {}),
+      ...(subscribed ? { subscribed: true } : {}),
+    }
   },
   component: OnboardingPage,
 })
@@ -41,6 +46,29 @@ function OnboardingPage() {
   )
   const search = Route.useSearch()
   const navigate = useNavigate()
+  const finalizeOnboardingAfterCheckout = useAction(
+    api.onboardingProfiles.finalizeOnboardingAfterCheckout,
+  )
+  const finalizedRef = useRef(false)
+  const [finalizeError, setFinalizeError] = useState<string | null>(null)
+
+  const runFinalize = () => {
+    finalizedRef.current = true
+    setFinalizeError(null)
+    void finalizeOnboardingAfterCheckout().catch((err) => {
+      finalizedRef.current = false
+      setFinalizeError(err instanceof Error ? err.message : 'Could not finish setup')
+    })
+  }
+
+  // The embedded PricingTable redirects here with ?subscribed=1 after checkout.
+  // Treat the param as a UI hint only: the server action verifies Clerk has an
+  // active paid subscription before syncing the plan, granting credits, and
+  // marking onboarding complete.
+  useEffect(() => {
+    if (!isSignedIn || !search.subscribed || finalizedRef.current) return
+    runFinalize()
+  }, [isSignedIn, search.subscribed, finalizeOnboardingAfterCheckout])
 
   // Loading
   if (!isLoaded || (isSignedIn && (status === undefined || profile === undefined))) {
@@ -72,6 +100,43 @@ function OnboardingPage() {
   // user with products) → bounce to studio.
   if (status && status.state !== 'pending') {
     return <RedirectTo to="/home" />
+  }
+
+  // Post-subscribe finalize in progress (see effect above): show a brief
+  // loader instead of re-rendering the plan picker while completeOnboarding
+  // resolves and flips status → complete (which then redirects to /home).
+  if (search.subscribed) {
+    return (
+      <Center mih="60vh">
+        <Stack align="center" gap="md">
+          {finalizeError ? (
+            <>
+              <Title order={2} ta="center">We couldn't finish setup</Title>
+              <Text c="dark.2" ta="center" maw={420}>
+                {finalizeError}. If your payment completed, retry in a moment;
+                otherwise choose a plan to continue.
+              </Text>
+              <Group>
+                <Button
+                  variant="default"
+                  onClick={runFinalize}
+                >
+                  Retry
+                </Button>
+                <Button color="brand" onClick={() => navigate({ to: '/pricing' })}>
+                  View plans
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <>
+              <Loader size="md" color="brand" />
+              <Text c="dark.2">Finishing setup…</Text>
+            </>
+          )}
+        </Stack>
+      </Center>
+    )
   }
 
   const profileStep = profile?.currentStep ?? 1

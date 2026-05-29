@@ -17,6 +17,8 @@ import {
   CAPABILITIES,
   requireCapability,
 } from './lib/billing'
+import { requireCredits } from './lib/billing/credits'
+import { enforceGenerationRateLimit, recordGenerationUsage } from './products'
 
 export const workflow = new WorkflowManager(components.workflow)
 export const imageGenPool = new Workpool(components.imageGenPool, {
@@ -218,8 +220,15 @@ export const matchTemplates = query({
     hasMore: boolean
     nextOffset: number
   }> => {
+    // Ownership check — mirror getRun/getGenerations so a guessed runId can't
+    // be probed by an unauthenticated or non-owning caller. Same error for
+    // missing and non-owned so we don't leak which runIds exist.
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Run not found')
     const run = await ctx.db.get(runId)
-    if (!run) throw new Error('Run not found')
+    if (!run || (run.userId && run.userId !== identity.tokenIdentifier)) {
+      throw new Error('Run not found')
+    }
 
     const pageSize = limit ?? 24
     const startOffset = offset ?? 0
@@ -283,6 +292,8 @@ export const submitRun = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
+    // Rate limit: must run before billing to avoid burning credits on abuse.
+    await enforceGenerationRateLimit(ctx, userId, 'submitRun')
     if (args.templateIds.length === 0) throw new Error('No templates selected')
     if (args.templateIds.length > 3) throw new Error('At most 3 templates')
     if (args.variationsPerTemplate < 1 || args.variationsPerTemplate > 4) {
@@ -304,6 +315,20 @@ export const submitRun = mutation({
     if (args.variationsPerTemplate > 2) {
       await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitRun')
     }
+
+    // Pre-flight credit check for the whole batch (legacy run path is
+    // nano-banana-only — no model arg, so the action defaults to nano-banana-2).
+    await requireCredits(
+      ctx,
+      'nano-banana-2',
+      args.templateIds.length * args.variationsPerTemplate,
+    )
+    await recordGenerationUsage(
+      ctx,
+      userId,
+      'submitRun',
+      args.templateIds.length * args.variationsPerTemplate,
+    )
 
     await ctx.db.patch(args.runId, {
       status: 'generating',

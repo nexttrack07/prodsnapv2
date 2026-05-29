@@ -1,6 +1,9 @@
 import { v } from 'convex/values'
-import { mutation, query, type MutationCtx } from './_generated/server'
+import { action, internalMutation, mutation, query, type MutationCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
+import { internal } from './_generated/api'
+import { getClerkClient } from './lib/billing/provider.clerk'
+import { isKnownPlan } from './lib/billing/planConfig'
 
 const ROLE_VALIDATOR = v.union(
   v.literal('ecom-store-owner'),
@@ -88,6 +91,70 @@ export const completeOnboarding = mutation({
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
 
+    const userPlan = await ctx.db
+      .query('userPlans')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    const planSlug = userPlan?.plan ?? ''
+    if (planSlug === '' || planSlug === 'free_user') {
+      throw new Error('No active paid subscription found')
+    }
+
+    const profile = await getOrCreate(ctx, userId)
+    if (profile.completedAt) return null
+    await ctx.db.patch(profile._id, {
+      currentStep: 4,
+      completedAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+    return null
+  },
+})
+
+export const finalizeOnboardingAfterCheckout = action({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+
+    const clerkUserId = identity.subject
+    const clerk = getClerkClient()
+    const subscription = await clerk.billing.getUserBillingSubscription(clerkUserId)
+    const items = Array.isArray(subscription?.subscriptionItems)
+      ? subscription.subscriptionItems
+      : []
+    const billedItem = items.find(
+      (item) => item.status === 'active' || item.status === 'past_due',
+    )
+    const plan = billedItem?.plan?.slug ?? ''
+
+    if (!isKnownPlan(plan) || plan === 'free_user') {
+      throw new Error('No active paid subscription found')
+    }
+
+    await ctx.runMutation(internal.billing.syncPlan.writePlan, {
+      userId: identity.tokenIdentifier,
+      clerkUserId,
+      plan,
+      periodStart: billedItem?.periodStart ?? undefined,
+      periodEnd: billedItem?.periodEnd ?? undefined,
+      billingStatus: billedItem?.status ?? undefined,
+    })
+    await ctx.runMutation(internal.billing.webhookHandler.applyCreditsFromPlan, {
+      userId: identity.tokenIdentifier,
+    })
+    await ctx.runMutation(internal.onboardingProfiles.completeOnboardingInternal, {
+      userId: identity.tokenIdentifier,
+    })
+
+    return null
+  },
+})
+
+export const completeOnboardingInternal = internalMutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
     const profile = await getOrCreate(ctx, userId)
     if (profile.completedAt) return null
     await ctx.db.patch(profile._id, {

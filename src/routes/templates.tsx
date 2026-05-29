@@ -582,6 +582,11 @@ function TemplateTile({
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error('Template download failed:', err)
+      notifications.show({
+        title: 'Download failed',
+        message: "Couldn't download that template. Please try again.",
+        color: 'red',
+      })
     }
   }
 

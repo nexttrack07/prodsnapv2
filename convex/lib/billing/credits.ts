@@ -28,13 +28,16 @@ export function mcToCredits(mc: number): number {
 // ─── Pre-flight check ────────────────────────────────────────────────────────
 
 /**
- * Assert the authenticated user has enough credits for modelKey.
- * Throws CREDITS_EXHAUSTED if insufficient. Does NOT consume credits.
- * Call chargeCredits after the operation succeeds.
+ * Assert the authenticated user has enough credits for `units` charges of
+ * modelKey (units defaults to 1; pass the batch size for multi-generation
+ * submits so the whole batch is gated up front). Throws CREDITS_EXHAUSTED if
+ * insufficient. Does NOT consume credits — call chargeCredits after each
+ * operation succeeds.
  */
 export async function requireCredits(
   ctx: MutationCtx,
   modelKey: string,
+  units = 1,
 ): Promise<{ userId: string; requiredMc: number }> {
   const billing = await getBillingContext(ctx)
   if (!billing) throw new Error('Not authenticated')
@@ -64,14 +67,15 @@ export async function requireCredits(
   const availableMc =
     balance.planAllowanceMc - balance.planUsedMc + balance.topupBalanceMc
 
-  if (availableMc < pricing.creditsMc) {
+  const requiredMc = pricing.creditsMc * Math.max(1, units)
+  if (availableMc < requiredMc) {
     throw billingError(
       'CREDITS_EXHAUSTED',
       `Insufficient credits for ${modelKey}`,
     )
   }
 
-  return { userId, requiredMc: pricing.creditsMc }
+  return { userId, requiredMc }
 }
 
 // ─── Post-success decrement ───────────────────────────────────────────────────

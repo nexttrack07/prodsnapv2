@@ -7,26 +7,42 @@
  * so unauthenticated users aren't rerouted here. Unauthenticated users see
  * the sign-in experience from __root's <Unauthenticated> branch.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { Center, Loader, Stack, Text } from '@mantine/core'
-import { useQuery } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 
 // Tunables: how long to wait for BillingSync to populate userPlans before
-// redirecting to /pricing. Keeps us generous during flaky networks and
-// avoids flashing new subscribers back to /pricing right after checkout.
-const SYNC_GRACE_MS = 3000
+// redirecting to /pricing. Bumped from 3s to give the self-heal sync below a
+// full round-trip so a user who just paid (but whose plan hasn't synced yet,
+// e.g. arriving via a bookmark instead of the post-checkout interstitial)
+// isn't bounced to /pricing.
+const SYNC_GRACE_MS = 6000
 
 export function SubscriptionRequired({ children }: { children: ReactNode }) {
   const router = useRouter()
   const status = useQuery(api.billing.syncPlan.getBillingStatus)
+  const syncUserPlan = useAction(api.billing.syncPlan.syncUserPlan)
   const [graceExpired, setGraceExpired] = useState(false)
+  const attemptedSyncRef = useRef(false)
 
   useEffect(() => {
     const t = setTimeout(() => setGraceExpired(true), SYNC_GRACE_MS)
     return () => clearTimeout(t)
   }, [])
+
+  // Self-heal: if we're signed in but no plan is visible, proactively pull the
+  // plan from Clerk once before giving up. Covers the paid-but-unsynced user
+  // who lands on a protected route directly. If it resolves a plan,
+  // getBillingStatus updates reactively and the children render.
+  useEffect(() => {
+    if (!status) return
+    if (status.signedIn && !status.plan && !attemptedSyncRef.current) {
+      attemptedSyncRef.current = true
+      void syncUserPlan().catch(() => {})
+    }
+  }, [status, syncUserPlan])
 
   useEffect(() => {
     if (!status) return
@@ -43,7 +59,7 @@ export function SubscriptionRequired({ children }: { children: ReactNode }) {
   if (!status.signedIn) return <>{children}</>
   // Plan not yet synced — either grace period, or we've already kicked off
   // the redirect. Render a loader to avoid a flash of protected content.
-  if (!status.plan) return <LoadingGate hint="Loading your subscription…" />
+  if (!status.plan) return <LoadingGate hint="Confirming your subscription…" />
   return <>{children}</>
 }
 

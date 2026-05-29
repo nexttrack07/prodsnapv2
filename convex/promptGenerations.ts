@@ -9,11 +9,12 @@ import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import { internal } from './_generated/api'
 import { workflow } from './studio'
-import { enforceGenerationRateLimit } from './products'
+import { enforceGenerationRateLimit, recordGenerationUsage } from './products'
 import {
   CAPABILITIES,
   requireCapability,
 } from './lib/billing'
+import { requireCredits } from './lib/billing/credits'
 
 const aspectRatio = v.union(
   v.literal('1:1'),
@@ -111,6 +112,16 @@ export const submitPromptGeneration = mutation({
     if (count > 2) {
       await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitPromptGeneration')
     }
+
+    // Pre-flight credit check for the whole batch. Mirror generateFromAngle's
+    // model-key logic: gpt-image-2 with no source image bills the text-to-image
+    // endpoint, otherwise the edit endpoint.
+    const promptModelKey =
+      (model ?? 'nano-banana-2') === 'gpt-image-2'
+        ? productImageUrl ? 'gpt-image-2-edit' : 'gpt-image-2'
+        : 'nano-banana-2'
+    await requireCredits(ctx, promptModelKey, count)
+    await recordGenerationUsage(ctx, userId, 'submitPromptGeneration', count)
 
     // Insert one row per requested variation, then start a workflow per row.
     for (let i = 0; i < count; i++) {

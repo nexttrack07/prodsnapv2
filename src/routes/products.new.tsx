@@ -71,6 +71,7 @@ const CURRENCY_OPTIONS = [
 ]
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'scraping', 'extracting', 'uploading'])
+const URL_IMPORT_TIMEOUT_MS = 90_000
 
 function NewProductPage() {
   const navigate = useNavigate()
@@ -94,6 +95,22 @@ function NewProductPage() {
     importRow !== undefined &&
     importRow !== null &&
     IN_FLIGHT_STATUSES.has(importRow.status)
+
+  useEffect(() => {
+    if (!importId) return
+    if (importRow?.status === 'done' || importRow?.status === 'failed') return
+    const t = setTimeout(() => {
+      setImportError('Import timed out — try again or upload images manually.')
+      setImportId(null)
+      notifications.show({
+        title: "Couldn't finish import",
+        message: 'That page took too long to read. You can try again or upload product images manually.',
+        color: 'orange',
+        autoClose: 7000,
+      })
+    }, URL_IMPORT_TIMEOUT_MS)
+    return () => clearTimeout(t)
+  }, [importId, importRow?.status])
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [name, setName] = useState('')

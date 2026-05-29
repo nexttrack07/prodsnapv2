@@ -18,6 +18,7 @@ import {
   requireProductLimit,
   requireProductLimitForUser,
 } from './lib/billing'
+import { requireCredits } from './lib/billing/credits'
 import { billingError } from './lib/billing/errors'
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
@@ -81,7 +82,8 @@ export async function enforceGenerationRateLimit(
     )
     .collect()
 
-  if (recent.length >= RATE_LIMIT_MAX_CALLS) {
+  const recentUnits = recent.reduce((sum, event) => sum + (event.units ?? 1), 0)
+  if (recentUnits >= RATE_LIMIT_MAX_CALLS) {
     await ctx.db.insert('billingEvents', {
       userId,
       mutationName,
@@ -94,6 +96,22 @@ export async function enforceGenerationRateLimit(
       'Too many requests — please wait a moment before generating again.',
     )
   }
+}
+
+export async function recordGenerationUsage(
+  ctx: MutationCtx,
+  userId: string,
+  mutationName: string,
+  units = 1,
+): Promise<void> {
+  await ctx.db.insert('billingEvents', {
+    userId,
+    mutationName,
+    allowed: true,
+    timestamp: Date.now(),
+    units,
+    context: 'usage',
+  })
 }
 
 // ─── Product lifecycle mutations ──────────────────────────────────────────
@@ -177,11 +195,11 @@ export const runProductAnalysis = internalAction({
       productId,
     })
     if (!product) return
-    if (!product.imageUrl) {
-      throw new Error('Product has no image URL')
-    }
 
     try {
+      if (!product.imageUrl) {
+        throw new Error('Product has no image URL')
+      }
       const result = await ctx.runAction(internal.ai.analyzeProduct, {
         imageUrl: product.imageUrl,
         customerLanguage: product.customerLanguage,
@@ -412,12 +430,16 @@ export const listProducts = query({
 
     if (products.length === 0) return []
 
-    // Batch fetch: get all generations for user's products in ONE query
-    // This avoids N+1 queries when fetching generation counts
+    // Batch fetch: get generations for user's products in ONE query (avoids
+    // N+1 when computing counts). Bounded with .take() so a power user with a
+    // huge generation history can't blow the Convex per-query read limit and
+    // error out the whole products page. Beyond the cap the per-product count
+    // badge is approximate — acceptable for a dashboard stat.
+    const GENERATION_COUNT_SCAN_CAP = 5000
     const allGenerations = await ctx.db
       .query('templateGenerations')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .collect()
+      .take(GENERATION_COUNT_SCAN_CAP)
 
     // Group generation counts by productId
     const countsByProduct = new Map<string, number>()
@@ -742,11 +764,11 @@ export const runBackgroundRemoval = internalAction({
       productId,
     })
     if (!product) return
-    if (!product.imageUrl) {
-      throw new Error('Product has no image URL')
-    }
 
     try {
+      if (!product.imageUrl) {
+        throw new Error('Product has no image URL')
+      }
       const result = await ctx.runAction(internal.ai.removeBackground, {
         productId,
         imageUrl: product.imageUrl,
@@ -951,6 +973,23 @@ export const generateFromProduct = mutation({
     } else {
       throw new Error('Product has no image')
     }
+
+    // Pre-flight credit check for the whole batch, so an out-of-credits user
+    // gets a clean "insufficient credits" error up front instead of a string
+    // of failed generations after fal.ai has already run.
+    const productModelKey =
+      (args.model ?? 'nano-banana-2') === 'gpt-image-2' ? 'gpt-image-2-edit' : 'nano-banana-2'
+    await requireCredits(
+      ctx,
+      productModelKey,
+      args.templateIds.length * args.variationsPerTemplate,
+    )
+    await recordGenerationUsage(
+      ctx,
+      userId,
+      'generateFromProduct',
+      args.templateIds.length * args.variationsPerTemplate,
+    )
 
     // Create generations for each (template × variation) pair
     const generationIds: string[] = []
@@ -1193,6 +1232,32 @@ export const generateVariations = mutation({
     // Get the source generation for metadata
     const sourceGen = await ctx.db.get(args.generationId)
     if (!sourceGen) throw new Error('Source generation not found')
+    if (sourceGen.userId && sourceGen.userId !== userId) {
+      throw new Error('Not authorized to use this source generation')
+    }
+    if (sourceGen.productId && sourceGen.productId !== args.productId) {
+      throw new Error('Source generation does not belong to this product')
+    }
+    if (sourceGen.status !== 'complete' || !sourceGen.outputUrl) {
+      throw new Error('Source generation is not ready')
+    }
+
+    const sourceImageUrl = sourceGen.outputUrl
+    const productImageUrl =
+      sourceGen.productImageUrl ||
+      (product.primaryImageId
+        ? (await ctx.db.get(product.primaryImageId))?.imageUrl
+        : undefined) ||
+      product.imageUrl
+    if (!productImageUrl) {
+      throw new Error('Product has no source image')
+    }
+
+    // Pre-flight credit check for the whole variation batch.
+    const variationModelKey =
+      (args.model ?? 'nano-banana-2') === 'gpt-image-2' ? 'gpt-image-2-edit' : 'nano-banana-2'
+    await requireCredits(ctx, variationModelKey, args.variationCount)
+    await recordGenerationUsage(ctx, userId, 'generateVariations', args.variationCount)
 
     const generationIds: string[] = []
 
@@ -1201,8 +1266,8 @@ export const generateVariations = mutation({
         productId: args.productId,
         userId, // Store userId on generation for efficient queries
         templateId: sourceGen.templateId,
-        productImageUrl: args.productImageUrl,
-        templateImageUrl: args.sourceImageUrl, // Use the generated image as the "template"
+        productImageUrl,
+        templateImageUrl: sourceImageUrl, // Use the generated image as the "template"
         templateSnapshot: sourceGen.templateSnapshot,
         aspectRatio: sourceGen.aspectRatio,
         mode: 'variation' as const,
@@ -1212,7 +1277,7 @@ export const generateVariations = mutation({
         model: args.model ?? 'nano-banana-2',
         variationSource: {
           sourceGenerationId: args.generationId,
-          sourceImageUrl: args.sourceImageUrl,
+          sourceImageUrl,
           changeText: args.changeText,
           changeIcons: args.changeIcons,
           changeColors: args.changeColors,

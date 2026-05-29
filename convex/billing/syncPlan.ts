@@ -27,7 +27,7 @@
 import { v } from 'convex/values'
 import { getClerkClient } from '../lib/billing/provider.clerk'
 import { action, internalAction, internalMutation, internalQuery, query } from '../_generated/server'
-import type { ActionCtx } from '../_generated/server'
+import type { ActionCtx, MutationCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
 import { isKnownPlan, PLAN_CONFIG } from '../lib/billing/planConfig'
 import { mcToCredits } from '../lib/billing/credits'
@@ -159,9 +159,89 @@ export const syncUserPlan = action({
       billingEventMetadata,
     })
 
+    if (plan) {
+      await ctx.runMutation(internal.billing.webhookHandler.applyCreditsFromPlan, {
+        userId: identity.tokenIdentifier,
+      })
+    }
+
     return { plan, synced: true }
   },
 })
+
+/**
+ * Reconcile billing rows that were keyed by the raw Clerk user id onto the
+ * canonical `tokenIdentifier` key.
+ *
+ * Why this exists: the subscription webhook can fire before the client has
+ * ever synced, at which point we have no clerkUserId→tokenIdentifier mapping
+ * and the webhook grants credits + writes a userPlans row keyed by the raw
+ * `clerkUserId`. Everything else in the app (generation ownership, the credit
+ * charge path, the balance read) keys by `tokenIdentifier`. Left unreconciled,
+ * a paid user shows 0 credits and can't generate.
+ *
+ * `writePlan` is the first place we hold BOTH identities, so we migrate here:
+ *   1. Move/merge the clerkUserId-keyed `creditBalances` row onto the canonical
+ *      key (absorbing purchased top-up so no paid credits are lost).
+ *   2. Delete the orphan clerkUserId-keyed `userPlans` row so the non-unique
+ *      `getUserIdByClerkId` lookup converges future webhooks on the canonical
+ *      row instead of re-granting under the raw id.
+ *
+ * No-op for the webhook-first write itself (canonicalUserId === clerkUserId).
+ */
+async function reconcileClerkKeyedBilling(
+  ctx: MutationCtx,
+  canonicalUserId: string,
+  clerkUserId: string,
+): Promise<void> {
+  if (canonicalUserId === clerkUserId) return
+
+  const legacyBalance = await ctx.db
+    .query('creditBalances')
+    .withIndex('by_userId', (q) => q.eq('userId', clerkUserId))
+    .unique()
+
+  if (legacyBalance) {
+    const canonicalBalance = await ctx.db
+      .query('creditBalances')
+      .withIndex('by_userId', (q) => q.eq('userId', canonicalUserId))
+      .unique()
+
+    if (!canonicalBalance) {
+      // No canonical row yet — just re-key the legacy row in place.
+      await ctx.db.patch(legacyBalance._id, { userId: canonicalUserId })
+    } else {
+      // Both exist (an early period granted under clerkUserId, later grants
+      // landed on the canonical key). Keep the canonical plan-period state and
+      // absorb the legacy purchased top-up so nothing paid-for is lost.
+      await ctx.db.patch(canonicalBalance._id, {
+        topupBalanceMc:
+          canonicalBalance.topupBalanceMc + legacyBalance.topupBalanceMc,
+        version: canonicalBalance.version + 1,
+        updatedAt: Date.now(),
+      })
+      await ctx.db.delete(legacyBalance._id)
+    }
+
+    await ctx.db.insert('billingEvents', {
+      userId: canonicalUserId,
+      mutationName: 'billing/syncPlan:reconcileClerkKeyedBilling',
+      allowed: true,
+      timestamp: Date.now(),
+      context: 'credit-grant',
+    })
+  }
+
+  // Drop the orphan clerkUserId-keyed userPlans row (the canonical row was just
+  // upserted by writePlan and is authoritative).
+  const legacyPlan = await ctx.db
+    .query('userPlans')
+    .withIndex('by_userId', (q) => q.eq('userId', clerkUserId))
+    .unique()
+  if (legacyPlan) {
+    await ctx.db.delete(legacyPlan._id)
+  }
+}
 
 /**
  * Internal mutation — upserts a row in `userPlans` and optionally writes a
@@ -228,6 +308,10 @@ export const writePlan = internalMutation({
         metadata: billingEventMetadata,
       })
     }
+
+    // Migrate any rows the webhook keyed under the raw Clerk id onto the
+    // canonical tokenIdentifier so paid credits are actually spendable.
+    await reconcileClerkKeyedBilling(ctx, userId, clerkUserId)
   },
 })
 
@@ -513,6 +597,12 @@ export const syncUserPlanInternal = internalAction({
       billingEventContext: billingEventContext ?? undefined,
       billingEventMetadata,
     })
+
+    if (plan) {
+      await ctx.runMutation(internal.billing.webhookHandler.applyCreditsFromPlan, {
+        userId,
+      })
+    }
 
     return { plan, synced: true }
   },

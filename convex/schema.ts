@@ -403,6 +403,10 @@ const schema = defineSchema({
     finishedAt: v.optional(v.number()),
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
     isWinner: v.optional(v.boolean()),
+    // Idempotency guard for credit charging. Set true in the same mutation
+    // that deducts credits, AFTER the output is durably uploaded. Blocks
+    // double-charge when the workflow retries the generation action.
+    creditCharged: v.optional(v.boolean()),
   })
     .index('by_product', ['productId'])
     .index('by_productImage', ['productImageId'])

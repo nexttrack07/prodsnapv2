@@ -8,11 +8,12 @@ import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import { internal } from './_generated/api'
 import { workflow } from './studio'
-import { enforceGenerationRateLimit } from './products'
+import { enforceGenerationRateLimit, recordGenerationUsage } from './products'
 import {
   CAPABILITIES,
   requireCapability,
 } from './lib/billing'
+import { requireCredits } from './lib/billing/credits'
 
 const aspectRatio = v.union(
   v.literal('1:1'),
@@ -86,6 +87,12 @@ export const submitAngleGeneration = mutation({
     if (count > 2) {
       await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitAngleGeneration')
     }
+
+    // Pre-flight credit check for the whole batch (angle flow always has a
+    // source image, so it uses the edit endpoint).
+    const angleModelKey = (model ?? 'nano-banana-2') === 'gpt-image-2' ? 'gpt-image-2-edit' : 'nano-banana-2'
+    await requireCredits(ctx, angleModelKey, count)
+    await recordGenerationUsage(ctx, userId, 'submitAngleGeneration', count)
 
     // Insert one row per requested variation, then start a workflow per row.
     for (let i = 0; i < count; i++) {

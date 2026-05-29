@@ -82,6 +82,29 @@ export function StepBusiness({
     [],
   )
 
+  // ── Safety timeout: never let the scraping UI spin forever ──────────────
+  // If an import row is deleted, an auth error drops the subscription, or the
+  // backend action dies, `getUrlImport` can stay non-terminal indefinitely and
+  // `allTerminal` would never flip. After this window we force any non-terminal
+  // import to `failed` so the transition logic below can run (preview if any
+  // succeeded, otherwise back to input with a toast). "10–20s per site" × a few
+  // sites + headroom.
+  const SCRAPE_TIMEOUT_MS = 90_000
+
+  useEffect(() => {
+    if (phase !== 'scraping') return
+    const t = setTimeout(() => {
+      setImports((prev) =>
+        prev.map((e) =>
+          e.status === 'done' || e.status === 'failed'
+            ? e
+            : { ...e, status: 'failed', error: 'Timed out — took too long to read' },
+        ),
+      )
+    }, SCRAPE_TIMEOUT_MS)
+    return () => clearTimeout(t)
+  }, [phase])
+
   // ── Transition to preview once ALL imports are terminal ─────────────────
 
   const allTerminal = imports.length > 0 && imports.every((e) => e.status === 'done' || e.status === 'failed')
