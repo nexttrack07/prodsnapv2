@@ -95,4 +95,33 @@ http.route({
   }),
 })
 
+http.route({
+  path: '/download',
+  method: 'GET',
+  handler: httpAction(async (_ctx, request) => {
+    const params = new URL(request.url).searchParams
+    const imageUrl = params.get('url')
+    const filename = params.get('filename') ?? 'design.png'
+
+    if (!imageUrl) return new Response('Missing url', { status: 400 })
+
+    const publicUrl = process.env.R2_PUBLIC_URL
+    if (!publicUrl || !imageUrl.startsWith(publicUrl)) {
+      return new Response('URL not allowed', { status: 403 })
+    }
+
+    const res = await fetch(imageUrl)
+    if (!res.ok) return new Response('Fetch failed', { status: 502 })
+
+    return new Response(await res.arrayBuffer(), {
+      status: 200,
+      headers: {
+        'Content-Type': res.headers.get('content-type') ?? 'image/png',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'private, max-age=3600',
+      },
+    })
+  }),
+})
+
 export default http

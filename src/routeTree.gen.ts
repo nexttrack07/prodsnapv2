@@ -35,10 +35,15 @@ import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminPromptsRouteImport } from './routes/admin.prompts'
 import { Route as AdminPricingRouteImport } from './routes/admin.pricing'
 import { Route as AdminPlaygroundRouteImport } from './routes/admin.playground'
+import { Route as AdminDesignLabRouteImport } from './routes/admin.design-lab'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AccountBrandRouteImport } from './routes/account.brand'
 import { Route as AccountBillingRouteImport } from './routes/account.billing'
+import { Route as AdminDesignLabIndexRouteImport } from './routes/admin.design-lab.index'
 import { Route as StudioProductIdStrategyRouteImport } from './routes/studio.$productId.strategy'
+import { Route as AdminDesignLabNewRouteImport } from './routes/admin.design-lab.new'
+import { Route as AdminDesignLabLibraryRouteImport } from './routes/admin.design-lab.library'
+import { Route as AdminDesignLabGenerateRouteImport } from './routes/admin.design-lab.generate'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -170,6 +175,11 @@ const AdminPlaygroundRoute = AdminPlaygroundRouteImport.update({
   path: '/playground',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminDesignLabRoute = AdminDesignLabRouteImport.update({
+  id: '/design-lab',
+  path: '/design-lab',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminAuditRoute = AdminAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
@@ -185,10 +195,30 @@ const AccountBillingRoute = AccountBillingRouteImport.update({
   path: '/account/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminDesignLabIndexRoute = AdminDesignLabIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminDesignLabRoute,
+} as any)
 const StudioProductIdStrategyRoute = StudioProductIdStrategyRouteImport.update({
   id: '/strategy',
   path: '/strategy',
   getParentRoute: () => StudioProductIdRoute,
+} as any)
+const AdminDesignLabNewRoute = AdminDesignLabNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AdminDesignLabRoute,
+} as any)
+const AdminDesignLabLibraryRoute = AdminDesignLabLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => AdminDesignLabRoute,
+} as any)
+const AdminDesignLabGenerateRoute = AdminDesignLabGenerateRouteImport.update({
+  id: '/generate',
+  path: '/generate',
+  getParentRoute: () => AdminDesignLabRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -209,6 +239,7 @@ export interface FileRoutesByFullPath {
   '/account/billing': typeof AccountBillingRoute
   '/account/brand': typeof AccountBrandRoute
   '/admin/audit': typeof AdminAuditRoute
+  '/admin/design-lab': typeof AdminDesignLabRouteWithChildren
   '/admin/playground': typeof AdminPlaygroundRoute
   '/admin/pricing': typeof AdminPricingRoute
   '/admin/prompts': typeof AdminPromptsRoute
@@ -221,7 +252,11 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/products/': typeof ProductsIndexRoute
   '/studio/': typeof StudioIndexRoute
+  '/admin/design-lab/generate': typeof AdminDesignLabGenerateRoute
+  '/admin/design-lab/library': typeof AdminDesignLabLibraryRoute
+  '/admin/design-lab/new': typeof AdminDesignLabNewRoute
   '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
+  '/admin/design-lab/': typeof AdminDesignLabIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -250,7 +285,11 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/products': typeof ProductsIndexRoute
   '/studio': typeof StudioIndexRoute
+  '/admin/design-lab/generate': typeof AdminDesignLabGenerateRoute
+  '/admin/design-lab/library': typeof AdminDesignLabLibraryRoute
+  '/admin/design-lab/new': typeof AdminDesignLabNewRoute
   '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
+  '/admin/design-lab': typeof AdminDesignLabIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -271,6 +310,7 @@ export interface FileRoutesById {
   '/account/billing': typeof AccountBillingRoute
   '/account/brand': typeof AccountBrandRoute
   '/admin/audit': typeof AdminAuditRoute
+  '/admin/design-lab': typeof AdminDesignLabRouteWithChildren
   '/admin/playground': typeof AdminPlaygroundRoute
   '/admin/pricing': typeof AdminPricingRoute
   '/admin/prompts': typeof AdminPromptsRoute
@@ -283,7 +323,11 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/products/': typeof ProductsIndexRoute
   '/studio/': typeof StudioIndexRoute
+  '/admin/design-lab/generate': typeof AdminDesignLabGenerateRoute
+  '/admin/design-lab/library': typeof AdminDesignLabLibraryRoute
+  '/admin/design-lab/new': typeof AdminDesignLabNewRoute
   '/studio/$productId/strategy': typeof StudioProductIdStrategyRoute
+  '/admin/design-lab/': typeof AdminDesignLabIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -305,6 +349,7 @@ export interface FileRouteTypes {
     | '/account/billing'
     | '/account/brand'
     | '/admin/audit'
+    | '/admin/design-lab'
     | '/admin/playground'
     | '/admin/pricing'
     | '/admin/prompts'
@@ -317,7 +362,11 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/products/'
     | '/studio/'
+    | '/admin/design-lab/generate'
+    | '/admin/design-lab/library'
+    | '/admin/design-lab/new'
     | '/studio/$productId/strategy'
+    | '/admin/design-lab/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -346,7 +395,11 @@ export interface FileRouteTypes {
     | '/admin'
     | '/products'
     | '/studio'
+    | '/admin/design-lab/generate'
+    | '/admin/design-lab/library'
+    | '/admin/design-lab/new'
     | '/studio/$productId/strategy'
+    | '/admin/design-lab'
   id:
     | '__root__'
     | '/'
@@ -366,6 +419,7 @@ export interface FileRouteTypes {
     | '/account/billing'
     | '/account/brand'
     | '/admin/audit'
+    | '/admin/design-lab'
     | '/admin/playground'
     | '/admin/pricing'
     | '/admin/prompts'
@@ -378,7 +432,11 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/products/'
     | '/studio/'
+    | '/admin/design-lab/generate'
+    | '/admin/design-lab/library'
+    | '/admin/design-lab/new'
     | '/studio/$productId/strategy'
+    | '/admin/design-lab/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -587,6 +645,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPlaygroundRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/design-lab': {
+      id: '/admin/design-lab'
+      path: '/design-lab'
+      fullPath: '/admin/design-lab'
+      preLoaderRoute: typeof AdminDesignLabRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/audit': {
       id: '/admin/audit'
       path: '/audit'
@@ -608,6 +673,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountBillingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/design-lab/': {
+      id: '/admin/design-lab/'
+      path: '/'
+      fullPath: '/admin/design-lab/'
+      preLoaderRoute: typeof AdminDesignLabIndexRouteImport
+      parentRoute: typeof AdminDesignLabRoute
+    }
     '/studio/$productId/strategy': {
       id: '/studio/$productId/strategy'
       path: '/strategy'
@@ -615,11 +687,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioProductIdStrategyRouteImport
       parentRoute: typeof StudioProductIdRoute
     }
+    '/admin/design-lab/new': {
+      id: '/admin/design-lab/new'
+      path: '/new'
+      fullPath: '/admin/design-lab/new'
+      preLoaderRoute: typeof AdminDesignLabNewRouteImport
+      parentRoute: typeof AdminDesignLabRoute
+    }
+    '/admin/design-lab/library': {
+      id: '/admin/design-lab/library'
+      path: '/library'
+      fullPath: '/admin/design-lab/library'
+      preLoaderRoute: typeof AdminDesignLabLibraryRouteImport
+      parentRoute: typeof AdminDesignLabRoute
+    }
+    '/admin/design-lab/generate': {
+      id: '/admin/design-lab/generate'
+      path: '/generate'
+      fullPath: '/admin/design-lab/generate'
+      preLoaderRoute: typeof AdminDesignLabGenerateRouteImport
+      parentRoute: typeof AdminDesignLabRoute
+    }
   }
 }
 
+interface AdminDesignLabRouteChildren {
+  AdminDesignLabGenerateRoute: typeof AdminDesignLabGenerateRoute
+  AdminDesignLabLibraryRoute: typeof AdminDesignLabLibraryRoute
+  AdminDesignLabNewRoute: typeof AdminDesignLabNewRoute
+  AdminDesignLabIndexRoute: typeof AdminDesignLabIndexRoute
+}
+
+const AdminDesignLabRouteChildren: AdminDesignLabRouteChildren = {
+  AdminDesignLabGenerateRoute: AdminDesignLabGenerateRoute,
+  AdminDesignLabLibraryRoute: AdminDesignLabLibraryRoute,
+  AdminDesignLabNewRoute: AdminDesignLabNewRoute,
+  AdminDesignLabIndexRoute: AdminDesignLabIndexRoute,
+}
+
+const AdminDesignLabRouteWithChildren = AdminDesignLabRoute._addFileChildren(
+  AdminDesignLabRouteChildren,
+)
+
 interface AdminRouteChildren {
   AdminAuditRoute: typeof AdminAuditRoute
+  AdminDesignLabRoute: typeof AdminDesignLabRouteWithChildren
   AdminPlaygroundRoute: typeof AdminPlaygroundRoute
   AdminPricingRoute: typeof AdminPricingRoute
   AdminPromptsRoute: typeof AdminPromptsRoute
@@ -629,6 +741,7 @@ interface AdminRouteChildren {
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminAuditRoute: AdminAuditRoute,
+  AdminDesignLabRoute: AdminDesignLabRouteWithChildren,
   AdminPlaygroundRoute: AdminPlaygroundRoute,
   AdminPricingRoute: AdminPricingRoute,
   AdminPromptsRoute: AdminPromptsRoute,

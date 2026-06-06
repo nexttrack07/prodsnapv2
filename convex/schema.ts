@@ -627,6 +627,42 @@ const schema = defineSchema({
     createdAt: v.number(),
   })
     .index('by_admin', ['adminUserId', 'createdAt']),
+
+  // ─── Design Lab outputs (persistent design library) ──────────────────────
+  designOutputs: defineTable({
+    adminUserId: v.string(),
+    imageUrl: v.string(),
+    storageKey: v.string(),
+    prompt: v.string(),
+    promptTitle: v.string(),
+    conceptTitle: v.string(),
+    referenceImageUrls: v.array(v.string()),
+    batchName: v.optional(v.string()),
+    nicheDescription: v.optional(v.string()),
+    bgRemovedUrl: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index('by_adminUserId', ['adminUserId', 'createdAt']),
+
+  // ─── Design Lab: Idea Library ────────────────────────────────────────────────
+  ideas: defineTable({
+    adminUserId: v.string(),
+    title: v.string(),
+    typography: v.string(),          // text copy (empty string if graphic-only)
+    imageDescription: v.string(),    // visual concept
+    style: v.string(),               // art style
+    colorPalette: v.string(),        // colors
+    mood: v.string(),                // emotional tone
+    generationPrompt: v.string(),    // full prompt for image generation
+    status: v.union(
+      v.literal('pending'),
+      v.literal('queued'),
+      v.literal('generating'),
+      v.literal('failed'),
+    ),
+    errorMessage: v.optional(v.string()),
+    sourceInstruction: v.optional(v.string()),  // the user's original instruction
+    createdAt: v.number(),
+  }).index('by_adminUserId', ['adminUserId', 'createdAt']),
 })
 export default schema
 

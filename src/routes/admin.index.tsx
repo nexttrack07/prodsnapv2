@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { Container, Title, Text, SimpleGrid, Paper, Box, ThemeIcon, Group } from '@mantine/core'
-import { IconLayoutGrid, IconTextCaption, IconArrowRight, IconFlask2, IconClipboardList } from '@tabler/icons-react'
+import { IconLayoutGrid, IconTextCaption, IconArrowRight, IconFlask2, IconClipboardList, IconSparkles } from '@tabler/icons-react'
 
 export const Route = createFileRoute('/admin/')({
   component: AdminIndex,
@@ -50,6 +50,12 @@ function AdminIndex() {
           title="Audit Log"
           description="View the last 100 admin actions — who did what and when."
           icon={<IconClipboardList size={24} />}
+        />
+        <AdminCard
+          to="/admin/design-lab"
+          title="Design Lab"
+          description="Analyze competitor designs, extract concepts, and generate original variations."
+          icon={<IconSparkles size={24} />}
         />
       </SimpleGrid>
     </Container>
