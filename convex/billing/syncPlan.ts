@@ -26,7 +26,7 @@
  */
 import { v } from 'convex/values'
 import { getClerkClient } from '../lib/billing/provider.clerk'
-import { action, internalAction, internalMutation, internalQuery, query } from '../_generated/server'
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
 import type { ActionCtx, MutationCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
 import { isKnownPlan, PLAN_CONFIG } from '../lib/billing/planConfig'
@@ -439,6 +439,28 @@ export const markCancelScheduled = internalMutation({
     await ctx.db.patch(row._id, {
       cancelScheduledAt: scheduledAt ?? undefined,
     })
+    return null
+  },
+})
+
+/**
+ * Public mutation — called from the client after a user resumes a
+ * scheduled-cancel subscription via Clerk's hosted UI. Clears the
+ * `cancelScheduledAt` field so the "Cancellation scheduled" banner
+ * disappears immediately without waiting for the webhook.
+ */
+export const clearCancelScheduled = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return null
+    const row = await ctx.db
+      .query('userPlans')
+      .withIndex('by_userId', (q) => q.eq('userId', identity.tokenIdentifier))
+      .unique()
+    if (!row) return null
+    await ctx.db.patch(row._id, { cancelScheduledAt: undefined })
     return null
   },
 })

@@ -1,6 +1,6 @@
 # Spec 006 — Billing Self-Service: Eager Resync + Stale Cancel Banner
 
-**Status:** not started
+**Status:** completed
 **Severity:** HIGH
 **Suggested branch:** `fix/billing-self-service-resync`
 **Source:** `LAUNCH_AUDIT_CLAUDE.md` → C-6, C-7
