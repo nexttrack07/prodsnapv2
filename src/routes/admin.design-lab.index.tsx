@@ -11,6 +11,7 @@ import {
 import {
   IconTrash, IconDownload, IconSparkles,
   IconAlertCircle, IconPlus, IconScissors, IconCheck, IconLayoutGrid,
+  IconArrowsMaximize,
 } from '@tabler/icons-react'
 
 export const Route = createFileRoute('/admin/design-lab/')({
@@ -30,6 +31,7 @@ type DesignOutput = {
   batchName?: string
   nicheDescription?: string
   bgRemovedUrl?: string
+  upscaledUrl?: string
   createdAt: number
 }
 
@@ -237,7 +239,7 @@ function DesignLibrary() {
                       selectMode={selectMode}
                       bulkSelected={selectedIds.has(design._id)}
                       onToggleSelect={() => toggleSelectId(design._id)}
-                      onDownload={() => handleDownload(design.imageUrl, design.promptTitle)}
+                      onDownload={(url) => handleDownload(url, design.promptTitle)}
                       onDelete={() => handleDelete(design._id)}
                     />
                   ))}
@@ -549,7 +551,7 @@ function DesignCard({
   selectMode?: boolean
   bulkSelected?: boolean
   onToggleSelect?: () => void
-  onDownload: () => void
+  onDownload: (url: string) => void
   onDelete: () => void
 }) {
   const [bgColor, setBgColor] = useState('#FFFFFF')
@@ -559,17 +561,33 @@ function DesignCard({
   const [localResult, setLocalResult] = useState<string | null>(null)
   const [genError, setGenError] = useState<string | null>(null)
 
-  const displayUrl = localResult ?? (design.bgRemovedUrl ?? design.imageUrl)
+  // Background removal is the final step, so it wins over the upscale (which
+  // still has a background). Recommended order: upscale first, then remove bg.
+  const displayUrl = localResult ?? design.bgRemovedUrl ?? design.upscaledUrl ?? design.imageUrl
   const removeBg = useAction(api.designLabActions.removeBgForDesign)
+  const upscale = useAction(api.designLabActions.upscaleDesign)
   const generateSingle = useAction(api.designLabActions.generateSingleDesign)
   const [removingBg, setRemovingBg] = useState(false)
+  const [upscaling, setUpscaling] = useState(false)
 
   const handleRemoveBg = async () => {
     setRemovingBg(true)
     try {
-      await removeBg({ id: design._id, imageUrl: design.imageUrl })
+      // Remove the background from whatever is shown — the upscaled image if
+      // it exists — so the cut-out keeps the higher resolution.
+      await removeBg({ id: design._id, imageUrl: displayUrl })
     } finally {
       setRemovingBg(false)
+    }
+  }
+
+  const handleUpscale = async () => {
+    setUpscaling(true)
+    try {
+      // Upscale the pristine original for the cleanest high-res source.
+      await upscale({ id: design._id, imageUrl: design.imageUrl })
+    } finally {
+      setUpscaling(false)
     }
   }
 
@@ -668,8 +686,21 @@ function DesignCard({
                 </ActionIcon>
               </Tooltip>
             )}
+            {!design.upscaledUrl && (
+              <Tooltip label="Upscale (4×)">
+                <ActionIcon
+                  size="sm"
+                  variant="filled"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+                  onClick={handleUpscale}
+                  loading={upscaling}
+                >
+                  <IconArrowsMaximize size={12} />
+                </ActionIcon>
+              </Tooltip>
+            )}
             <Tooltip label="Download">
-              <ActionIcon size="sm" variant="filled" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }} onClick={onDownload}>
+              <ActionIcon size="sm" variant="filled" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }} onClick={() => onDownload(displayUrl)}>
                 <IconDownload size={12} />
               </ActionIcon>
             </Tooltip>

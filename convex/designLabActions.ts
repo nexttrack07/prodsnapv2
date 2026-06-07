@@ -467,6 +467,36 @@ export const removeBgForDesign = action({
   },
 })
 
+// ─── Upscale existing design ─────────────────────────────────────────────────
+// Uses SeedVR2. Operates on whatever image URL is passed (original or
+// background-removed), and outputs PNG to preserve transparency.
+
+export const upscaleDesign = action({
+  args: { id: v.id('designOutputs'), imageUrl: v.string() },
+  handler: async (ctx, { id, imageUrl }) => {
+    await requireAdmin(ctx)
+    validateImageUrls([imageUrl])
+
+    const result = await fal.subscribe('fal-ai/seedvr/upscale/image', {
+      input: {
+        image_url: imageUrl,
+        upscale_mode: 'factor',
+        upscale_factor: 4,
+        output_format: 'png',
+      },
+    })
+    const data = result.data as { image?: { url?: string } }
+    const outputUrl = data.image?.url
+    if (!outputUrl) throw new Error('Upscale did not return an image URL')
+
+    const key = `design-lab/${nanoid()}-upscaled.png`
+    const upscaledUrl = await uploadFromUrl(outputUrl, key)
+
+    await ctx.runMutation(internal.designLab.updateUpscaledUrl, { id, upscaledUrl })
+    return { upscaledUrl }
+  },
+})
+
 // ─── Background removal (best-effort, never throws) ─────────────────────────
 
 async function removeBackgroundForDesign(imageUrl: string): Promise<string | undefined> {

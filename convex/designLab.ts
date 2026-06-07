@@ -62,6 +62,16 @@ export const updateBgRemovedUrl = internalMutation({
   },
 })
 
+export const updateUpscaledUrl = internalMutation({
+  args: { id: v.id('designOutputs'), upscaledUrl: v.string() },
+  handler: async (ctx, { id, upscaledUrl }) => {
+    const adminUserId = await requireAdminIdentity(ctx)
+    const doc = await ctx.db.get(id)
+    if (!doc || doc.adminUserId !== adminUserId) throw new Error('Forbidden')
+    await ctx.db.patch(id, { upscaledUrl })
+  },
+})
+
 export const deleteDesignOutput = mutation({
   args: { id: v.id('designOutputs') },
   handler: async (ctx, { id }) => {
@@ -73,6 +83,8 @@ export const deleteDesignOutput = mutation({
     await ctx.scheduler.runAfter(0, internal.r2.clearUserObjectStorage, { key: doc.storageKey })
     const nbKey = doc.bgRemovedUrl ? bgRemovedKey(doc.bgRemovedUrl) : null
     if (nbKey) await ctx.scheduler.runAfter(0, internal.r2.clearUserObjectStorage, { key: nbKey })
+    const upKey = doc.upscaledUrl ? bgRemovedKey(doc.upscaledUrl) : null
+    if (upKey) await ctx.scheduler.runAfter(0, internal.r2.clearUserObjectStorage, { key: upKey })
   },
 })
 
@@ -87,6 +99,8 @@ export const bulkDeleteDesignOutputs = mutation({
       await ctx.scheduler.runAfter(0, internal.r2.clearUserObjectStorage, { key: doc.storageKey })
       const nbKey = doc.bgRemovedUrl ? bgRemovedKey(doc.bgRemovedUrl) : null
       if (nbKey) await ctx.scheduler.runAfter(0, internal.r2.clearUserObjectStorage, { key: nbKey })
+      const upKey = doc.upscaledUrl ? bgRemovedKey(doc.upscaledUrl) : null
+      if (upKey) await ctx.scheduler.runAfter(0, internal.r2.clearUserObjectStorage, { key: upKey })
     }
   },
 })

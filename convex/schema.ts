@@ -640,6 +640,7 @@ const schema = defineSchema({
     batchName: v.optional(v.string()),
     nicheDescription: v.optional(v.string()),
     bgRemovedUrl: v.optional(v.string()),
+    upscaledUrl: v.optional(v.string()),
     createdAt: v.number(),
   }).index('by_adminUserId', ['adminUserId', 'createdAt']),
 
