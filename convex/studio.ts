@@ -735,3 +735,53 @@ export const retryGeneration = mutation({
     }
   },
 })
+
+// ─── Stuck-generation watchdog ────────────────────────────────────────────
+// Rows stuck in 'queued' or 'running' beyond this threshold are considered
+// orphaned (the workflow never started or was dropped by the workpool).
+// Sized comfortably above GENERATION_TIMEOUT_MS (300 000 ms / 5 min) so we
+// never kill genuinely in-flight work.
+const STUCK_GENERATION_THRESHOLD_MS = 6 * 60 * 1000 // 6 minutes
+
+export const markStuckGenerationsFailed = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now()
+    const cutoff = now - STUCK_GENERATION_THRESHOLD_MS
+
+    // Collect all queued rows older than the threshold.
+    const stuckQueued = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_userId') // full scan is acceptable for a small table
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('status'), 'queued'),
+          q.lt(q.field('_creationTime'), cutoff),
+        ),
+      )
+      .collect()
+
+    // Collect all running rows whose startedAt is older than the threshold.
+    const stuckRunning = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_userId')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('status'), 'running'),
+          q.lt(q.field('startedAt'), cutoff),
+        ),
+      )
+      .collect()
+
+    const allStuck = [...stuckQueued, ...stuckRunning]
+    for (const gen of allStuck) {
+      await ctx.db.patch(gen._id, {
+        status: 'failed',
+        error: 'Generation timed out — please try again.',
+        finishedAt: now,
+      })
+    }
+
+    return { marked: allStuck.length }
+  },
+})

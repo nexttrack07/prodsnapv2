@@ -3,8 +3,6 @@ import { internal } from './_generated/api'
 
 const crons = cronJobs()
 
-crons.cron('clear messages table', '0,20,40 * * * *', internal.board.clear)
-
 crons.hourly(
   'refresh stale billing periods',
   { minuteUTC: 7 },
@@ -31,6 +29,16 @@ crons.daily(
   'notify-trials-ending',
   { hourUTC: 14, minuteUTC: 0 }, // ~9am Central, post-coffee, pre-rage
   internal.billing.notifications.scanAndNotifyTrialsEnding,
+)
+
+// Mark templateGenerations rows that are stuck in 'queued'/'running' as
+// 'failed'. Client-side timeout only fires while the tab is open; this cron
+// provides server-side reconciliation for orphaned workflows.
+crons.interval(
+  'mark-stuck-generations-failed',
+  { minutes: 2 },
+  internal.studio.markStuckGenerationsFailed,
+  {},
 )
 
 export default crons

@@ -1,6 +1,6 @@
 # Spec 003 — Remove Trellaux / Boards Starter Cruft
 
-**Status:** not started
+**Status:** completed
 **Severity:** BLOCKER
 **Suggested branch:** `chore/remove-trellaux-boards`
 **Source:** `LAUNCH_AUDIT_CLAUDE.md` → C-2
