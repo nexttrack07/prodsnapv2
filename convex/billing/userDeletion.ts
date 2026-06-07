@@ -425,10 +425,12 @@ export const handleUserDeleted = internalAction({
     const userIds = new Set<string>([clerkUserId])
     if (resolvedUserId) userIds.add(resolvedUserId)
 
-    console.log(
-      `[userDeletion] Starting GDPR erasure for clerkUserId=${clerkUserId} ` +
-        `userIds=${[...userIds].join(',')}`,
-    )
+    if (process.env.DEBUG_AI === 'true') {
+      console.log(
+        `[userDeletion] Starting GDPR erasure for clerkUserId=${clerkUserId} ` +
+          `userIds=${[...userIds].join(',')}`,
+      )
+    }
 
     const r2Keys = new Set<string>()
     const counts: Record<string, number> = {}
@@ -512,11 +514,13 @@ export const handleUserDeleted = internalAction({
     }
 
     const totalRows = Object.values(counts).reduce((a, b) => a + b, 0)
-    console.log(
-      `[userDeletion] Completed for clerkUserId=${clerkUserId}: ` +
-        `rows=${totalRows} r2Keys=${r2Keys.size} ` +
-        `breakdown=${JSON.stringify(counts)}`,
-    )
+    if (process.env.DEBUG_AI === 'true') {
+      console.log(
+        `[userDeletion] Completed for clerkUserId=${clerkUserId}: ` +
+          `rows=${totalRows} r2Keys=${r2Keys.size} ` +
+          `breakdown=${JSON.stringify(counts)}`,
+      )
+    }
 
     return null
   },

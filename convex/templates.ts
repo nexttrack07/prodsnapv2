@@ -180,7 +180,7 @@ export const listPublished = query({
             x.eq('aspectRatio', aspectRatio).eq('status', 'published'),
           )
       : ctx.db.query('adTemplates').withIndex('by_status', (x) => x.eq('status', 'published'))
-    return await q.collect()
+    return await q.take(1000)
   },
 })
 
