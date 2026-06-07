@@ -69,6 +69,9 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
                       Sign In
                     </Button>
                   </SignInButton>
+                  <Button component={Link} to="/onboarding" size="sm" color="brand">
+                    Start free trial
+                  </Button>
                 </Unauthenticated>
                 <Authenticated>
                   <Button
@@ -113,9 +116,21 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
           <MobileNavLink to="/pricing" onClick={closeMobileNav}>
             Pricing
           </MobileNavLink>
+          <Unauthenticated>
+            <Button
+              component={Link}
+              to="/onboarding"
+              onClick={closeMobileNav}
+              color="brand"
+              fullWidth
+              mt="xs"
+            >
+              Start free trial
+            </Button>
+          </Unauthenticated>
           <Divider my="sm" color="dark.5" />
           <Text size="xs" c="dark.2" px="md">
-            Pro-quality product photos in a snap
+            Performance creative co-pilot for media buyers
           </Text>
         </Stack>
       </Drawer>

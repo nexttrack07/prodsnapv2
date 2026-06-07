@@ -75,9 +75,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       ...seo({
-        title: 'ProdSnap — Pro-quality product photos in a snap',
+        title: 'ProdSnap — performance creative co-pilot for media buyers',
         description:
-          'Upload a product photo, pick Facebook-ad templates, and generate variations in seconds.',
+          'Save winning ads to a swipe file. Generate 12 Meta-ready variants per batch — using those exact references.',
         image: '/og-prodsnap.png',
       }),
     ],
