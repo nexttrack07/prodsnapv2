@@ -1,6 +1,6 @@
 # Spec 008 — Launch Cleanup & Polish Batch
 
-**Status:** not started
+**Status:** completed
 **Severity:** POLISH
 **Suggested branch:** `chore/launch-cleanup-polish`
 **Source:** `LAUNCH_AUDIT_CLAUDE.md` → C-11, C-12, C-13, C-14, C-15, C-16

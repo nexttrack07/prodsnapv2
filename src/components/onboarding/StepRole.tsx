@@ -18,6 +18,7 @@ import {
   IconBuildingStore,
   IconHeart,
   IconQuestionMark,
+  IconArrowRight,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { api } from '../../../convex/_generated/api'
@@ -131,7 +132,7 @@ export function StepRole({ onNext }: { onNext: () => void }) {
           disabled={!selected}
           loading={submitting}
           onClick={handleContinue}
-          rightSection="→"
+          rightSection={<IconArrowRight size={16} />}
         >
           Continue
         </Button>

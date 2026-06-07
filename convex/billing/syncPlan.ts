@@ -514,9 +514,10 @@ export const getBillingStatus = query({
       ? Math.floor(mcToCredits(creditBalance.planUsedMc))
       : 0
 
-    // Use Clerk's period end if available; fall back to first of next UTC month.
-    const now = new Date()
-    const nextReset = row?.periodEnd ?? Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+    // Use Clerk's period end if available; suppress the date until it is known
+    // so the UI doesn't show a misleading "Resets on 1st of next month" before
+    // the first Clerk webhook has synced.
+    const nextReset = row?.periodEnd ?? null
 
     return {
       signedIn: true,
@@ -664,10 +665,12 @@ export const refreshStalePeriodsInternal = internalAction({
       scheduled++
     }
 
-    console.log(
-      `[billing cron] Scanned ${rows.length}, scheduled ${scheduled}, ` +
-        `skipped ${skippedMissingClerkUserId} missing clerkUserId`,
-    )
+    if (process.env.DEBUG_AI === 'true') {
+      console.log(
+        `[billing cron] Scanned ${rows.length}, scheduled ${scheduled}, ` +
+          `skipped ${skippedMissingClerkUserId} missing clerkUserId`,
+      )
+    }
     return null
   },
 })

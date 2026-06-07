@@ -361,19 +361,12 @@ export function StepBusiness({
               <BrandPreviewCard key={bk._id} brandKit={bk} />
             ))
           ) : (
-            /* Fallback: show all brand kits if we can't match by URL */
-            brandKits && brandKits.length > 0 ? (
-              brandKits.map((bk) => (
-                <BrandPreviewCard key={bk._id} brandKit={bk} />
-              ))
-            ) : (
-              <Paper p="lg" radius="lg" withBorder bg="dark.7">
-                <Text size="sm" c="dark.2">
-                  We couldn't pull much brand info from those pages. No worries —
-                  you can add it manually anytime in Brand kit.
-                </Text>
-              </Paper>
-            )
+            <Paper p="lg" radius="lg" withBorder bg="dark.7">
+              <Text size="sm" c="dark.2">
+                We couldn't pull much brand info from those pages. No worries —
+                you can add it manually anytime in Brand kit.
+              </Text>
+            </Paper>
           )}
 
           <Text size="xs" c="dark.3" ta="center">
