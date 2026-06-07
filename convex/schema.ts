@@ -115,6 +115,8 @@ const schema = defineSchema({
     aiNotes: v.optional(v.string()), // Free-form notes for the AI: "this product is..."
     error: v.optional(v.string()),
     archivedAt: v.optional(v.number()), // soft delete timestamp
+    // Marks the single product cloned by the "Try with a sample" demo on-ramp.
+    isSampleSource: v.optional(v.boolean()),
     // ─── Legacy fields (kept for migration, will be removed) ─────────────
     imageUrl: v.optional(v.string()), // @deprecated - use productImages table
     imageStorageId: v.optional(v.string()), // @deprecated
@@ -130,7 +132,8 @@ const schema = defineSchema({
     .index('by_status', ['status'])
     .index('by_archived', ['archivedAt'])
     .index('by_userId', ['userId'])
-    .index('by_userId_archived', ['userId', 'archivedAt']),
+    .index('by_userId_archived', ['userId', 'archivedAt'])
+    .index('by_sample_source', ['isSampleSource']),
 
   // ─── Product Images (original uploads + enhancements) ───────────────────
   productImages: defineTable({

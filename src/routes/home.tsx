@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
-import { useQuery } from 'convex/react'
+import { useQuery, useMutation } from 'convex/react'
+import { notifications } from '@mantine/notifications'
 import { useMediaQuery } from '@mantine/hooks'
 import {
   Anchor,
@@ -369,6 +370,29 @@ function HeroSkeleton() {
 
 function EmptyHero({ isMobile }: { isMobile: boolean }) {
   const navigate = useNavigate()
+  const sample = useQuery(api.products.getSampleProduct, {})
+  const brandKits = useQuery(api.brandKits.listBrandKits, {})
+  const createFromSample = useMutation(api.products.createProductFromSample)
+  const [seeding, setSeeding] = useState(false)
+
+  // Only offer the sample to a genuinely fresh user: a demo is configured AND
+  // they have no brand kits yet (zero products is already implied by this
+  // empty state). Keeps the hand-holding away from users who've shown intent.
+  const canTrySample = !!sample && (brandKits?.length ?? 0) === 0
+
+  const handleTrySample = async () => {
+    setSeeding(true)
+    try {
+      const productId = await createFromSample({})
+      navigate({ to: '/studio/$productId', params: { productId } })
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Could not load the sample product.',
+      })
+      setSeeding(false)
+    }
+  }
 
   return (
     <Paper
@@ -397,18 +421,42 @@ function EmptyHero({ isMobile }: { isMobile: boolean }) {
             Let's make your first ad
           </Title>
           <Text c="dark.2" size="sm" maw={460} ta="center">
-            Add a product — paste a URL or upload a photo. ProdSnap will
-            turn it into ad creatives in about a minute.
+            {canTrySample
+              ? 'Try it instantly with a sample product, or add your own — paste a URL or upload a photo.'
+              : 'Add a product — paste a URL or upload a photo. ProdSnap will turn it into ad creatives in about a minute.'}
           </Text>
         </Stack>
-        <Button
-          leftSection={<IconPlus size={18} />}
-          color="brand"
-          size="md"
-          onClick={() => navigate({ to: '/products/new' })}
-        >
-          Create your first product
-        </Button>
+        {canTrySample ? (
+          <Group gap="sm" justify="center" wrap="wrap">
+            <Button
+              leftSection={<IconSparkles size={18} />}
+              color="brand"
+              size="md"
+              loading={seeding}
+              onClick={handleTrySample}
+            >
+              Try with a sample product
+            </Button>
+            <Button
+              leftSection={<IconPlus size={18} />}
+              variant="default"
+              size="md"
+              disabled={seeding}
+              onClick={() => navigate({ to: '/products/new' })}
+            >
+              Create your own
+            </Button>
+          </Group>
+        ) : (
+          <Button
+            leftSection={<IconPlus size={18} />}
+            color="brand"
+            size="md"
+            onClick={() => navigate({ to: '/products/new' })}
+          >
+            Create your first product
+          </Button>
+        )}
       </Stack>
     </Paper>
   )

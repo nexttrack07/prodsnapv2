@@ -20,6 +20,7 @@ import {
 } from './lib/billing'
 import { requireCredits } from './lib/billing/credits'
 import { billingError } from './lib/billing/errors'
+import { requireAdminIdentity } from './lib/admin/requireAdmin'
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -160,6 +161,121 @@ export const createProduct = mutation({
     await ctx.scheduler.runAfter(0, internal.products.runProductAnalysis, {
       productId,
     })
+
+    return productId
+  },
+})
+
+// ─── Demo "Try with a sample" on-ramp ────────────────────────────────────────
+
+/**
+ * Admin-only: designate one analyzed product as the demo sample that fresh
+ * users clone via "Try with a sample". Marks exactly one — clears any prior.
+ * Run once from the Convex dashboard with the product's id (it's in the
+ * /studio/<id> URL of the product you want to showcase).
+ */
+export const setSampleSourceProduct = mutation({
+  args: { productId: v.id('products') },
+  handler: async (ctx, { productId }) => {
+    await requireAdminIdentity(ctx)
+    const product = await ctx.db.get(productId)
+    if (!product) throw new Error('Product not found')
+    if (product.status !== 'ready' || !product.primaryImageId) {
+      throw new Error('Sample product must be analyzed (ready) with a primary image')
+    }
+    // Clear any previously-flagged sample(s) so exactly one is the source.
+    const existing = await ctx.db
+      .query('products')
+      .withIndex('by_sample_source', (q) => q.eq('isSampleSource', true))
+      .collect()
+    for (const p of existing) {
+      if (p._id !== productId) await ctx.db.patch(p._id, { isSampleSource: false })
+    }
+    await ctx.db.patch(productId, { isSampleSource: true })
+  },
+})
+
+/**
+ * Returns a lightweight summary of the demo sample product, or null if none
+ * is configured. Drives whether the "Try with a sample" CTA renders.
+ */
+export const getSampleProduct = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return null
+    const sample = await ctx.db
+      .query('products')
+      .withIndex('by_sample_source', (q) => q.eq('isSampleSource', true))
+      .first()
+    if (!sample || sample.status !== 'ready') return null
+    return { _id: sample._id, name: sample.name }
+  },
+})
+
+/**
+ * Clones the demo sample product into the caller's account as a ready-to-use
+ * product (image + analysis + angles copied), so a brand-new user can hit
+ * Generate immediately. Only available to genuinely fresh users — anyone who
+ * already has a product or a brand kit is rejected.
+ */
+export const createProductFromSample = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx)
+
+    const existingProduct = await ctx.db
+      .query('products')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .first()
+    if (existingProduct) {
+      throw new Error('The sample is only available before you add your own product.')
+    }
+    const existingBrand = await ctx.db
+      .query('brandKits')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .first()
+    if (existingBrand) {
+      throw new Error('The sample is only available before you create a brand.')
+    }
+
+    const sample = await ctx.db
+      .query('products')
+      .withIndex('by_sample_source', (q) => q.eq('isSampleSource', true))
+      .first()
+    if (!sample || sample.status !== 'ready') {
+      throw new Error('No sample product is available right now.')
+    }
+
+    // Resolve the sample's primary image URL (fall back to the legacy field).
+    let imageUrl = sample.imageUrl
+    if (sample.primaryImageId) {
+      const img = await ctx.db.get(sample.primaryImageId)
+      if (img) imageUrl = img.imageUrl
+    }
+    if (!imageUrl) throw new Error('Sample product has no image.')
+
+    // Clone the analyzed product into the caller's account (status: ready).
+    const productId = await ctx.db.insert('products', {
+      name: sample.name,
+      status: 'ready',
+      userId,
+      imageUrl,
+      category: sample.category,
+      productDescription: sample.productDescription,
+      targetAudience: sample.targetAudience,
+      valueProposition: sample.valueProposition,
+      marketingAngles: sample.marketingAngles,
+      customerLanguage: sample.customerLanguage,
+    })
+    const imageId = await ctx.db.insert('productImages', {
+      productId,
+      userId,
+      imageUrl,
+      type: 'original',
+      status: 'ready',
+    })
+    await ctx.db.patch(productId, { primaryImageId: imageId })
 
     return productId
   },
