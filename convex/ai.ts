@@ -696,6 +696,12 @@ async function callImageEditModel({
     }
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err)
+    const status = (err as { status?: number })?.status
+    if (status === 429 || status === 503 || /overload|too many requests|service unavailable/i.test(raw)) {
+      const overloadErr = new Error('FAL_OVERLOADED')
+      ;(overloadErr as Error & { code: string }).code = 'FAL_OVERLOADED'
+      throw overloadErr
+    }
     if (/safety|blocked|rejected/i.test(raw)) {
       throw new Error('Image model rejected the request — try a different template or soften the prompt.')
     }
@@ -739,6 +745,12 @@ async function callImageGenModel({
     }
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err)
+    const status = (err as { status?: number })?.status
+    if (status === 429 || status === 503 || /overload|too many requests|service unavailable/i.test(raw)) {
+      const overloadErr = new Error('FAL_OVERLOADED')
+      ;(overloadErr as Error & { code: string }).code = 'FAL_OVERLOADED'
+      throw overloadErr
+    }
     if (/safety|blocked|rejected/i.test(raw)) {
       throw new Error('Image model rejected the request — try softening the prompt.')
     }

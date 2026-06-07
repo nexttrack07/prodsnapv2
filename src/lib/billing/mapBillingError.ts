@@ -116,6 +116,14 @@ export function mapBillingError(err: unknown): BillingErrorInfo {
 
 export function mapGenerationError(err: unknown): BillingErrorInfo {
   const msg = err instanceof Error ? err.message : String(err)
+  const code = (err as { code?: string })?.code
+
+  if (code === 'FAL_OVERLOADED' || /FAL_OVERLOADED/i.test(msg)) {
+    return {
+      title: 'AI is busy',
+      message: 'AI is busy right now — please try again in a moment.',
+    }
+  }
 
   if (/image model rejected|safety|blocked|rejected/i.test(msg)) {
     return {
