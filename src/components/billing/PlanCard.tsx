@@ -26,7 +26,7 @@ import {
   Title,
 } from '@mantine/core'
 import { IconCheck } from '@tabler/icons-react'
-import { useQuery } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 import { useClerk } from '@clerk/react'
 import { api } from '../../../convex/_generated/api'
 import { PLAN_CONFIG } from '../../../convex/lib/billing/planConfig'
@@ -41,8 +41,19 @@ export type PlanCardProps = {
 export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
   const limits = PLAN_CONFIG[plan.slug]
   const billingStatus = useQuery(api.billing.syncPlan.getBillingStatus)
+  const syncPlan = useAction(api.billing.syncPlan.syncUserPlan)
   const { openUserProfile } = useClerk()
   const [confirmOpen, setConfirmOpen] = useState(false)
+
+  // Fire syncUserPlan after a delay so the UI reflects plan changes made in
+  // the Clerk modal without waiting for the webhook. Clerk modals have no
+  // close callback so we poll after ~5 s as the eager path.
+  function openProfileAndResync() {
+    openUserProfile()
+    setTimeout(() => {
+      void syncPlan().catch(() => {})
+    }, 5000)
+  }
 
   const priceAmount =
     period === 'month'
@@ -85,7 +96,7 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
     // Plan change for existing subscribers → open Clerk's hosted UI.
     if (hasActiveSubscription && !isCurrent) {
       e.preventDefault()
-      openUserProfile()
+      openProfileAndResync()
       return
     }
     if (needsDowngradeWarning) {
@@ -97,7 +108,7 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
   function handleConfirm() {
     setConfirmOpen(false)
     if (hasActiveSubscription) {
-      openUserProfile()
+      openProfileAndResync()
     } else {
       window.location.href = checkoutHref
     }

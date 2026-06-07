@@ -26,7 +26,7 @@ import {
   Title,
 } from '@mantine/core'
 import { IconBolt, IconPhoto } from '@tabler/icons-react'
-import { useAction, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 
 export function AccountBillingPage() {
@@ -34,6 +34,7 @@ export function AccountBillingPage() {
   const status = useQuery(api.billing.syncPlan.getBillingStatus)
   const cancelSub = useAction(api.billing.syncPlan.cancelMySubscription)
   const syncPlan = useAction(api.billing.syncPlan.syncUserPlan)
+  const clearCancelScheduled = useMutation(api.billing.syncPlan.clearCancelScheduled)
 
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
@@ -157,7 +158,15 @@ export function AccountBillingPage() {
                   variant="light"
                   color="brand"
                   size="xs"
-                  onClick={() => openUserProfile()}
+                  onClick={() => {
+                    openUserProfile()
+                    // Clerk modals have no close callback. Poll after ~5 s so plan
+                    // and cancel banner refresh without waiting for the webhook.
+                    setTimeout(() => {
+                      void syncPlan().catch(() => {})
+                      void clearCancelScheduled().catch(() => {})
+                    }, 5000)
+                  }}
                 >
                   Resume subscription
                 </Button>
