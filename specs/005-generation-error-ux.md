@@ -1,6 +1,6 @@
 # Spec 005 — Generation Error UX (fal.ai 429/503 + Consistent Out-of-Credits Mapping)
 
-**Status:** not started
+**Status:** completed
 **Severity:** HIGH
 **Suggested branch:** `fix/generation-error-ux`
 **Source:** `LAUNCH_AUDIT_CLAUDE.md` → C-5, C-8

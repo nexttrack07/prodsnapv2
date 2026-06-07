@@ -589,9 +589,10 @@ function ProductHeader({
       await addImageMutation.mutateAsync({ productId, imageUrl: url })
       notifications.show({ title: 'Added', message: 'Source image added.', color: 'green' })
     } catch (err) {
+      const info = mapGenerationError(err)
       notifications.show({
-        title: 'Upload failed',
-        message: err instanceof Error ? err.message : 'Try again',
+        title: info.title,
+        message: info.message,
         color: 'red',
       })
     } finally {
@@ -1598,11 +1599,16 @@ function ImageGallerySection({
       await setPrimaryMutation.mutateAsync({ productId, imageId })
       notifications.show({ title: 'Success', message: 'Primary image updated', color: 'green' })
     } catch (err) {
-      notifications.show({
-        title: 'Error',
-        message: err instanceof Error ? err.message : 'Failed to update',
-        color: 'red',
-      })
+      if (err instanceof ConvexError && (err.data as { code?: string })?.code === 'CREDITS_EXHAUSTED') {
+        setOocOpen(true)
+      } else {
+        const info = mapGenerationError(err)
+        notifications.show({
+          title: info.title,
+          message: info.message,
+          color: 'red',
+        })
+      }
     }
   }
 
@@ -2059,6 +2065,7 @@ function GalleryView({
   const [deleteTarget, setDeleteTarget] = useState<Id<'templateGenerations'> | null>(null)
   const [retryingId, setRetryingId] = useState<Id<'templateGenerations'> | null>(null)
   const [winnersOnly, setWinnersOnly] = useState(false)
+  const [oocOpen, setOocOpen] = useState(false)
   const winnerCount = completedGenerations.filter((g) => g.isWinner).length
   const visibleCompleted = winnersOnly
     ? completedGenerations.filter((g) => g.isWinner)
@@ -2104,15 +2111,19 @@ function GalleryView({
       await retryMutation.mutateAsync({ generationId: id })
       notifications.show({ title: 'Retry started', message: 'Generation queued again.', color: 'green' })
     } catch (err) {
-      const info = mapGenerationError(err)
-      notifications.show({
-        title: info.title,
-        message: info.action ? (
-          <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
-        ) : info.message,
-        color: 'red',
-        autoClose: 8000,
-      })
+      if (err instanceof ConvexError && (err.data as { code?: string })?.code === 'CREDITS_EXHAUSTED') {
+        setOocOpen(true)
+      } else {
+        const info = mapGenerationError(err)
+        notifications.show({
+          title: info.title,
+          message: info.action ? (
+            <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
+          ) : info.message,
+          color: 'red',
+          autoClose: 8000,
+        })
+      }
     } finally {
       setRetryingId(null)
     }
@@ -2314,6 +2325,7 @@ function GalleryView({
           </Button>
         </Group>
       </Modal>
+      <OutOfCreditsModal opened={oocOpen} onClose={() => setOocOpen(false)} />
     </Box>
   )
 }
