@@ -15,16 +15,18 @@ import { useMediaQuery } from '@mantine/hooks'
 import { Notifications } from '@mantine/notifications'
 import { ModalsProvider } from '@mantine/modals'
 import type { QueryClient } from '@tanstack/react-query'
-import { Authenticated } from 'convex/react'
+import { Authenticated, Unauthenticated } from 'convex/react'
 import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
 import { NotFound } from '~/components/NotFound'
 import { BillingSync } from '~/components/billing/BillingSync'
 import { OnboardingGuard } from '~/components/onboarding/OnboardingGuard'
+import { AuthGuard } from '~/components/auth/AuthGuard'
 import { AppShellLayout } from '~/components/layout/AppShellLayout'
 import { MarketingLayout } from '~/components/layout/MarketingLayout'
 import { WizardLayout } from '~/components/layout/WizardLayout'
 import appCss from '~/styles/app.css?url'
 import { seo } from '~/utils/seo'
+import { isAppRoute, isWizardRoute } from '~/utils/routeGroups'
 
 const theme = createTheme({
   fontFamily:
@@ -121,6 +123,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               <BillingSync />
               <OnboardingGuard />
             </Authenticated>
+            <Unauthenticated>
+              <AuthGuard />
+            </Unauthenticated>
             <LayoutSwitcher>{children}</LayoutSwitcher>
           </ModalsProvider>
         </MantineProvider>
@@ -138,26 +143,4 @@ function LayoutSwitcher({ children }: { children: React.ReactNode }) {
   if (isWizardRoute(pathname)) return <WizardLayout>{children}</WizardLayout>
   if (isAppRoute(pathname)) return <AppShellLayout>{children}</AppShellLayout>
   return <MarketingLayout>{children}</MarketingLayout>
-}
-
-const APP_ROUTE_PREFIXES = [
-  '/home',
-  '/studio',
-  '/account',
-  '/admin',
-  '/products',
-  '/library',
-  '/templates',
-  '/strategy',
-  '/ads',
-]
-function isAppRoute(pathname: string): boolean {
-  return APP_ROUTE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
-}
-
-const WIZARD_ROUTE_PREFIXES = ['/onboarding', '/checkout']
-function isWizardRoute(pathname: string): boolean {
-  return WIZARD_ROUTE_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  )
 }

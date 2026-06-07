@@ -1,6 +1,6 @@
 # Spec 002 — Auth Gate on App Routes
 
-**Status:** not started
+**Status:** completed
 **Severity:** BLOCKER
 **Suggested branch:** `fix/auth-route-gate`
 **Source:** `LAUNCH_AUDIT_CLAUDE.md` → C-1
