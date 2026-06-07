@@ -1,3 +1,8 @@
+// Social crawlers (Facebook, LinkedIn, iMessage, …) require an ABSOLUTE
+// og:image URL — a relative path silently fails to render. Resolve relative
+// paths against the production origin.
+const SITE_URL = 'https://prodsnap.io'
+
 export const seo = ({
   title,
   description,
@@ -9,6 +14,12 @@ export const seo = ({
   image?: string
   keywords?: string
 }) => {
+  const absoluteImage = image
+    ? image.startsWith('http')
+      ? image
+      : `${SITE_URL}${image.startsWith('/') ? '' : '/'}${image}`
+    : undefined
+
   const tags = [
     { title },
     { name: 'description', content: description },
@@ -18,11 +29,11 @@ export const seo = ({
     { name: 'og:type', content: 'website' },
     { name: 'og:title', content: title },
     { name: 'og:description', content: description },
-    ...(image
+    ...(absoluteImage
       ? [
-          { name: 'twitter:image', content: image },
+          { name: 'twitter:image', content: absoluteImage },
           { name: 'twitter:card', content: 'summary_large_image' },
-          { name: 'og:image', content: image },
+          { name: 'og:image', content: absoluteImage },
         ]
       : []),
   ]
