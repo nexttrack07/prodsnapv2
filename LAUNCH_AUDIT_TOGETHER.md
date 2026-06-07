@@ -17,14 +17,6 @@ Each item needs a **product/copy/design decision from you**, then I do the codin
 
 ## HIGH
 
-### T-2 — Credit numbers shown in-app contradict the marketing spec (and premium isn't priced higher)
-- **Evidence:** Studio shows "Generate 2 Images — **20 credits**" (`studio.$productId.tsx:3391`, 10cr/image); backend charges `10_000` mc = 10 credits/gen (`convex/lib/billing/seedPricing.ts:16`); plans are 10×-scaled (Lite = **500** credits, not 50 — `planConfig.ts:62`). Your locked marketing spec is "**$29.99 / 50 credits**, 1cr = 1 std gen, 3cr = premium, 1cr = BG."
-- **Two problems:**
-  1. **Scale mismatch:** Internally consistent (500cr ÷ 10 = 50 generations), but a buyer who reads "50 credits" then sees "20 credits for 2 images" will think gens cost ~10× the advertised rate.
-  2. **No premium tier:** `gpt-image-2` (premium) costs the **same 10cr** as standard `nano-banana-2`. Your spec says premium = 3cr (3×). Not implemented → silent margin leak on the pricier model.
-- **Decision I need:** (a) Should displayed credits match the marketing 1:1 (re-scale to 1cr/gen and re-seed) or keep the 10× internal scale and relabel? (b) Should premium gens cost 3× (or some multiplier), or is price parity intentional?
-- **Then I:** re-scale `seedPricing` + `planConfig` and/or adjust the studio label + premium multiplier, and re-seed.
-
 ### T-3 — A user who starts onboarding but doesn't subscribe is trapped on `/onboarding` forever
 - **Evidence:** First step auto-creates a `pending` profile (`StepRole.tsx:93` → `onboardingProfiles.ts:54-69`); `OnboardingGuard.tsx:38-45` then force-redirects them to `/onboarding` from `/` and everywhere outside the allow-list, on every future visit. Only escape is Sign out.
 - **Why it matters:** A non-technical store owner evaluating the product who bails at the plan step can never get back to the marketing site or browse — feels like a hostage situation.

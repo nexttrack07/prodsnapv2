@@ -77,6 +77,21 @@ function PrivacyPolicy() {
             <List.Item>
               <strong>fal.ai</strong> — AI image generation
             </List.Item>
+            <List.Item>
+              <strong>Stripe</strong> (via Clerk Billing) — subscription payments
+            </List.Item>
+            <List.Item>
+              <strong>Firecrawl</strong> — fetching product details from URLs you import
+            </List.Item>
+            <List.Item>
+              <strong>Resend</strong> — transactional email (trial and billing notices)
+            </List.Item>
+            <List.Item>
+              <strong>Sentry</strong> — error monitoring and diagnostics
+            </List.Item>
+            <List.Item>
+              <strong>DataFast</strong> — privacy-conscious product analytics
+            </List.Item>
           </List>
         </div>
 
