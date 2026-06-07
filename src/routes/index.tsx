@@ -21,7 +21,7 @@ export const Route = createFileRoute('/')({
         title: 'ProdSnap — performance creative co-pilot for media buyers',
         description:
           'Save winning ads to a swipe file. Generate 12 Meta-ready variants per batch — using those exact references.',
-        image: '/prodsnap_logo.png',
+        image: '/og-prodsnap.png',
       }),
     ],
   }),
