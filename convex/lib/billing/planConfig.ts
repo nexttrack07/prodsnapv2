@@ -85,7 +85,7 @@ export const PLAN_CONFIG: Record<string, PlanConfig> = {
     slug: 'max',
     productLimit: -1,
     imageCredits: 4000,
-    monthlyPriceCents: 12900,
+    monthlyPriceCents: 12999,
     brandKitLimit: -1,
     savedTemplateLimit: -1,
     customTemplateUpload: true,

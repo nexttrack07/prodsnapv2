@@ -50,7 +50,7 @@ export function PricingPage() {
           onChange={(v) => setPeriod(v as 'month' | 'annual')}
           data={[
             { label: 'Monthly', value: 'month' },
-            { label: 'Annual (save up to 30%)', value: 'annual' },
+            { label: 'Annual (save up to 24%)', value: 'annual' },
           ]}
         />
       </Stack>
