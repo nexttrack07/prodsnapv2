@@ -1,6 +1,6 @@
 # Spec 004 — Stuck-Generation Watchdog Cron
 
-**Status:** not started
+**Status:** completed
 **Severity:** BLOCKER
 **Suggested branch:** `fix/stuck-generation-watchdog`
 **Source:** `LAUNCH_AUDIT_CLAUDE.md` → C-3

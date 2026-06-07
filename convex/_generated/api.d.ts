@@ -18,7 +18,6 @@ import type * as billing_notifications from "../billing/notifications.js";
 import type * as billing_syncPlan from "../billing/syncPlan.js";
 import type * as billing_userDeletion from "../billing/userDeletion.js";
 import type * as billing_webhookHandler from "../billing/webhookHandler.js";
-import type * as board from "../board.js";
 import type * as brandKits from "../brandKits.js";
 import type * as credits from "../credits.js";
 import type * as crons from "../crons.js";
@@ -77,7 +76,6 @@ declare const fullApi: ApiFromModules<{
   "billing/syncPlan": typeof billing_syncPlan;
   "billing/userDeletion": typeof billing_userDeletion;
   "billing/webhookHandler": typeof billing_webhookHandler;
-  board: typeof board;
   brandKits: typeof brandKits;
   credits: typeof credits;
   crons: typeof crons;

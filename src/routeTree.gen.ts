@@ -29,7 +29,6 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as StudioProductIdRouteImport } from './routes/studio.$productId'
 import { Route as ProductsNewRouteImport } from './routes/products.new'
-import { Route as BoardsBoardIdRouteImport } from './routes/boards.$boardId'
 import { Route as AdsAdIdRouteImport } from './routes/ads.$adId'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminPromptsRouteImport } from './routes/admin.prompts'
@@ -132,7 +131,8 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 } as any)
 const AccountIndexRoute = AccountIndexRouteImport.update({
   id: '/account/',
-  path: '/account/',
+  path: '/account',
+  fullPath: '/account/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudioProductIdRoute = StudioProductIdRouteImport.update({
@@ -144,11 +144,6 @@ const ProductsNewRoute = ProductsNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => ProductsRoute,
-} as any)
-const BoardsBoardIdRoute = BoardsBoardIdRouteImport.update({
-  id: '/boards/$boardId',
-  path: '/boards/$boardId',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const AdsAdIdRoute = AdsAdIdRouteImport.update({
   id: '/ads/$adId',
@@ -245,7 +240,6 @@ export interface FileRoutesByFullPath {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
-  '/boards/$boardId': typeof BoardsBoardIdRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account/': typeof AccountIndexRoute
@@ -278,7 +272,6 @@ export interface FileRoutesByTo {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
-  '/boards/$boardId': typeof BoardsBoardIdRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account': typeof AccountIndexRoute
@@ -316,7 +309,6 @@ export interface FileRoutesById {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
-  '/boards/$boardId': typeof BoardsBoardIdRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account/': typeof AccountIndexRoute
@@ -355,7 +347,6 @@ export interface FileRouteTypes {
     | '/admin/prompts'
     | '/admin/templates'
     | '/ads/$adId'
-    | '/boards/$boardId'
     | '/products/new'
     | '/studio/$productId'
     | '/account/'
@@ -388,7 +379,6 @@ export interface FileRouteTypes {
     | '/admin/prompts'
     | '/admin/templates'
     | '/ads/$adId'
-    | '/boards/$boardId'
     | '/products/new'
     | '/studio/$productId'
     | '/account'
@@ -425,7 +415,6 @@ export interface FileRouteTypes {
     | '/admin/prompts'
     | '/admin/templates'
     | '/ads/$adId'
-    | '/boards/$boardId'
     | '/products/new'
     | '/studio/$productId'
     | '/account/'
@@ -457,7 +446,6 @@ export interface RootRouteChildren {
   AccountBillingRoute: typeof AccountBillingRoute
   AccountBrandRoute: typeof AccountBrandRoute
   AdsAdIdRoute: typeof AdsAdIdRoute
-  BoardsBoardIdRoute: typeof BoardsBoardIdRoute
   AccountIndexRoute: typeof AccountIndexRoute
 }
 
@@ -602,13 +590,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/products/new'
       preLoaderRoute: typeof ProductsNewRouteImport
       parentRoute: typeof ProductsRoute
-    }
-    '/boards/$boardId': {
-      id: '/boards/$boardId'
-      path: '/boards/$boardId'
-      fullPath: '/boards/$boardId'
-      preLoaderRoute: typeof BoardsBoardIdRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/ads/$adId': {
       id: '/ads/$adId'
@@ -808,7 +789,6 @@ const rootRouteChildren: RootRouteChildren = {
   AccountBillingRoute: AccountBillingRoute,
   AccountBrandRoute: AccountBrandRoute,
   AdsAdIdRoute: AdsAdIdRoute,
-  BoardsBoardIdRoute: BoardsBoardIdRoute,
   AccountIndexRoute: AccountIndexRoute,
 }
 export const routeTree = rootRouteImport
