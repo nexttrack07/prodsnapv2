@@ -68,6 +68,23 @@ function validateMagicBytes(buffer: Buffer, contentType: string): void {
   }
 }
 
+/**
+ * Detects the real image type from a buffer's magic bytes, independent of the
+ * claimed content-type / file extension. Returns the matching MIME type, or
+ * null if the bytes don't match any supported image format. Trusting the bytes
+ * lets us accept images saved with a wrong extension (e.g. a WebP named .png).
+ */
+function detectImageType(buffer: Buffer): string | null {
+  for (const [type, signatures] of Object.entries(MAGIC_BYTES)) {
+    const matches = signatures.some((signature) => {
+      if (buffer.length < signature.length) return false
+      return signature.every((byte, i) => byte === null || buffer[i] === byte)
+    })
+    if (matches) return type
+  }
+  return null
+}
+
 // ─── R2 Client Setup ─────────────────────────────────────────────────────────
 
 // Lazy-initialized S3 client (env vars not available at module load time in Convex)
@@ -193,19 +210,26 @@ export const uploadProductImage = action({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
 
-    // Security: Validate content-type is an allowed image type
+    // Security: claimed content-type must at least be an allowed image type
     validateContentType(contentType)
 
     const buf = Buffer.from(base64, 'base64')
     if (buf.length === 0) throw new Error('Empty upload')
     if (buf.length > 10 * 1024 * 1024) throw new Error('Image exceeds 10 MB')
 
-    // Security: Verify magic bytes match claimed content-type
-    validateMagicBytes(buf, contentType)
+    // Trust the bytes, not the extension: detect the real format and store
+    // that. Handles images saved with a wrong extension (e.g. a WebP named
+    // .png) — the common cause of "content does not match claimed type".
+    const actualType = detectImageType(buf)
+    if (!actualType) {
+      throw new Error(
+        'Unsupported or unreadable image. Please upload a PNG, JPG, GIF, or WebP file.',
+      )
+    }
 
     const safeName = name.replace(/[^\w.\-]/g, '_').slice(0, 80)
     const key = `uploads/${nanoid()}-${safeName}`
-    const url = await uploadToR2(buf, key, contentType)
+    const url = await uploadToR2(buf, key, actualType)
     return { url, key }
   },
 })
