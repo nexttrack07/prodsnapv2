@@ -14,6 +14,8 @@ import {
 } from '@tabler/icons-react'
 
 export const Route = createFileRoute('/admin/design-lab/generate')({
+  validateSearch: (search: Record<string, unknown>): { ref?: string } =>
+    typeof search.ref === 'string' && search.ref ? { ref: search.ref } : {},
   component: BatchGenerate,
 })
 
@@ -42,13 +44,13 @@ type GenCard = {
   error: string | null
 }
 
-function makeCard(): GenCard {
+function makeCard(referenceR2Url: string | null = null): GenCard {
   return {
     id: uid(),
     prompt: '',
     referenceFile: null,
-    referencePreviewUrl: null,
-    referenceR2Url: null,
+    referencePreviewUrl: referenceR2Url,
+    referenceR2Url,
     status: 'idle',
     resultUrl: null,
     error: null,
@@ -58,11 +60,12 @@ function makeCard(): GenCard {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 function BatchGenerate() {
+  const { ref: seedRef } = Route.useSearch()
   const [sharedPrompt, setSharedPrompt] = useLocalStorage({
     key: 'prodsnap-generate-shared-prompt',
     defaultValue: '',
   })
-  const [cards, setCards] = useState<GenCard[]>([makeCard()])
+  const [cards, setCards] = useState<GenCard[]>(() => [makeCard(seedRef ?? null)])
 
   const uploadImage = useAction(api.r2.uploadProductImage)
   const generateSingle = useAction(api.designLabActions.generateSingleDesign)
@@ -75,13 +78,13 @@ function BatchGenerate() {
       const updated = prev.map(c => c.id === id ? { ...c, prompt } : c)
       const last = updated[updated.length - 1]
       if (last && (last.prompt.trim() || last.status !== 'idle')) {
-        return [...updated, makeCard()]
+        return [...updated, makeCard(seedRef ?? null)]
       }
       return updated
     })
   }
 
-  const addCard = () => setCards(prev => [...prev, makeCard()])
+  const addCard = () => setCards(prev => [...prev, makeCard(seedRef ?? null)])
 
   const removeCard = (id: string) => {
     setCards(prev => {
@@ -201,6 +204,30 @@ function BatchGenerate() {
             </Button>
           </Group>
         </Group>
+
+        {/* Seed reference (from the library "Generate variations from this") */}
+        {seedRef && (
+          <Paper
+            p="sm"
+            radius="lg"
+            withBorder
+            style={{ borderColor: 'var(--mantine-color-brand-8)', backgroundColor: 'var(--mantine-color-dark-8)' }}
+          >
+            <Group gap="sm" wrap="nowrap">
+              <Image
+                src={seedRef}
+                w={44}
+                h={44}
+                radius="sm"
+                style={{ objectFit: 'contain', backgroundColor: '#fff', flexShrink: 0 }}
+              />
+              <Text size="sm" c="dark.1">
+                Generating from this reference — it's pre-applied to every prompt below. Write a
+                prompt per variation, then <strong>Generate all</strong>.
+              </Text>
+            </Group>
+          </Paper>
+        )}
 
         {/* Shared context */}
         <Paper

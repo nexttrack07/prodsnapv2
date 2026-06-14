@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useAction } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -567,6 +567,7 @@ function DesignCard({
   const removeBg = useAction(api.designLabActions.removeBgForDesign)
   const upscale = useAction(api.designLabActions.upscaleDesign)
   const generateSingle = useAction(api.designLabActions.generateSingleDesign)
+  const navigate = useNavigate()
   const [removingBg, setRemovingBg] = useState(false)
   const [upscaling, setUpscaling] = useState(false)
 
@@ -673,6 +674,16 @@ function DesignCard({
         {/* Action buttons — hidden in select/generating mode */}
         {!selectMode && !generating && (
           <Group gap={4} style={{ position: 'absolute', top: 6, right: 6 }}>
+            <Tooltip label="Generate variations from this">
+              <ActionIcon
+                size="sm"
+                variant="filled"
+                style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+                onClick={() => navigate({ to: '/admin/design-lab/generate', search: { ref: displayUrl } })}
+              >
+                <IconLayoutGrid size={12} />
+              </ActionIcon>
+            </Tooltip>
             {!design.bgRemovedUrl && (
               <Tooltip label="Remove background">
                 <ActionIcon
