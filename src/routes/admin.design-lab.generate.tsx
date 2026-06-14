@@ -33,24 +33,29 @@ const toBase64 = (file: File): Promise<string> =>
 
 type GenStatus = 'idle' | 'uploading' | 'generating' | 'done' | 'error'
 
+type GenRef = {
+  id: string
+  file: File | null     // null when the ref is a remote URL (e.g. seeded from the library)
+  previewUrl: string    // object URL for files, or the remote URL directly
+  r2Url: string | null  // set immediately for remote refs; set after upload for files
+}
+
 type GenCard = {
   id: string
   prompt: string
-  referenceFile: File | null
-  referencePreviewUrl: string | null
-  referenceR2Url: string | null
+  references: GenRef[]
   status: GenStatus
   resultUrl: string | null
   error: string | null
 }
 
-function makeCard(referenceR2Url: string | null = null): GenCard {
+function makeCard(seedRefUrl: string | null = null): GenCard {
   return {
     id: uid(),
     prompt: '',
-    referenceFile: null,
-    referencePreviewUrl: referenceR2Url,
-    referenceR2Url,
+    references: seedRefUrl
+      ? [{ id: uid(), file: null, previewUrl: seedRefUrl, r2Url: seedRefUrl }]
+      : [],
     status: 'idle',
     resultUrl: null,
     error: null,
@@ -89,25 +94,30 @@ function BatchGenerate() {
   const removeCard = (id: string) => {
     setCards(prev => {
       const card = prev.find(c => c.id === id)
-      if (card?.referencePreviewUrl) URL.revokeObjectURL(card.referencePreviewUrl)
+      card?.references.forEach(r => { if (r.file) URL.revokeObjectURL(r.previewUrl) })
       return prev.filter(c => c.id !== id)
     })
   }
 
-  const setReference = (id: string, file: File) => {
-    const card = cards.find(c => c.id === id)
-    if (card?.referencePreviewUrl) URL.revokeObjectURL(card.referencePreviewUrl)
-    updateCard(id, {
-      referenceFile: file,
-      referencePreviewUrl: URL.createObjectURL(file),
-      referenceR2Url: null,
-    })
+  const addReference = (id: string, file: File) => {
+    setCards(prev => prev.map(c => c.id === id
+      ? {
+          ...c,
+          references: [
+            ...c.references,
+            { id: uid(), file, previewUrl: URL.createObjectURL(file), r2Url: null },
+          ],
+        }
+      : c))
   }
 
-  const clearReference = (id: string) => {
-    const card = cards.find(c => c.id === id)
-    if (card?.referencePreviewUrl) URL.revokeObjectURL(card.referencePreviewUrl)
-    updateCard(id, { referenceFile: null, referencePreviewUrl: null, referenceR2Url: null })
+  const removeReference = (id: string, refId: string) => {
+    setCards(prev => prev.map(c => {
+      if (c.id !== id) return c
+      const ref = c.references.find(r => r.id === refId)
+      if (ref?.file) URL.revokeObjectURL(ref.previewUrl)
+      return { ...c, references: c.references.filter(r => r.id !== refId) }
+    }))
   }
 
   const generateCard = async (id: string) => {
@@ -119,26 +129,35 @@ function BatchGenerate() {
       : card.prompt.trim()
 
     try {
-      let r2Url: string | null = card.referenceR2Url
+      // Upload any references that are local files not yet on R2; remote refs
+      // (e.g. the seeded library image) already have an r2Url.
+      const needsUpload = card.references.some(r => r.file && !r.r2Url)
+      if (needsUpload) updateCard(id, { status: 'uploading', error: null })
 
-      if (card.referenceFile && !r2Url) {
-        updateCard(id, { status: 'uploading', error: null })
-        const base64 = await toBase64(card.referenceFile)
+      const resolved: GenRef[] = []
+      for (const ref of card.references) {
+        if (ref.r2Url) { resolved.push(ref); continue }
+        if (!ref.file) continue
+        const base64 = await toBase64(ref.file)
         const { url } = await uploadImage({
-          name: card.referenceFile.name,
-          contentType: card.referenceFile.type,
+          name: ref.file.name,
+          contentType: ref.file.type,
           base64,
         })
-        r2Url = url
-        updateCard(id, { referenceR2Url: url })
+        resolved.push({ ...ref, r2Url: url })
       }
+      updateCard(id, { references: resolved })
+
+      const referenceImageUrls = resolved
+        .map(r => r.r2Url)
+        .filter((u): u is string => !!u)
 
       updateCard(id, { status: 'generating', error: null })
       const { imageUrl } = await generateSingle({
         prompt: fullPrompt,
         promptTitle: card.prompt.trim().slice(0, 60),
         conceptTitle: sharedPrompt.trim().slice(0, 60) || 'Batch Generate',
-        referenceImageUrls: r2Url ? [r2Url] : [],
+        referenceImageUrls,
         nicheDescription: sharedPrompt.trim() || undefined,
       })
       updateCard(id, { status: 'done', resultUrl: imageUrl })
@@ -166,7 +185,7 @@ function BatchGenerate() {
     return () => {
       // capture current cards at unmount time
       setCards(prev => {
-        prev.forEach(c => { if (c.referencePreviewUrl) URL.revokeObjectURL(c.referencePreviewUrl) })
+        prev.forEach(c => c.references.forEach(r => { if (r.file) URL.revokeObjectURL(r.previewUrl) }))
         return prev
       })
     }
@@ -266,8 +285,8 @@ function BatchGenerate() {
                 key={card.id}
                 card={card}
                 onPromptChange={p => handlePromptChange(card.id, p)}
-                onSetReference={f => setReference(card.id, f)}
-                onClearReference={() => clearReference(card.id)}
+                onAddReference={f => addReference(card.id, f)}
+                onRemoveReference={refId => removeReference(card.id, refId)}
                 onGenerate={() => generateCard(card.id)}
                 onRetry={() => retryCard(card.id)}
                 onRemove={() => removeCard(card.id)}
@@ -287,16 +306,16 @@ function BatchGenerate() {
 function GenCardItem({
   card,
   onPromptChange,
-  onSetReference,
-  onClearReference,
+  onAddReference,
+  onRemoveReference,
   onGenerate,
   onRetry,
   onRemove,
 }: {
   card: GenCard
   onPromptChange: (p: string) => void
-  onSetReference: (f: File) => void
-  onClearReference: () => void
+  onAddReference: (f: File) => void
+  onRemoveReference: (refId: string) => void
   onGenerate: () => void
   onRetry: () => void
   onRemove: () => void
@@ -402,44 +421,48 @@ function GenCardItem({
               type="file"
               accept="image/*"
               style={{ display: 'none' }}
-              onChange={e => e.target.files?.[0] && onSetReference(e.target.files[0])}
+              onChange={e => {
+                if (e.target.files?.[0]) onAddReference(e.target.files[0])
+                e.target.value = '' // allow re-selecting / adding more
+              }}
             />
 
-            {card.referencePreviewUrl ? (
-              <Group gap="sm" align="center">
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <Image
-                    src={card.referencePreviewUrl}
-                    w={48}
-                    h={48}
-                    radius="sm"
-                    style={{ objectFit: 'cover', display: 'block' }}
-                  />
-                  <ActionIcon
-                    size="xs"
-                    color="red"
-                    variant="filled"
-                    radius="xl"
-                    style={{ position: 'absolute', top: -5, right: -5 }}
-                    onClick={onClearReference}
-                  >
-                    <IconX size={8} />
-                  </ActionIcon>
-                </div>
-                <Text size="xs" c="dark.3">Reference image</Text>
+            {card.references.length > 0 && (
+              <Group gap="xs" align="center">
+                {card.references.map(ref => (
+                  <div key={ref.id} style={{ position: 'relative', display: 'inline-block' }}>
+                    <Image
+                      src={ref.previewUrl}
+                      w={48}
+                      h={48}
+                      radius="sm"
+                      style={{ objectFit: 'cover', display: 'block', backgroundColor: '#fff' }}
+                    />
+                    <ActionIcon
+                      size="xs"
+                      color="red"
+                      variant="filled"
+                      radius="xl"
+                      style={{ position: 'absolute', top: -5, right: -5 }}
+                      onClick={() => onRemoveReference(ref.id)}
+                    >
+                      <IconX size={8} />
+                    </ActionIcon>
+                  </div>
+                ))}
               </Group>
-            ) : (
-              <Button
-                size="compact-xs"
-                variant="subtle"
-                color="dark.3"
-                leftSection={<IconUpload size={11} />}
-                onClick={() => fileInputRef.current?.click()}
-                style={{ alignSelf: 'flex-start' }}
-              >
-                Add reference image
-              </Button>
             )}
+
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="dark.3"
+              leftSection={<IconUpload size={11} />}
+              onClick={() => fileInputRef.current?.click()}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              {card.references.length > 0 ? 'Add another image' : 'Add reference image'}
+            </Button>
 
             <Button
               onClick={isError ? onRetry : onGenerate}
