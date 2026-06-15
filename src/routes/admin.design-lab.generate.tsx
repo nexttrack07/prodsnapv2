@@ -31,7 +31,7 @@ const toBase64 = (file: File): Promise<string> =>
     r.readAsDataURL(file)
   })
 
-type GenStatus = 'idle' | 'uploading' | 'generating' | 'review' | 'approving' | 'approved' | 'error'
+type GenStatus = 'idle' | 'uploading' | 'generating' | 'review' | 'approving' | 'error'
 
 type GenRef = {
   id: string
@@ -198,7 +198,13 @@ function BatchGenerate() {
         imageUrl: card.preview.imageUrl,
         storageKey: card.preview.storageKey,
       })
-      updateCard(id, { status: 'approved', selected: false })
+      // Saved to the library — remove the card from the batch page.
+      card.references.forEach(r => { if (r.file) URL.revokeObjectURL(r.previewUrl) })
+      setCards(prev => {
+        const next = prev.filter(c => c.id !== id)
+        if (!next.some(c => c.status === 'idle')) next.push(makeCard(seedRef ?? null))
+        return next
+      })
     } catch (err) {
       updateCard(id, { status: 'review', error: err instanceof Error ? err.message : 'Could not save' })
     }
@@ -209,7 +215,11 @@ function BatchGenerate() {
     const card = cards.find(c => c.id === id)
     if (card?.preview) discardPreview({ storageKey: card.preview.storageKey }).catch(() => {})
     card?.references.forEach(r => { if (r.file) URL.revokeObjectURL(r.previewUrl) })
-    setCards(prev => prev.filter(c => c.id !== id))
+    setCards(prev => {
+      const next = prev.filter(c => c.id !== id)
+      if (!next.some(c => c.status === 'idle')) next.push(makeCard(seedRef ?? null))
+      return next
+    })
   }
 
   // Redo: delete the old R2 object, then regenerate with the same prompt + refs.
@@ -444,7 +454,6 @@ function GenCardItem({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isBusy = card.status === 'uploading' || card.status === 'generating' || card.status === 'approving'
   const isReview = card.status === 'review'
-  const isApproved = card.status === 'approved'
   const isError = card.status === 'error'
   const isEditable = card.status === 'idle' || card.status === 'error'
 
@@ -454,9 +463,7 @@ function GenCardItem({
       p="md"
       withBorder
       style={{
-        borderColor: isApproved
-          ? 'var(--mantine-color-green-8)'
-          : isReview && card.selected
+        borderColor: isReview && card.selected
           ? 'var(--mantine-color-brand-5)'
           : isReview
           ? 'var(--mantine-color-brand-9)'
@@ -479,8 +486,8 @@ function GenCardItem({
           </Group>
         )}
 
-        {/* Preview (review or approved) */}
-        {(isReview || isApproved) && card.preview && (
+        {/* Preview (pending review) */}
+        {isReview && card.preview && (
           <div style={{
             position: 'relative',
             aspectRatio: '1',
@@ -503,11 +510,11 @@ function GenCardItem({
               />
             )}
             <Badge
-              color={isApproved ? 'green' : 'brand'}
+              color="brand"
               variant="filled"
               style={{ position: 'absolute', top: 8, right: 8 }}
             >
-              {isApproved ? 'Saved' : 'Pending review'}
+              Pending review
             </Badge>
           </div>
         )}
@@ -631,14 +638,6 @@ function GenCardItem({
               </Button>
             </Group>
           </>
-        )}
-
-        {/* Approved */}
-        {isApproved && (
-          <Group gap={6} align="center" justify="center">
-            <IconCheck size={14} color="var(--mantine-color-green-5)" />
-            <Text size="xs" c="green.4">Saved to library</Text>
-          </Group>
         )}
 
       </Stack>
