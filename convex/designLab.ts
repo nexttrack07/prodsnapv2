@@ -26,6 +26,45 @@ export const saveDesignOutput = internalMutation({
   },
 })
 
+// ─── Batch-generate review step (approve / discard a preview) ─────────────────
+
+/**
+ * Persists a previewed design to the library after the admin approves it.
+ * The image is already on R2 (uploaded during preview generation).
+ */
+export const approveDesignPreview = mutation({
+  args: {
+    imageUrl: v.string(),
+    storageKey: v.string(),
+    prompt: v.string(),
+    promptTitle: v.string(),
+    conceptTitle: v.string(),
+    referenceImageUrls: v.array(v.string()),
+    batchName: v.optional(v.string()),
+    nicheDescription: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const adminUserId = await requireAdminIdentity(ctx)
+    return ctx.db.insert('designOutputs', {
+      ...args,
+      adminUserId,
+      createdAt: Date.now(),
+    })
+  },
+})
+
+/**
+ * Discards a previewed design that was never approved — deletes its orphaned
+ * R2 object so dismissing/redoing never leaks storage.
+ */
+export const discardDesignPreview = mutation({
+  args: { storageKey: v.string() },
+  handler: async (ctx, { storageKey }) => {
+    await requireAdminIdentity(ctx)
+    await ctx.scheduler.runAfter(0, internal.r2.clearUserObjectStorage, { key: storageKey })
+  },
+})
+
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
 export const listDesignOutputs = query({

@@ -514,6 +514,72 @@ async function removeBackgroundForDesign(imageUrl: string): Promise<string | und
   }
 }
 
+// ─── Shared graphic generation (nano-banana-2 → R2) ──────────────────────────
+
+/**
+ * Generates a print-ready graphic and uploads it to R2. Does NOT persist a
+ * designOutputs row — callers decide whether/when to save. Returns the durable
+ * R2 url + storage key.
+ */
+async function generateGraphic(
+  prompt: string,
+  referenceImageUrls: string[],
+): Promise<{ imageUrl: string; storageKey: string }> {
+  // Append print-ready graphic constraint to every prompt
+  const printPrompt = `${prompt} -- flat graphic design artwork only, isolated on a plain white or transparent background, no t-shirt mockup, no product shape, no clothing, no model, no scene, suitable for direct upload to print-on-demand (Printify)`
+
+  let generatedUrl: string | undefined
+
+  if (referenceImageUrls.length > 0) {
+    const result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
+      input: {
+        prompt: printPrompt,
+        image_urls: referenceImageUrls,
+        aspect_ratio: '1:1' as const,
+        output_format: 'png',
+        resolution: '1K',
+      },
+    })
+    const data = result.data as { images?: Array<{ url?: string }> }
+    generatedUrl = data.images?.[0]?.url
+  } else {
+    const result = await fal.subscribe('fal-ai/nano-banana-2', {
+      input: {
+        prompt: printPrompt,
+        aspect_ratio: '1:1' as const,
+        output_format: 'png',
+        resolution: '1K',
+      },
+    })
+    const data = result.data as { images?: Array<{ url?: string }> }
+    generatedUrl = data.images?.[0]?.url
+  }
+
+  if (!generatedUrl) throw new Error('Image model returned no URL')
+
+  const key = `design-lab/${nanoid()}.png`
+  const imageUrl = await uploadFromUrl(generatedUrl, key)
+  return { imageUrl, storageKey: key }
+}
+
+// ─── Preview generation (no save — Batch Generate review step) ────────────────
+// Generates + uploads to R2 but does NOT create a designOutputs row. The client
+// reviews the result and then approves (saves) or dismisses (deletes the R2
+// object) it. Keeps unreviewed designs out of the library.
+
+export const generateDesignPreview = action({
+  args: {
+    prompt: v.string(),
+    referenceImageUrls: v.array(v.string()),
+  },
+  handler: async (ctx, { prompt, referenceImageUrls }) => {
+    await requireAdmin(ctx)
+    if (prompt.length > 5000) throw new Error('Prompt too long (max 5000 chars)')
+    if (referenceImageUrls.length > 0) validateImageUrls(referenceImageUrls)
+    return generateGraphic(prompt, referenceImageUrls)
+  },
+})
+
 // ─── Single design generation (Step 3) ───────────────────────────────────────
 
 export const generateSingleDesign = action({
@@ -534,45 +600,12 @@ export const generateSingleDesign = action({
 
     if (referenceImageUrls.length > 0) validateImageUrls(referenceImageUrls)
 
-    // Append print-ready graphic constraint to every prompt
-    const printPrompt = `${prompt} -- flat graphic design artwork only, isolated on a plain white or transparent background, no t-shirt mockup, no product shape, no clothing, no model, no scene, suitable for direct upload to print-on-demand (Printify)`
-
-    let generatedUrl: string | undefined
-
-    if (referenceImageUrls.length > 0) {
-      const result = await fal.subscribe('fal-ai/nano-banana-2/edit', {
-        input: {
-          prompt: printPrompt,
-          image_urls: referenceImageUrls,
-          aspect_ratio: '1:1' as const,
-          output_format: 'png',
-          resolution: '1K',
-        },
-      })
-      const data = result.data as { images?: Array<{ url?: string }> }
-      generatedUrl = data.images?.[0]?.url
-    } else {
-      const result = await fal.subscribe('fal-ai/nano-banana-2', {
-        input: {
-          prompt: printPrompt,
-          aspect_ratio: '1:1' as const,
-          output_format: 'png',
-          resolution: '1K',
-        },
-      })
-      const data = result.data as { images?: Array<{ url?: string }> }
-      generatedUrl = data.images?.[0]?.url
-    }
-
-    if (!generatedUrl) throw new Error('Image model returned no URL')
-
-    const key = `design-lab/${nanoid()}.png`
-    const imageUrl = await uploadFromUrl(generatedUrl, key)
+    const { imageUrl, storageKey } = await generateGraphic(prompt, referenceImageUrls)
 
     await ctx.runMutation(internal.designLab.saveDesignOutput, {
       adminUserId,
       imageUrl,
-      storageKey: key,
+      storageKey,
       prompt,
       promptTitle,
       conceptTitle,

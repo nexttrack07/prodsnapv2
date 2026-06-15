@@ -1,16 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { useAction } from 'convex/react'
+import { useAction, useMutation } from 'convex/react'
 import { useLocalStorage } from '@mantine/hooks'
 import { api } from '../../convex/_generated/api'
 import {
   Container, Stack, Group, Text, Title, Button, Paper, Textarea,
   SimpleGrid, ActionIcon, Tooltip, Image, Center, Loader, Alert,
-  ThemeIcon,
+  Checkbox, Badge,
 } from '@mantine/core'
 import {
   IconPlus, IconSparkles, IconUpload, IconX, IconCheck,
-  IconAlertCircle, IconArrowLeft, IconPlayerPlay, IconRefresh,
+  IconAlertCircle, IconArrowLeft, IconPlayerPlay, IconRefresh, IconTrash,
 } from '@tabler/icons-react'
 
 export const Route = createFileRoute('/admin/design-lab/generate')({
@@ -31,7 +31,7 @@ const toBase64 = (file: File): Promise<string> =>
     r.readAsDataURL(file)
   })
 
-type GenStatus = 'idle' | 'uploading' | 'generating' | 'done' | 'error'
+type GenStatus = 'idle' | 'uploading' | 'generating' | 'review' | 'approving' | 'approved' | 'error'
 
 type GenRef = {
   id: string
@@ -40,12 +40,24 @@ type GenRef = {
   r2Url: string | null  // set immediately for remote refs; set after upload for files
 }
 
+// Snapshot of everything needed to persist an approved design, captured at
+// generation time so a later change to the shared prompt can't affect it.
+type SavePayload = {
+  prompt: string
+  promptTitle: string
+  conceptTitle: string
+  referenceImageUrls: string[]
+  nicheDescription?: string
+}
+
 type GenCard = {
   id: string
   prompt: string
   references: GenRef[]
   status: GenStatus
-  resultUrl: string | null
+  preview: { imageUrl: string; storageKey: string } | null
+  savePayload: SavePayload | null
+  selected: boolean
   error: string | null
 }
 
@@ -57,7 +69,9 @@ function makeCard(seedRefUrl: string | null = null): GenCard {
       ? [{ id: uid(), file: null, previewUrl: seedRefUrl, r2Url: seedRefUrl }]
       : [],
     status: 'idle',
-    resultUrl: null,
+    preview: null,
+    savePayload: null,
+    selected: false,
     error: null,
   }
 }
@@ -73,7 +87,9 @@ function BatchGenerate() {
   const [cards, setCards] = useState<GenCard[]>(() => [makeCard(seedRef ?? null)])
 
   const uploadImage = useAction(api.r2.uploadProductImage)
-  const generateSingle = useAction(api.designLabActions.generateSingleDesign)
+  const generatePreview = useAction(api.designLabActions.generateDesignPreview)
+  const approvePreview = useMutation(api.designLab.approveDesignPreview)
+  const discardPreview = useMutation(api.designLab.discardDesignPreview)
 
   const updateCard = (id: string, patch: Partial<GenCard>) =>
     setCards(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c))
@@ -152,15 +168,18 @@ function BatchGenerate() {
         .map(r => r.r2Url)
         .filter((u): u is string => !!u)
 
-      updateCard(id, { status: 'generating', error: null })
-      const { imageUrl } = await generateSingle({
+      // Snapshot the save payload now so a later shared-prompt edit can't change it.
+      const savePayload: SavePayload = {
         prompt: fullPrompt,
         promptTitle: card.prompt.trim().slice(0, 60),
         conceptTitle: sharedPrompt.trim().slice(0, 60) || 'Batch Generate',
         referenceImageUrls,
         nicheDescription: sharedPrompt.trim() || undefined,
-      })
-      updateCard(id, { status: 'done', resultUrl: imageUrl })
+      }
+
+      updateCard(id, { status: 'generating', error: null })
+      const preview = await generatePreview({ prompt: fullPrompt, referenceImageUrls })
+      updateCard(id, { status: 'review', preview, savePayload, selected: false })
     } catch (err) {
       updateCard(id, {
         status: 'error',
@@ -169,9 +188,50 @@ function BatchGenerate() {
     }
   }
 
-  const retryCard = (id: string) => {
-    updateCard(id, { status: 'idle', error: null, resultUrl: null })
+  const approveCard = async (id: string) => {
+    const card = cards.find(c => c.id === id)
+    if (!card || !card.preview || !card.savePayload) return
+    updateCard(id, { status: 'approving', error: null })
+    try {
+      await approvePreview({
+        ...card.savePayload,
+        imageUrl: card.preview.imageUrl,
+        storageKey: card.preview.storageKey,
+      })
+      updateCard(id, { status: 'approved', selected: false })
+    } catch (err) {
+      updateCard(id, { status: 'review', error: err instanceof Error ? err.message : 'Could not save' })
+    }
   }
+
+  // Dismiss: discard the unreviewed result, delete its R2 object, drop the card.
+  const dismissCard = (id: string) => {
+    const card = cards.find(c => c.id === id)
+    if (card?.preview) discardPreview({ storageKey: card.preview.storageKey }).catch(() => {})
+    card?.references.forEach(r => { if (r.file) URL.revokeObjectURL(r.previewUrl) })
+    setCards(prev => prev.filter(c => c.id !== id))
+  }
+
+  // Redo: delete the old R2 object, then regenerate with the same prompt + refs.
+  const redoCard = (id: string) => {
+    const card = cards.find(c => c.id === id)
+    if (card?.preview) discardPreview({ storageKey: card.preview.storageKey }).catch(() => {})
+    updateCard(id, { status: 'idle', preview: null, savePayload: null, selected: false, error: null })
+    generateCard(id)
+  }
+
+  const toggleCardSelected = (id: string) =>
+    setCards(prev => prev.map(c => c.id === id ? { ...c, selected: !c.selected } : c))
+
+  const reviewCards = cards.filter(c => c.status === 'review')
+  const selectedReview = reviewCards.filter(c => c.selected)
+  const allReviewSelected = reviewCards.length > 0 && selectedReview.length === reviewCards.length
+
+  const toggleSelectAll = () =>
+    setCards(prev => prev.map(c => c.status === 'review' ? { ...c, selected: !allReviewSelected } : c))
+
+  const approveSelected = () => { selectedReview.forEach(c => approveCard(c.id)) }
+  const dismissSelected = () => { selectedReview.slice().forEach(c => dismissCard(c.id)) }
 
   const generateAll = () => {
     const idle = cards.filter(c => c.status === 'idle' && c.prompt.trim())
@@ -185,7 +245,13 @@ function BatchGenerate() {
     return () => {
       // capture current cards at unmount time
       setCards(prev => {
-        prev.forEach(c => c.references.forEach(r => { if (r.file) URL.revokeObjectURL(r.previewUrl) }))
+        prev.forEach(c => {
+          c.references.forEach(r => { if (r.file) URL.revokeObjectURL(r.previewUrl) })
+          // Best-effort: don't leave un-reviewed previews orphaned in R2.
+          if (c.status === 'review' && c.preview) {
+            discardPreview({ storageKey: c.preview.storageKey }).catch(() => {})
+          }
+        })
         return prev
       })
     }
@@ -278,6 +344,52 @@ function BatchGenerate() {
           </Stack>
         </Paper>
 
+        {/* Review toolbar — bulk approve / dismiss the pending previews */}
+        {reviewCards.length > 0 && (
+          <Paper
+            p="sm"
+            radius="lg"
+            withBorder
+            style={{ borderColor: 'var(--mantine-color-brand-8)', backgroundColor: 'var(--mantine-color-dark-8)' }}
+          >
+            <Group justify="space-between" wrap="wrap" gap="sm">
+              <Group gap="sm">
+                <Checkbox
+                  checked={allReviewSelected}
+                  indeterminate={selectedReview.length > 0 && !allReviewSelected}
+                  onChange={toggleSelectAll}
+                  label={`Select all (${reviewCards.length})`}
+                  color="brand"
+                />
+                <Text size="sm" c="dark.2">
+                  {selectedReview.length} selected · {reviewCards.length} awaiting review
+                </Text>
+              </Group>
+              <Group gap="sm">
+                <Button
+                  size="compact-sm"
+                  color="brand"
+                  leftSection={<IconCheck size={14} />}
+                  disabled={selectedReview.length === 0}
+                  onClick={approveSelected}
+                >
+                  Approve {selectedReview.length || ''}
+                </Button>
+                <Button
+                  size="compact-sm"
+                  color="red"
+                  variant="light"
+                  leftSection={<IconTrash size={14} />}
+                  disabled={selectedReview.length === 0}
+                  onClick={dismissSelected}
+                >
+                  Dismiss {selectedReview.length || ''}
+                </Button>
+              </Group>
+            </Group>
+          </Paper>
+        )}
+
         {/* Cards grid */}
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
             {cards.map(card => (
@@ -288,8 +400,11 @@ function BatchGenerate() {
                 onAddReference={f => addReference(card.id, f)}
                 onRemoveReference={refId => removeReference(card.id, refId)}
                 onGenerate={() => generateCard(card.id)}
-                onRetry={() => retryCard(card.id)}
                 onRemove={() => removeCard(card.id)}
+                onApprove={() => approveCard(card.id)}
+                onDismiss={() => dismissCard(card.id)}
+                onRedo={() => redoCard(card.id)}
+                onToggleSelected={() => toggleCardSelected(card.id)}
               />
             ))}
 
@@ -309,21 +424,29 @@ function GenCardItem({
   onAddReference,
   onRemoveReference,
   onGenerate,
-  onRetry,
   onRemove,
+  onApprove,
+  onDismiss,
+  onRedo,
+  onToggleSelected,
 }: {
   card: GenCard
   onPromptChange: (p: string) => void
   onAddReference: (f: File) => void
   onRemoveReference: (refId: string) => void
   onGenerate: () => void
-  onRetry: () => void
   onRemove: () => void
+  onApprove: () => void
+  onDismiss: () => void
+  onRedo: () => void
+  onToggleSelected: () => void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const isActive = card.status === 'uploading' || card.status === 'generating'
-  const isDone = card.status === 'done'
+  const isBusy = card.status === 'uploading' || card.status === 'generating' || card.status === 'approving'
+  const isReview = card.status === 'review'
+  const isApproved = card.status === 'approved'
   const isError = card.status === 'error'
+  const isEditable = card.status === 'idle' || card.status === 'error'
 
   return (
     <Paper
@@ -331,8 +454,12 @@ function GenCardItem({
       p="md"
       withBorder
       style={{
-        borderColor: isDone
+        borderColor: isApproved
           ? 'var(--mantine-color-green-8)'
+          : isReview && card.selected
+          ? 'var(--mantine-color-brand-5)'
+          : isReview
+          ? 'var(--mantine-color-brand-9)'
           : isError
           ? 'var(--mantine-color-red-8)'
           : 'var(--mantine-color-dark-5)',
@@ -341,8 +468,8 @@ function GenCardItem({
     >
       <Stack gap="sm">
 
-        {/* Remove button (top-right) */}
-        {!isActive && (
+        {/* Remove button — only while editable (review uses Dismiss) */}
+        {isEditable && (
           <Group justify="flex-end" style={{ marginBottom: -4 }}>
             <Tooltip label="Remove">
               <ActionIcon size="xs" color="dark.4" variant="subtle" onClick={onRemove}>
@@ -352,8 +479,8 @@ function GenCardItem({
           </Group>
         )}
 
-        {/* Result image */}
-        {isDone && card.resultUrl && (
+        {/* Preview (review or approved) */}
+        {(isReview || isApproved) && card.preview && (
           <div style={{
             position: 'relative',
             aspectRatio: '1',
@@ -362,29 +489,40 @@ function GenCardItem({
             overflow: 'hidden',
           }}>
             <Image
-              src={card.resultUrl}
-              alt="Result"
+              src={card.preview.imageUrl}
+              alt="Preview"
               style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 8 }}
             />
-            <ThemeIcon
-              size={24}
-              color="green"
+            {isReview && (
+              <Checkbox
+                checked={card.selected}
+                onChange={onToggleSelected}
+                color="brand"
+                styles={{ input: { cursor: 'pointer' } }}
+                style={{ position: 'absolute', top: 8, left: 8 }}
+              />
+            )}
+            <Badge
+              color={isApproved ? 'green' : 'brand'}
               variant="filled"
-              radius="xl"
-              style={{ position: 'absolute', bottom: 8, right: 8 }}
+              style={{ position: 'absolute', top: 8, right: 8 }}
             >
-              <IconCheck size={12} />
-            </ThemeIcon>
+              {isApproved ? 'Saved' : 'Pending review'}
+            </Badge>
           </div>
         )}
 
-        {/* Generating / uploading */}
-        {isActive && (
+        {/* Busy (uploading / generating / saving) */}
+        {isBusy && (
           <Center py={48}>
             <Stack align="center" gap="sm">
               <Loader size="md" color="brand" />
               <Text size="xs" c="dark.3">
-                {card.status === 'uploading' ? 'Uploading reference…' : 'Generating…'}
+                {card.status === 'uploading'
+                  ? 'Uploading reference…'
+                  : card.status === 'approving'
+                  ? 'Saving…'
+                  : 'Generating…'}
               </Text>
             </Stack>
           </Center>
@@ -398,7 +536,7 @@ function GenCardItem({
         )}
 
         {/* Editable state */}
-        {!isActive && !isDone && (
+        {isEditable && (
           <>
             <Textarea
               placeholder="Describe the design…"
@@ -465,7 +603,7 @@ function GenCardItem({
             </Button>
 
             <Button
-              onClick={isError ? onRetry : onGenerate}
+              onClick={onGenerate}
               disabled={!card.prompt.trim()}
               color={isError ? 'red' : 'brand'}
               variant={isError ? 'light' : 'filled'}
@@ -477,21 +615,30 @@ function GenCardItem({
           </>
         )}
 
-        {/* Done — show prompt summary + regenerate option */}
-        {isDone && (
+        {/* Review — approve / redo / dismiss */}
+        {isReview && (
           <>
             <Text size="xs" c="dark.3" lineClamp={2}>{card.prompt}</Text>
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              color="dark.3"
-              onClick={onRetry}
-              leftSection={<IconRefresh size={11} />}
-              style={{ alignSelf: 'flex-start' }}
-            >
-              Regenerate
-            </Button>
+            <Group gap="xs" grow>
+              <Button size="compact-sm" color="brand" leftSection={<IconCheck size={14} />} onClick={onApprove}>
+                Approve
+              </Button>
+              <Button size="compact-sm" variant="default" leftSection={<IconRefresh size={14} />} onClick={onRedo}>
+                Redo
+              </Button>
+              <Button size="compact-sm" color="red" variant="light" leftSection={<IconTrash size={14} />} onClick={onDismiss}>
+                Dismiss
+              </Button>
+            </Group>
           </>
+        )}
+
+        {/* Approved */}
+        {isApproved && (
+          <Group gap={6} align="center" justify="center">
+            <IconCheck size={14} color="var(--mantine-color-green-5)" />
+            <Text size="xs" c="green.4">Saved to library</Text>
+          </Group>
         )}
 
       </Stack>
