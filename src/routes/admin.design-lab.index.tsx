@@ -6,7 +6,7 @@ import type { Id } from '../../convex/_generated/dataModel'
 import {
   Container, Stack, Group, Text, Title, Button, Paper, SimpleGrid,
   Image, Badge, ActionIcon, Tooltip, Center, Loader, Textarea,
-  Alert, Checkbox, Tabs, ColorSwatch, Collapse,
+  Alert, Checkbox, Tabs, ColorSwatch, Collapse, SegmentedControl,
 } from '@mantine/core'
 import {
   IconTrash, IconDownload, IconSparkles,
@@ -61,6 +61,52 @@ const TSHIRT_COLORS = [
   { label: 'Sand', value: '#D4B896' },
 ]
 
+// ─── Date grouping ─────────────────────────────────────────────────────────────
+// Current month → group per day; older → group per month. Designs arrive sorted
+// newest-first, so iterating in order yields groups (and items) in descending
+// order and naturally skips any period with no designs.
+
+type DateGroup = { key: string; label: string; items: DesignOutput[] }
+
+function groupDesignsByDate(designs: DesignOutput[]): DateGroup[] {
+  const now = new Date()
+  const curY = now.getFullYear()
+  const curM = now.getMonth()
+  const dayKeyOf = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+  const todayKey = dayKeyOf(now)
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const yesterdayKey = dayKeyOf(yesterday)
+
+  const groups: DateGroup[] = []
+  let cur: DateGroup | null = null
+
+  for (const design of designs) {
+    const dt = new Date(design.createdAt)
+    let key: string
+    let label: string
+    if (dt.getFullYear() === curY && dt.getMonth() === curM) {
+      const dk = dayKeyOf(dt)
+      key = `day-${dk}`
+      label =
+        dk === todayKey
+          ? 'Today'
+          : dk === yesterdayKey
+          ? 'Yesterday'
+          : dt.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })
+    } else {
+      key = `month-${dt.getFullYear()}-${dt.getMonth()}`
+      label = dt.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    }
+    if (!cur || cur.key !== key) {
+      cur = { key, label, items: [] }
+      groups.push(cur)
+    }
+    cur.items.push(design)
+  }
+  return groups
+}
+
 // ─── Main library page ────────────────────────────────────────────────────────
 
 function DesignLibrary() {
@@ -72,6 +118,7 @@ function DesignLibrary() {
   // Bulk select state
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [viewMode, setViewMode] = useState<'all' | 'date'>('all')
 
   const handleDelete = async (id: Id<'designOutputs'>) => {
     if (!confirm('Delete this design?')) return
@@ -109,6 +156,22 @@ function DesignLibrary() {
     a.click()
     document.body.removeChild(a)
   }
+
+  const renderCards = (items: DesignOutput[]) => (
+    <SimpleGrid cols={{ base: 2, sm: 3, lg: 4 }} spacing="md">
+      {items.map(design => (
+        <DesignCard
+          key={design._id}
+          design={design}
+          selectMode={selectMode}
+          bulkSelected={selectedIds.has(design._id)}
+          onToggleSelect={() => toggleSelectId(design._id)}
+          onDownload={(url) => handleDownload(url, design.promptTitle)}
+          onDelete={() => handleDelete(design._id)}
+        />
+      ))}
+    </SimpleGrid>
+  )
 
   if (outputs === undefined) {
     return <Center h="60vh"><Loader size="lg" color="brand" /></Center>
@@ -205,7 +268,15 @@ function DesignLibrary() {
                       </Button>
                     </Group>
                   ) : (
-                    <div />
+                    <SegmentedControl
+                      size="xs"
+                      value={viewMode}
+                      onChange={(v) => setViewMode(v as 'all' | 'date')}
+                      data={[
+                        { label: 'All', value: 'all' },
+                        { label: 'By date', value: 'date' },
+                      ]}
+                    />
                   )}
                   <Group gap="sm">
                     {selectMode && selectedIds.size > 0 && (
@@ -231,19 +302,25 @@ function DesignLibrary() {
                   </Group>
                 </Group>
 
-                <SimpleGrid cols={{ base: 2, sm: 3, lg: 4 }} spacing="md">
-                  {(outputs as DesignOutput[]).map(design => (
-                    <DesignCard
-                      key={design._id}
-                      design={design}
-                      selectMode={selectMode}
-                      bulkSelected={selectedIds.has(design._id)}
-                      onToggleSelect={() => toggleSelectId(design._id)}
-                      onDownload={(url) => handleDownload(url, design.promptTitle)}
-                      onDelete={() => handleDelete(design._id)}
-                    />
-                  ))}
-                </SimpleGrid>
+                {viewMode === 'all' ? (
+                  renderCards(outputs as DesignOutput[])
+                ) : (
+                  <Stack gap="xl">
+                    {groupDesignsByDate(outputs as DesignOutput[]).map(group => (
+                      <Stack key={group.key} gap="sm">
+                        <Group gap={8} align="baseline">
+                          <Text size="sm" fw={700} c="white" tt="uppercase" style={{ letterSpacing: 0.4 }}>
+                            {group.label}
+                          </Text>
+                          <Text size="xs" c="dark.3">
+                            {group.items.length} design{group.items.length !== 1 ? 's' : ''}
+                          </Text>
+                        </Group>
+                        {renderCards(group.items)}
+                      </Stack>
+                    ))}
+                  </Stack>
+                )}
               </Stack>
             )}
           </Tabs.Panel>
