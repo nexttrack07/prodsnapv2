@@ -119,6 +119,9 @@ http.route({
         'Content-Type': res.headers.get('content-type') ?? 'image/png',
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Cache-Control': 'private, max-age=3600',
+        // Allow the app (different origin) to fetch the bytes for client-side
+        // zipping (bulk download). Simple GET, so no preflight is needed.
+        'Access-Control-Allow-Origin': '*',
       },
     })
   }),

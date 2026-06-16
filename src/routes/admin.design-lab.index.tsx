@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { zip } from 'fflate'
 import { useQuery, useMutation, useAction } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -107,6 +108,58 @@ function groupDesignsByDate(designs: DesignOutput[]): DateGroup[] {
   return groups
 }
 
+// ─── Download helpers ───────────────────────────────────────────────────────
+
+// The best version to export: a cut-out wins (final step), then the upscale,
+// then the original. Mirrors the card's displayUrl precedence.
+const bestUrl = (d: DesignOutput) => d.bgRemovedUrl ?? d.upscaledUrl ?? d.imageUrl
+
+const sanitizeName = (title: string) => title.replace(/[^\w\s-]/g, '').trim() || 'design'
+
+const zipBytes = (files: Record<string, Uint8Array>): Promise<Uint8Array> =>
+  new Promise((resolve, reject) =>
+    // level 0 (store): PNG/JPEG are already compressed, so skip re-compression.
+    zip(files, { level: 0 }, (err, data) => (err ? reject(err) : resolve(data))),
+  )
+
+const triggerBlobDownload = (data: Uint8Array, filename: string) => {
+  const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
+  const blob = new Blob([ab], { type: 'application/zip' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+// Fetch each design's best image through the /download proxy (which fences URLs
+// to our R2 bucket and is CORS-enabled), then bundle them into one zip. Names
+// collide-safely on the prompt title.
+async function downloadDesignsAsZip(designs: DesignOutput[], zipName: string) {
+  const siteUrl = import.meta.env.VITE_CONVEX_SITE_URL as string
+  const files: Record<string, Uint8Array> = {}
+  const used = new Set<string>()
+
+  for (const d of designs) {
+    const proxyUrl = `${siteUrl}/download?url=${encodeURIComponent(bestUrl(d))}`
+    const res = await fetch(proxyUrl)
+    if (!res.ok) continue
+    const bytes = new Uint8Array(await res.arrayBuffer())
+
+    const base = sanitizeName(d.promptTitle)
+    let name = `${base}.png`
+    for (let i = 2; used.has(name); i++) name = `${base}-${i}.png`
+    used.add(name)
+    files[name] = bytes
+  }
+
+  if (Object.keys(files).length === 0) throw new Error('No images could be downloaded')
+  triggerBlobDownload(await zipBytes(files), zipName)
+}
+
 // ─── Main library page ────────────────────────────────────────────────────────
 
 function DesignLibrary() {
@@ -118,7 +171,9 @@ function DesignLibrary() {
   // Bulk select state
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [viewMode, setViewMode] = useState<'all' | 'date'>('all')
+  const [viewMode, setViewMode] = useState<'all' | 'date'>('date')
+  // Which zip is being built: a date-group key, '__selected__', or null when idle.
+  const [zippingKey, setZippingKey] = useState<string | null>(null)
 
   const handleDelete = async (id: Id<'designOutputs'>) => {
     if (!confirm('Delete this design?')) return
@@ -156,6 +211,28 @@ function DesignLibrary() {
     a.click()
     document.body.removeChild(a)
   }
+
+  const SELECTED_KEY = '__selected__'
+
+  const runZip = async (key: string, designs: DesignOutput[], zipName: string) => {
+    if (designs.length === 0 || zippingKey) return
+    setZippingKey(key)
+    try {
+      await downloadDesignsAsZip(designs, zipName)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Download failed')
+    } finally {
+      setZippingKey(null)
+    }
+  }
+
+  const handleDownloadSelected = () => {
+    const designs = (outputs as DesignOutput[]).filter(d => selectedIds.has(d._id))
+    runZip(SELECTED_KEY, designs, `designs-${designs.length}.zip`)
+  }
+
+  const handleDownloadGroup = (group: DateGroup) =>
+    runZip(group.key, group.items, `${sanitizeName(group.label)}.zip`)
 
   const renderCards = (items: DesignOutput[]) => (
     <SimpleGrid cols={{ base: 2, sm: 3, lg: 4 }} spacing="md">
@@ -282,6 +359,19 @@ function DesignLibrary() {
                     {selectMode && selectedIds.size > 0 && (
                       <Button
                         size="compact-sm"
+                        color="brand"
+                        variant="light"
+                        leftSection={<IconDownload size={13} />}
+                        loading={zippingKey === SELECTED_KEY}
+                        disabled={!!zippingKey && zippingKey !== SELECTED_KEY}
+                        onClick={handleDownloadSelected}
+                      >
+                        Download {selectedIds.size}
+                      </Button>
+                    )}
+                    {selectMode && selectedIds.size > 0 && (
+                      <Button
+                        size="compact-sm"
                         color="red"
                         variant="light"
                         leftSection={<IconTrash size={13} />}
@@ -308,13 +398,25 @@ function DesignLibrary() {
                   <Stack gap="xl">
                     {groupDesignsByDate(outputs as DesignOutput[]).map(group => (
                       <Stack key={group.key} gap="sm">
-                        <Group gap={8} align="baseline">
+                        <Group gap={8} align="center">
                           <Text size="sm" fw={700} c="white" tt="uppercase" style={{ letterSpacing: 0.4 }}>
                             {group.label}
                           </Text>
                           <Text size="xs" c="dark.3">
                             {group.items.length} design{group.items.length !== 1 ? 's' : ''}
                           </Text>
+                          <Tooltip label={`Download all ${group.items.length} as zip`}>
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="dark.2"
+                              loading={zippingKey === group.key}
+                              disabled={!!zippingKey && zippingKey !== group.key}
+                              onClick={() => handleDownloadGroup(group)}
+                            >
+                              <IconDownload size={14} />
+                            </ActionIcon>
+                          </Tooltip>
                         </Group>
                         {renderCards(group.items)}
                       </Stack>
