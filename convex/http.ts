@@ -103,25 +103,29 @@ http.route({
     const imageUrl = params.get('url')
     const filename = params.get('filename') ?? 'design.png'
 
-    if (!imageUrl) return new Response('Missing url', { status: 400 })
+    // Allow the app (a different origin) to fetch responses for client-side
+    // zipping (bulk download). Set on *every* response — including errors — so a
+    // fenced-out/failed URL surfaces its real status instead of an opaque CORS
+    // "Failed to fetch". Simple GET, so no preflight is needed.
+    const cors = { 'Access-Control-Allow-Origin': '*' }
+
+    if (!imageUrl) return new Response('Missing url', { status: 400, headers: cors })
 
     const publicUrl = process.env.R2_PUBLIC_URL
     if (!publicUrl || !imageUrl.startsWith(publicUrl)) {
-      return new Response('URL not allowed', { status: 403 })
+      return new Response('URL not allowed', { status: 403, headers: cors })
     }
 
     const res = await fetch(imageUrl)
-    if (!res.ok) return new Response('Fetch failed', { status: 502 })
+    if (!res.ok) return new Response('Fetch failed', { status: 502, headers: cors })
 
     return new Response(await res.arrayBuffer(), {
       status: 200,
       headers: {
+        ...cors,
         'Content-Type': res.headers.get('content-type') ?? 'image/png',
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Cache-Control': 'private, max-age=3600',
-        // Allow the app (different origin) to fetch the bytes for client-side
-        // zipping (bulk download). Simple GET, so no preflight is needed.
-        'Access-Control-Allow-Origin': '*',
       },
     })
   }),
