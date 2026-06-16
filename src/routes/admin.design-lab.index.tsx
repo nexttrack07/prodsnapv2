@@ -145,7 +145,10 @@ async function downloadDesignsAsZip(designs: DesignOutput[], zipName: string) {
 
   for (const d of designs) {
     const proxyUrl = `${siteUrl}/download?url=${encodeURIComponent(bestUrl(d))}`
-    const res = await fetch(proxyUrl)
+    // Bypass the HTTP cache: a single-image download (an <a> navigation) may
+    // have cached this proxy response without a CORS header, which would make a
+    // cors-mode fetch() fail with an opaque "Failed to fetch".
+    const res = await fetch(proxyUrl, { cache: 'no-store' })
     if (!res.ok) continue
     const bytes = new Uint8Array(await res.arrayBuffer())
 
