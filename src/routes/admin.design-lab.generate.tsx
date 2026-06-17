@@ -21,7 +21,23 @@ export const Route = createFileRoute('/admin/design-lab/generate')({
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Most generations in flight at once when running "Generate all". Tuned to stay
+// near (but under) the 20/user/min backend rate limit with ~10–20s/gen; bump
+// down if rate-limit errors become common. (See enforceGenerationRateLimit.)
+const MAX_CONCURRENT_GENERATIONS = 5
+
 const uid = () => Math.random().toString(36).slice(2, 11)
+
+// Split a pasted blob into prompts on a line that is only hyphens — three or
+// more, so both a tidy `---` and a long `--------` rule work (pasted files
+// commonly use a full-width divider). Optional surrounding whitespace allowed.
+// A whole-line delimiter keeps multi-line prompts intact; leading/trailing
+// dividers just yield empty chunks, which are trimmed and dropped.
+const parsePrompts = (blob: string): string[] =>
+  blob
+    .split(/^[ \t]*-{3,}[ \t]*$/m)
+    .map(s => s.trim())
+    .filter(Boolean)
 
 const toBase64 = (file: File): Promise<string> =>
   new Promise((res, rej) => {
@@ -85,6 +101,7 @@ function BatchGenerate() {
     defaultValue: '',
   })
   const [cards, setCards] = useState<GenCard[]>(() => [makeCard(seedRef ?? null)])
+  const [pasteBlob, setPasteBlob] = useState('')
 
   const uploadImage = useAction(api.r2.uploadProductImage)
   const generatePreview = useAction(api.designLabActions.generateDesignPreview)
@@ -106,6 +123,20 @@ function BatchGenerate() {
   }
 
   const addCard = () => setCards(prev => [...prev, makeCard(seedRef ?? null)])
+
+  // Parse the paste box into one card per prompt and append them. Existing cards
+  // are kept; trailing empty placeholder cards are collapsed so the new prompts
+  // sit at the end, followed by a single fresh placeholder for manual entry.
+  const addPrompts = () => {
+    const prompts = parsePrompts(pasteBlob)
+    if (prompts.length === 0) return
+    setCards(prev => {
+      const kept = prev.filter(c => !(c.status === 'idle' && !c.prompt.trim()))
+      const added = prompts.map(p => ({ ...makeCard(seedRef ?? null), prompt: p }))
+      return [...kept, ...added, makeCard(seedRef ?? null)]
+    })
+    setPasteBlob('')
+  }
 
   const removeCard = (id: string) => {
     setCards(prev => {
@@ -243,9 +274,21 @@ function BatchGenerate() {
   const approveSelected = () => { selectedReview.forEach(c => approveCard(c.id)) }
   const dismissSelected = () => { selectedReview.slice().forEach(c => dismissCard(c.id)) }
 
-  const generateAll = () => {
-    const idle = cards.filter(c => c.status === 'idle' && c.prompt.trim())
-    idle.forEach(c => generateCard(c.id))
+  // Throttled "Generate all": run a queue of idle cards with at most
+  // MAX_CONCURRENT_GENERATIONS in flight. A fixed pool of workers each pull the
+  // next card index as they free up, so 50 pasted prompts wave through 5-at-a-time.
+  const generateAll = async () => {
+    const ids = cards.filter(c => c.status === 'idle' && c.prompt.trim()).map(c => c.id)
+    let cursor = 0
+    const worker = async () => {
+      while (cursor < ids.length) {
+        const id = ids[cursor++]
+        await generateCard(id)
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(MAX_CONCURRENT_GENERATIONS, ids.length) }, worker),
+    )
   }
 
   const idleCount = cards.filter(c => c.status === 'idle' && c.prompt.trim()).length
@@ -399,6 +442,49 @@ function BatchGenerate() {
             </Group>
           </Paper>
         )}
+
+        {/* Bulk paste — split a blob of prompts on `---` lines into one card each */}
+        <Paper
+          p="md"
+          radius="lg"
+          withBorder
+          style={{ borderColor: 'var(--mantine-color-dark-4)', backgroundColor: 'var(--mantine-color-dark-8)' }}
+        >
+          <Stack gap="xs">
+            <Group gap="xs">
+              <Text size="sm" fw={600} c="white">Paste prompts</Text>
+              <Text size="xs" c="dark.3">· one prompt per block, separate with a line of <code>---</code></Text>
+            </Group>
+            <Textarea
+              placeholder={'a mountain bike on a rocky ridge, flat vector\n---\nretro MTB badge, 2 colors\n---\ndownhill rider silhouette, minimal'}
+              value={pasteBlob}
+              onChange={e => setPasteBlob(e.currentTarget.value)}
+              autosize
+              minRows={3}
+              maxRows={10}
+              styles={{
+                input: {
+                  backgroundColor: 'var(--mantine-color-dark-7)',
+                  color: 'var(--mantine-color-white)',
+                  fontSize: 13,
+                  fontFamily: 'var(--mantine-font-family-monospace)',
+                },
+              }}
+            />
+            <Group justify="flex-end">
+              <Button
+                onClick={addPrompts}
+                disabled={parsePrompts(pasteBlob).length === 0}
+                color="brand"
+                variant="light"
+                size="compact-sm"
+                leftSection={<IconPlus size={14} />}
+              >
+                Add prompts ({parsePrompts(pasteBlob).length})
+              </Button>
+            </Group>
+          </Stack>
+        </Paper>
 
         {/* Cards grid */}
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
