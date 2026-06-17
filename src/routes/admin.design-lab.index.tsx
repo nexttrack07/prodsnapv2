@@ -142,27 +142,21 @@ async function downloadDesignsAsZip(designs: DesignOutput[], zipName: string) {
   const siteUrl = import.meta.env.VITE_CONVEX_SITE_URL as string
   const files: Record<string, Uint8Array> = {}
   const used = new Set<string>()
-
-  console.log('[bulk-download] start', { count: designs.length, zipName, siteUrl })
   let failures = 0
 
   for (const d of designs) {
-    const imgUrl = bestUrl(d)
-    const proxyUrl = `${siteUrl}/download?url=${encodeURIComponent(imgUrl)}`
-    console.log('[bulk-download] fetching', { id: d._id, imgUrl, proxyUrl })
+    const proxyUrl = `${siteUrl}/download?url=${encodeURIComponent(bestUrl(d))}`
     try {
       // Bypass the HTTP cache: a single-image download (an <a> navigation) may
       // have cached this proxy response without a CORS header, which would make
       // a cors-mode fetch() fail with an opaque "Failed to fetch".
       const res = await fetch(proxyUrl, { cache: 'no-store' })
-      console.log('[bulk-download] response', { id: d._id, status: res.status, ok: res.ok })
       if (!res.ok) {
         failures++
-        console.warn('[bulk-download] non-OK, skipping', { id: d._id, status: res.status, body: await res.text().catch(() => '') })
+        console.warn('[bulk-download] skipped', d._id, res.status)
         continue
       }
       const bytes = new Uint8Array(await res.arrayBuffer())
-      console.log('[bulk-download] bytes', { id: d._id, size: bytes.byteLength })
 
       const base = sanitizeName(d.promptTitle)
       let name = `${base}.png`
@@ -172,16 +166,13 @@ async function downloadDesignsAsZip(designs: DesignOutput[], zipName: string) {
     } catch (err) {
       // Don't let one bad image abort the whole batch — log it and move on.
       failures++
-      console.error('[bulk-download] fetch threw', { id: d._id, imgUrl, proxyUrl, err })
+      console.warn('[bulk-download] failed', d._id, err)
     }
   }
 
-  console.log('[bulk-download] done fetching', { ok: Object.keys(files).length, failures })
-
   if (Object.keys(files).length === 0) {
-    throw new Error(`No images could be downloaded (${failures} failed). See console for details.`)
+    throw new Error(`No images could be downloaded (${failures} failed)`)
   }
-  console.log('[bulk-download] zipping', Object.keys(files).length, 'files')
   triggerBlobDownload(await zipBytes(files), zipName)
   console.log('[bulk-download] zip download triggered')
 }
@@ -241,15 +232,12 @@ function DesignLibrary() {
   const SELECTED_KEY = '__selected__'
 
   const runZip = async (key: string, designs: DesignOutput[], zipName: string) => {
-    if (designs.length === 0 || zippingKey) {
-      console.log('[bulk-download] runZip ignored', { key, count: designs.length, zippingKey })
-      return
-    }
+    if (designs.length === 0 || zippingKey) return
     setZippingKey(key)
     try {
       await downloadDesignsAsZip(designs, zipName)
     } catch (err) {
-      console.error('[bulk-download] runZip failed', err)
+      console.error('[bulk-download] failed', err)
       alert(err instanceof Error ? err.message : 'Download failed')
     } finally {
       setZippingKey(null)
