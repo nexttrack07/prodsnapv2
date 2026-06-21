@@ -9,6 +9,7 @@ import { internalAction } from './_generated/server'
 import { internal } from './_generated/api'
 import { uploadFromUrl, deleteFromR2 } from './r2'
 import { upgradeToHighResImageUrl } from './lib/imageUrls'
+import { isBlockedHost } from './lib/ssrf'
 import { nanoid } from 'nanoid'
 
 // HEAD an image URL and return its Content-Length in bytes, or null if
@@ -18,6 +19,16 @@ import { nanoid } from 'nanoid'
 //
 // Uses the SAME headers as uploadFromUrl: many CDNs hotlink-block any
 // fetch that doesn't look browser-shaped, including HEAD requests.
+// Wraps isBlockedHost with URL parsing — returns true (treat as blocked) when
+// the URL is unparseable, so a malformed URL is never fetched.
+function isBlockedHostSafe(url: string): boolean {
+  try {
+    return isBlockedHost(new URL(url).hostname)
+  } catch {
+    return true
+  }
+}
+
 async function headSize(url: string): Promise<number | null> {
   let referer: string | undefined
   try {
@@ -167,6 +178,11 @@ export const runUrlImport = internalAction({
 
     const importRow = await ctx.runQuery(internal.urlImports.getInternal, { importId })
     if (!importRow) return
+
+    // Track every R2 object written during this import so the catch block can
+    // reclaim them if a later step fails — otherwise they're orphaned (the
+    // import row is marked failed and no product ever references them).
+    const uploadedR2Keys: string[] = []
 
     try {
       // 1. Scrape via Firecrawl
@@ -326,6 +342,7 @@ export const runUrlImport = internalAction({
             const url = await uploadFromUrl(sourceUrl, key)
             uploadedUrls.push(url)
             uploadedKeys.push(key)
+            uploadedR2Keys.push(key)
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             uploadErrors.push(message)
@@ -423,12 +440,18 @@ export const runUrlImport = internalAction({
 
       let brandLogoR2Url: string | undefined
       let brandLogoStorageKey: string | undefined
-      if (extracted.brandLogoUrl && /^https?:\/\//i.test(extracted.brandLogoUrl)) {
+      if (
+        extracted.brandLogoUrl &&
+        /^https?:\/\//i.test(extracted.brandLogoUrl) &&
+        !isBlockedHostSafe(extracted.brandLogoUrl)
+      ) {
         try {
           const ext = guessExtension(extracted.brandLogoUrl)
           const key = `imports/${importId}/logo-${nanoid(8)}${ext}`
           brandLogoR2Url = await uploadFromUrl(extracted.brandLogoUrl, key)
           brandLogoStorageKey = key
+          // Track for orphan cleanup until the brand kit references it below.
+          uploadedR2Keys.push(key)
         } catch (err) {
           // eslint-disable-next-line no-console
           console.warn('Failed to upload brand logo:', err)
@@ -460,6 +483,12 @@ export const runUrlImport = internalAction({
           customerLanguage: reviewSnippets,
         })
         brandKitUpdated = true
+        // The brand kit now references the logo, so it's no longer an orphan —
+        // drop it from the cleanup set so a later failure doesn't delete it.
+        if (brandLogoStorageKey) {
+          const idx = uploadedR2Keys.indexOf(brandLogoStorageKey)
+          if (idx !== -1) uploadedR2Keys.splice(idx, 1)
+        }
       }
 
       // 6. Done
@@ -471,10 +500,15 @@ export const runUrlImport = internalAction({
         finishedAt: Date.now(),
       })
     } catch (err) {
-      // TODO(R2-sweeper): if image upload(s) succeeded but a later step
-      // (createProductFromImport, brand-kit upsert) threw, the R2 objects we wrote
-      // are orphaned. A periodic sweeper that cross-references the imports/{importId}/
-      // prefix against successful import rows can reclaim them.
+      // Reclaim any R2 objects uploaded before the failure. Without this the
+      // bytes are orphaned: the import is marked failed and no product row
+      // ever references them, so they leak storage permanently. Best-effort
+      // and scheduled separately so it never blocks the status update.
+      if (uploadedR2Keys.length > 0) {
+        await ctx.scheduler.runAfter(0, internal.urlImportsActions.deleteImportR2Objects, {
+          keys: uploadedR2Keys,
+        })
+      }
       const message = err instanceof Error ? err.message : String(err)
       await ctx.runMutation(internal.urlImports.patchImportStatus, {
         importId,
@@ -605,6 +639,13 @@ function uniqueValidImages(urls: string[]): string[] {
     if (!u || typeof u !== 'string') continue
     if (!/^https?:\/\//i.test(u)) continue
     if (!looksLikeImageUrl(u)) continue
+    // SSRF guard: these URLs are fetched by our backend (HEAD + upload), so
+    // drop any that point at private/loopback/link-local hosts.
+    try {
+      if (isBlockedHost(new URL(u).hostname)) continue
+    } catch {
+      continue
+    }
 
     const upgraded = upgradeToHighResImageUrl(u)
     if (seen.has(upgraded)) continue

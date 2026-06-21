@@ -8,6 +8,7 @@ import { action } from './_generated/server'
 import { internal } from './_generated/api'
 import { requireAdmin } from './lib/admin/requireAdmin'
 import { uploadFromUrl } from './r2'
+import { assertPublicUrl } from './lib/ssrf'
 
 fal.config({ credentials: process.env.FAL_KEY })
 
@@ -16,20 +17,9 @@ const LLM_MODEL = 'google/gemini-2.5-flash'
 // ─── URL validation (SSRF guard) ─────────────────────────────────────────────
 
 function validateImageUrls(urls: string[]): void {
-  const blocked = [
-    '169.254.', '10.', '172.16.', '172.17.', '172.18.', '172.19.',
-    '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
-    '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.',
-    '192.168.',
-  ]
+  // Shared HTTPS-only SSRF guard (see convex/lib/ssrf.ts).
   for (const url of urls) {
-    let parsed: URL
-    try { parsed = new URL(url) } catch { throw new Error(`Invalid URL: ${url}`) }
-    if (parsed.protocol !== 'https:') throw new Error(`Only HTTPS URLs allowed`)
-    const h = parsed.hostname.toLowerCase()
-    if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || blocked.some(p => h.startsWith(p))) {
-      throw new Error(`Private/internal URLs are not allowed`)
-    }
+    assertPublicUrl(url)
   }
 }
 

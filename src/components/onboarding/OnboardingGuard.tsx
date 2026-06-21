@@ -20,6 +20,11 @@ const ALLOWED_PREFIXES = [
   '/sign-up',
   '/privacy',
   '/terms',
+  // Browse-allowed: pending (signed-up-but-unpaid) users can explore the
+  // template library before committing to a plan. Without this they're
+  // trapped in the wizard and bounce — a hard funnel drop-off. Generating
+  // still requires onboarding, so this is read-only exploration.
+  '/templates',
 ]
 
 export function OnboardingGuard() {
@@ -31,15 +36,12 @@ export function OnboardingGuard() {
     if (!status) return // loading
     if (status.state === 'unauthenticated') return
 
-    // Pending users (signed up but haven't finished plan selection) need to
-    // be force-routed to /onboarding from anywhere outside the allow-list,
-    // including the landing page. Onboarded users can visit / freely — the
-    // landing page has its own "App" link to bring them back into the app.
+    // Pending users (signed up but haven't finished plan selection) are
+    // force-routed to /onboarding from app routes, but may freely browse the
+    // landing page (/) and the allow-listed marketing/browse routes (e.g.
+    // /templates) so they can explore before paying instead of being trapped.
     if (status.state === 'pending') {
-      if (pathname === '/') {
-        navigate({ to: '/onboarding' })
-        return
-      }
+      if (pathname === '/') return
       if (ALLOWED_PREFIXES.some((p) => pathname.startsWith(p))) return
       navigate({ to: '/onboarding' })
     }

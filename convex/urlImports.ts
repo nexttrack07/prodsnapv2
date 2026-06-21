@@ -18,6 +18,7 @@ import {
   type MutationCtx,
 } from './_generated/server'
 import { internal } from './_generated/api'
+import { isBlockedHost } from './lib/ssrf'
 
 async function requireAuth(ctx: { auth: { getUserIdentity: () => Promise<unknown> } }): Promise<string> {
   const identity = (await ctx.auth.getUserIdentity()) as { tokenIdentifier: string } | null
@@ -139,6 +140,11 @@ function normalizeUrl(input: string): string {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Only http(s) URLs are supported')
+  }
+  // SSRF guard: block private/loopback/link-local hosts so a user can't make
+  // the backend fetch internal network resources (cloud metadata, admin panels).
+  if (isBlockedHost(parsed.hostname)) {
+    throw new Error('Private or internal URLs are not allowed')
   }
   return parsed.toString()
 }
