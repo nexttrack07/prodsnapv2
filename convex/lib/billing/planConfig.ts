@@ -77,7 +77,9 @@ export const PLAN_CONFIG: Record<string, PlanConfig> = {
     monthlyPriceCents: 5999,
     brandKitLimit: 10,
     savedTemplateLimit: 250,
-    customTemplateUpload: true,
+    // Keep false until custom-template upload actually ships, so it can never
+    // leak into the UI as a paid entitlement the user can't use.
+    customTemplateUpload: false,
     prioritySupport: false,
     capabilities: ALL_CAPABILITIES,
   },
@@ -88,7 +90,8 @@ export const PLAN_CONFIG: Record<string, PlanConfig> = {
     monthlyPriceCents: 12999,
     brandKitLimit: -1,
     savedTemplateLimit: -1,
-    customTemplateUpload: true,
+    // Keep false until custom-template upload actually ships (see Pro tier note).
+    customTemplateUpload: false,
     prioritySupport: true,
     capabilities: ALL_CAPABILITIES,
   },

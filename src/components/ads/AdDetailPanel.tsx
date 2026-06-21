@@ -24,6 +24,7 @@ import {
   Group,
   Image,
   Loader,
+  Menu,
   Modal,
   Paper,
   Stack,
@@ -47,7 +48,7 @@ import {
 } from '@tabler/icons-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
-import { fetchDownloadAsset } from '../../utils/downloads'
+import { downloadGeneratedImage, DOWNLOAD_FORMATS, type DownloadFormat } from '../../utils/downloadImage'
 import { mapGenerationError } from '../../lib/billing/mapBillingError'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -60,44 +61,6 @@ export type AdDetailPanelProps = {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function slugifyFilePart(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'image'
-}
-
-function inferFileExtension(url: string, contentType?: string | null): string {
-  if (contentType) {
-    if (contentType.includes('png')) return 'png'
-    if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg'
-    if (contentType.includes('webp')) return 'webp'
-  }
-  try {
-    const pathname = new URL(url).pathname
-    const match = pathname.match(/\.([a-zA-Z0-9]+)$/)
-    if (match?.[1]) return match[1].toLowerCase()
-  } catch { /* ignore */ }
-  return 'png'
-}
-
-async function downloadFile(url: string, fileBaseName: string) {
-  const { base64, contentType } = await fetchDownloadAsset({ data: { url } })
-  const binary = atob(base64)
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
-  const blob = new Blob([bytes], { type: contentType || 'application/octet-stream' })
-  const ext = inferFileExtension(url, contentType)
-  const objectUrl = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = objectUrl
-  link.download = `${slugifyFilePart(fileBaseName)}.${ext}`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
-}
 
 function getModeLabel(mode: string): string {
   switch (mode) {
@@ -236,12 +199,12 @@ export function AdDetailContent({
   const prevId = siblings && currentIdx > 0 ? siblings[currentIdx - 1] : null
   const nextId = siblings && currentIdx >= 0 && currentIdx < siblings.length - 1 ? siblings[currentIdx + 1] : null
 
-  const handleDownload = useCallback(async () => {
+  const handleDownload = useCallback(async (format: DownloadFormat) => {
     if (!ad?.outputUrl) return
     setIsDownloading(true)
     try {
       const name = `${ad.productName ?? 'ad'}-${ad.mode ?? 'generation'}`
-      await downloadFile(ad.outputUrl, name)
+      await downloadGeneratedImage(ad.outputUrl, name, format)
     } catch (err) {
       notifications.show({
         title: 'Download failed',
@@ -490,19 +453,30 @@ export function AdDetailContent({
 
       {/* Secondary actions */}
       <Group gap="xs">
-        <Tooltip label="Download">
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="lg"
-            onClick={handleDownload}
-            loading={isDownloading}
-            disabled={!ad.outputUrl}
-            aria-label="Download ad"
-          >
-            <IconDownload size={18} />
-          </ActionIcon>
-        </Tooltip>
+        <Menu position="top" withinPortal shadow="md">
+          <Menu.Target>
+            <Tooltip label="Download">
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="lg"
+                loading={isDownloading}
+                disabled={!ad.outputUrl}
+                aria-label="Download ad"
+              >
+                <IconDownload size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Label>Download as</Menu.Label>
+            {DOWNLOAD_FORMATS.map((f) => (
+              <Menu.Item key={f.value} onClick={() => handleDownload(f.value)}>
+                {f.label}
+              </Menu.Item>
+            ))}
+          </Menu.Dropdown>
+        </Menu>
         <Tooltip label={ad.isWinner ? 'Unmark winner' : 'Mark as winner'}>
           <ActionIcon
             variant="subtle"

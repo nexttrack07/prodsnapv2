@@ -131,8 +131,7 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 } as any)
 const AccountIndexRoute = AccountIndexRouteImport.update({
   id: '/account/',
-  path: '/account',
-  fullPath: '/account/',
+  path: '/account/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudioProductIdRoute = StudioProductIdRouteImport.update({

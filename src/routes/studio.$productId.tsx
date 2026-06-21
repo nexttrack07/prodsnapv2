@@ -90,10 +90,13 @@ import { mapGenerationError } from '../lib/billing/mapBillingError'
 import { OutOfCreditsModal } from '../components/billing/OutOfCreditsModal'
 import { ConvexError } from 'convex/values'
 import { fetchDownloadAsset } from '../utils/downloads'
+import { downloadGeneratedImage, DOWNLOAD_FORMATS, type DownloadFormat } from '../utils/downloadImage'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
 import { BrandPicker } from '../components/brand/BrandPicker'
+import { useCustomTemplateUpload } from '../utils/customTemplateUpload'
+import { MAX_TEMPLATE_IMAGE_SIZE } from '../utils/constants'
 
 type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string; editAd?: string }
 
@@ -2649,14 +2652,16 @@ function GenerationCard({
     }
   }
 
-  async function handleDownload(e: React.MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation()
+  async function handleDownload(format: DownloadFormat) {
     if (!generation.outputUrl) return
 
-    // TODO: bundle image + copy.txt into a zip when JSZip is added as a dependency
     setIsDownloading(true)
     try {
-      await downloadFile(generation.outputUrl, `${title}-${generation.mode || 'generation'}`)
+      await downloadGeneratedImage(
+        generation.outputUrl,
+        `${title}-${generation.mode || 'generation'}`,
+        format,
+      )
     } catch (err) {
       notifications.show({
         title: 'Download failed',
@@ -2741,17 +2746,28 @@ function GenerationCard({
             <IconSparkles size={16} />
           </ActionIcon>
           <WinnerToggle generation={generation} />
-          <ActionIcon
-            variant="subtle"
-            color="gray.0"
-            size="md"
-            radius="sm"
-            onClick={handleDownload}
-            loading={isDownloading}
-            aria-label="Download"
-          >
-            <IconDownload size={16} />
-          </ActionIcon>
+          <Menu position="top-end" withinPortal shadow="md">
+            <Menu.Target>
+              <ActionIcon
+                variant="subtle"
+                color="gray.0"
+                size="md"
+                radius="sm"
+                loading={isDownloading}
+                aria-label="Download"
+              >
+                <IconDownload size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
+              <Menu.Label>Download as</Menu.Label>
+              {DOWNLOAD_FORMATS.map((f) => (
+                <Menu.Item key={f.value} onClick={() => handleDownload(f.value)}>
+                  {f.label}
+                </Menu.Item>
+              ))}
+            </Menu.Dropdown>
+          </Menu>
           <ActionIcon
             variant="subtle"
             color="red.4"
@@ -3123,6 +3139,15 @@ function GenerateWizard({
   const [filterAspectRatio, setFilterAspectRatio] = useState<string | null>(null)
   const [mySavesOnly, setMySavesOnly] = useState(false)
 
+  // ── Template source toggle: curated library vs. the user's own customs ─────
+  const [templateSource, setTemplateSource] = useState<'library' | 'mine'>('library')
+
+  // ── The user's own custom templates (any visibility — all are valid seeds
+  //    for the owner) + the inline upload flow ──────────────────────────────
+  const myCustomTemplatesRaw = useConvexQuery(api.customTemplates.listMyCustomTemplates)
+  const myCustomTemplates = myCustomTemplatesRaw ?? []
+  const { uploadCustomTemplate, isUploading } = useCustomTemplateUpload()
+
   // ── Product inspirations for "My saves" filter ────────────────────────────
   const { data: productInspirations } = useQuery(
     convexQuery(api.productInspirations.listInspirationsForProduct, { productId }),
@@ -3232,6 +3257,41 @@ function GenerateWizard({
       }
       return [...prev, id]
     })
+  }
+
+  // ── Upload-your-own → create custom template → auto-select as a seed ───────
+  // The convex query is reactive, so the new row appears in "My templates" on
+  // its own. We just auto-select it (respecting the max-3 cap) and toast.
+  async function handleCustomTemplateUpload(file: File) {
+    try {
+      const newId = await uploadCustomTemplate(file, file.name)
+      let selected = false
+      setPickedIds((prev) => {
+        if (prev.includes(newId)) {
+          selected = true
+          return prev
+        }
+        if (prev.length >= 3) return prev
+        selected = true
+        return [...prev, newId]
+      })
+      if (selected) {
+        notifications.show({
+          title: 'Template added',
+          message: 'Your image was uploaded and selected.',
+          color: 'green',
+        })
+      } else {
+        notifications.show({
+          title: 'Template uploaded',
+          message: 'Added to My templates. Remove one to select it (max 3).',
+          color: 'yellow',
+        })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      notifications.show({ title: 'Upload failed', message: msg, color: 'red' })
+    }
   }
 
   // ── Builder preview assembly ────────────────────────────────────────────────
@@ -3758,6 +3818,167 @@ function GenerateWizard({
           {/* ─── Template segment ─── */}
           {activeSegment === 'template' && (
             <Box>
+              {/* Source toggle: curated library vs. the user's own customs */}
+              <SegmentedControl
+                value={templateSource}
+                onChange={(v) => setTemplateSource(v as 'library' | 'mine')}
+                data={[
+                  { value: 'library', label: 'Library' },
+                  {
+                    value: 'mine',
+                    label: `My templates${myCustomTemplates.length > 0 ? ` (${myCustomTemplates.length})` : ''}`,
+                  },
+                ]}
+                size="sm"
+                radius="xl"
+                mb="md"
+                fullWidth={isMobile}
+              />
+
+            {templateSource === 'mine' ? (
+              <Box>
+                {pickedIds.length > 0 && (
+                  <Group justify="flex-end" mb="sm">
+                    <Button
+                      variant="subtle"
+                      size="sm"
+                      color="red"
+                      leftSection={<IconX size={14} />}
+                      onClick={() => setPickedIds([])}
+                    >
+                      Clear selection ({pickedIds.length})
+                    </Button>
+                  </Group>
+                )}
+                <Box
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: isMobile
+                      ? 'repeat(2, 1fr)'
+                      : 'repeat(auto-fill, minmax(180px, 1fr))',
+                    gap: 8,
+                  }}
+                >
+                  {/* Upload-your-own tile */}
+                  <Dropzone
+                    onDrop={(files) => {
+                      if (files[0]) void handleCustomTemplateUpload(files[0])
+                    }}
+                    accept={IMAGE_MIME_TYPE}
+                    multiple={false}
+                    maxSize={MAX_TEMPLATE_IMAGE_SIZE}
+                    loading={isUploading}
+                    radius="sm"
+                    style={{
+                      aspectRatio: '1/1',
+                      border: '1px dashed var(--mantine-color-dark-4)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Stack gap={4} align="center" justify="center" style={{ pointerEvents: 'none' }}>
+                      <ThemeIcon variant="light" color="brand" radius="xl" size="lg">
+                        <IconUpload size={18} />
+                      </ThemeIcon>
+                      <Text size="xs" c="dark.1" ta="center" fw={600}>
+                        Upload your own
+                      </Text>
+                      <Text size="xs" c="dark.3" ta="center">
+                        PNG / JPG, up to 20 MB
+                      </Text>
+                    </Stack>
+                  </Dropzone>
+
+                  {myCustomTemplates.map((tpl) => {
+                    const picked = pickedIds.includes(tpl._id)
+                    const aspectRatio =
+                      tpl.aspectRatio === '4:5'
+                        ? '4/5'
+                        : tpl.aspectRatio === '9:16'
+                          ? '9/16'
+                          : '1/1'
+                    const visibility = tpl.visibility ?? 'private'
+                    const visColor =
+                      visibility === 'public'
+                        ? 'teal'
+                        : visibility === 'pending'
+                          ? 'yellow'
+                          : 'gray'
+                    const visLabel =
+                      visibility.charAt(0).toUpperCase() + visibility.slice(1)
+                    return (
+                      <UnstyledButton
+                        key={tpl._id}
+                        onClick={() => toggleTemplate(tpl._id)}
+                        w="100%"
+                        className="template-card-selectable"
+                        data-testid={`my-template-card-${tpl._id}`}
+                        aria-pressed={picked}
+                        aria-label={`Select your template: ${tpl.name}`}
+                        style={{
+                          borderRadius: 'var(--mantine-radius-sm)',
+                          overflow: 'hidden',
+                          boxShadow: picked
+                            ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(84, 116, 180, 0.35)'
+                            : 'none',
+                          position: 'relative',
+                          display: 'block',
+                          transition: 'all 200ms ease',
+                          transform: picked ? 'scale(1.02)' : 'scale(1)',
+                        }}
+                      >
+                        <Box style={{ aspectRatio }}>
+                          <Image
+                            src={tpl.thumbnailUrl ?? tpl.imageUrl}
+                            alt={`Template: ${tpl.name}`}
+                            fit="cover"
+                            h="100%"
+                            w="100%"
+                          />
+                        </Box>
+                        <Badge
+                          size="xs"
+                          variant="filled"
+                          color={visColor}
+                          pos="absolute"
+                          bottom={6}
+                          left={6}
+                          style={{ opacity: 0.85 }}
+                        >
+                          {visLabel}
+                        </Badge>
+                        {picked && (
+                          <Box
+                            pos="absolute"
+                            top={8}
+                            right={8}
+                            w={24}
+                            h={24}
+                            bg="brand"
+                            style={{
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 2px 8px rgba(84, 116, 180, 0.4)',
+                            }}
+                          >
+                            <IconCheck size={14} color="white" strokeWidth={3} />
+                          </Box>
+                        )}
+                      </UnstyledButton>
+                    )
+                  })}
+                </Box>
+                {myCustomTemplates.length === 0 && (
+                  <Text c="dark.2" ta="center" pt="md" size="sm">
+                    No custom templates yet — upload one above to get started.
+                  </Text>
+                )}
+              </Box>
+            ) : (
+            <>
               <Group gap="sm" wrap="wrap" mb="md" align="flex-end">
                 <TextInput
                   placeholder="Search templates"
@@ -3983,6 +4204,8 @@ function GenerateWizard({
                   )}
                 </>
               )}
+            </>
+            )}
             </Box>
           )}
 
@@ -4143,7 +4366,9 @@ function GenerateWizard({
                 <Stack gap={6}>
                   <Group gap={6} wrap="wrap">
                     {pickedIds.map((id) => {
-                      const tpl = templates.find((t) => t._id === id)
+                      const tpl =
+                        templates.find((t) => t._id === id) ??
+                        myCustomTemplates.find((t) => t._id === id)
                       if (!tpl) return null
                       return (
                         <Box

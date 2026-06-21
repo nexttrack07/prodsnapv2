@@ -632,6 +632,21 @@ export const composePrompt = internalAction({
       .filter(Boolean)
       .join('\n')
 
+    // Brand kit feeds the template path too, so a product tagged with a brand
+    // gets its colors/voice/offer applied on every generation — not just in the
+    // angle/prompt composers. (Keeps the "brand kit on every gen" promise true.)
+    const brandKit = generation.userId
+      ? await ctx.runQuery(internal.brandKits.getBrandKitForProductInternal, {
+          userId: generation.userId,
+          productId: generation.productId,
+        })
+      : null
+    const brandLines: string[] = []
+    if (brandKit?.colors?.length) brandLines.push(`Brand colors: ${brandKit.colors.join(', ')}`)
+    if (brandKit?.primaryFont) brandLines.push(`Brand font feel: ${brandKit.primaryFont}`)
+    if (brandKit?.tagline) brandLines.push(`Brand tagline: ${brandKit.tagline}`)
+    if (brandKit?.voice) brandLines.push(`Brand voice: ${brandKit.voice}`)
+
     const userText = [
       'FIRST IMAGE = ad template.',
       'SECOND IMAGE = user product.',
@@ -639,6 +654,9 @@ export const composePrompt = internalAction({
       productContextStr || '(no product analysis available)',
       '',
       templateContext || '(no template tags available)',
+      '',
+      brandLines.length ? brandLines.join('\n') : '(no brand kit set — keep brand styling neutral)',
+      ...(brandKit?.currentOffer ? [`Current offer to display at the bottom: "${brandKit.currentOffer}"`] : []),
       '',
       'Visual hierarchy rules (apply to the rendered ad):',
       '1. The largest text element is the main headline — communicates the value proposition or visceral benefit. Readable at thumbnail size in <1 second.',

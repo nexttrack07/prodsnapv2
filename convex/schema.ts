@@ -184,6 +184,25 @@ const schema = defineSchema({
     embedding: v.optional(v.array(v.float64())), // @deprecated - not used, kept for existing data
     aiTagsRaw: v.optional(v.any()),
     ingestError: v.optional(v.string()),
+    // ─── Custom (user-uploaded) templates ─────────────────────────────────
+    // Curated library rows leave ownerUserId undefined. When set, the row is a
+    // user's own uploaded template. `visibility` gates who else can see/use it
+    // and moves through an admin-in-the-middle approval flow:
+    //   'private' (default) = owner only.
+    //   'pending'           = owner has requested it be made public; it is
+    //                         awaiting admin review. Behaves like 'private' to
+    //                         everyone except the owner — NOT shown in the
+    //                         discover browse, NOT generatable by other users.
+    //   'public'            = admin-approved; shows in the discover browse and
+    //                         is generatable by any user.
+    // A user may only move private<->pending (request/withdraw) or down to
+    // private; only an admin may promote 'pending' -> 'public'. `name` is the
+    // user-facing label for custom rows (curated rows are unnamed).
+    ownerUserId: v.optional(v.string()),
+    visibility: v.optional(
+      v.union(v.literal('private'), v.literal('pending'), v.literal('public')),
+    ),
+    name: v.optional(v.string()),
   })
     .index('by_status', ['status'])
     .index('by_aspect_status', ['aspectRatio', 'status'])
@@ -192,7 +211,10 @@ const schema = defineSchema({
     .index('by_product_category', ['productCategory', 'status'])
     .index('by_primary_color', ['primaryColor', 'status'])
     .index('by_image_style', ['imageStyle', 'status'])
-    .index('by_setting', ['setting', 'status']),
+    .index('by_setting', ['setting', 'status'])
+    // Owner-scoped listing for "My Templates"; visibility for public discovery.
+    .index('by_owner', ['ownerUserId'])
+    .index('by_visibility_status', ['visibility', 'status']),
 
   // ─── DEPRECATED: Legacy studio runs (use products + generations instead) ──
   // Kept temporarily for migration; will be removed once existing flows updated
