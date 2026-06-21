@@ -101,7 +101,12 @@ http.route({
   handler: httpAction(async (_ctx, request) => {
     const params = new URL(request.url).searchParams
     const imageUrl = params.get('url')
-    const filename = params.get('filename') ?? 'design.png'
+    // Header values must be a ByteString (Latin-1). A filename with a stray
+    // Unicode char (e.g. an exotic space the client filter let through) would
+    // make `new Response(..., { headers })` throw below and surface as an opaque
+    // "couldn't be completed". Strip to printable ASCII so it can never throw.
+    const rawFilename = params.get('filename') ?? 'design.png'
+    const filename = rawFilename.replace(/[^\x20-\x7E]/g, '') || 'design.png'
 
     // Allow the app (a different origin) to fetch responses for client-side
     // zipping (bulk download). Set on *every* response — including errors — so a
@@ -116,10 +121,33 @@ http.route({
       return new Response('URL not allowed', { status: 403, headers: cors })
     }
 
-    const res = await fetch(imageUrl)
-    if (!res.ok) return new Response('Fetch failed', { status: 502, headers: cors })
+    let res: Response
+    try {
+      res = await fetch(imageUrl)
+    } catch (err) {
+      // R2 fetch rejected outright (network/DNS/reset/timeout). Without this
+      // catch the throw escapes the handler and Convex returns an opaque,
+      // CORS-less "Your request couldn't be completed" — surfacing to the
+      // client as a generic "Failed to fetch". Return a real, CORS'd status
+      // and log the underlying cause so the failure is diagnosable.
+      console.error('[download] fetch threw', { imageUrl, err: String(err) })
+      return new Response('Upstream fetch error', { status: 502, headers: cors })
+    }
+    if (!res.ok) {
+      console.warn('[download] upstream not ok', { imageUrl, status: res.status })
+      return new Response('Fetch failed', { status: 502, headers: cors })
+    }
 
-    return new Response(await res.arrayBuffer(), {
+    let body: ArrayBuffer
+    try {
+      body = await res.arrayBuffer()
+    } catch (err) {
+      // Stream aborted mid-read, or the buffered body exceeded a Convex limit.
+      console.error('[download] arrayBuffer threw', { imageUrl, err: String(err) })
+      return new Response('Read error', { status: 502, headers: cors })
+    }
+
+    return new Response(body, {
       status: 200,
       headers: {
         ...cors,

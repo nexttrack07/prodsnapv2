@@ -135,6 +135,29 @@ const triggerBlobDownload = (data: Uint8Array, filename: string) => {
   URL.revokeObjectURL(url)
 }
 
+// Download a single image the same way bulk does: fetch the bytes through the
+// CORS-enabled /download proxy, then save them from a same-origin blob: URL so
+// the browser honors the `download` filename. A cross-origin `<a download>`
+// straight to the proxy is unreliable — the attribute is ignored cross-origin,
+// so the save hinges on the server's Content-Disposition header, which throws
+// on a non-Latin-1 filename and fails the whole request. The blob path applies
+// the filename client-side and sidesteps both problems.
+async function downloadImageThroughProxy(imageUrl: string, filename: string) {
+  const siteUrl = import.meta.env.VITE_CONVEX_SITE_URL as string
+  const proxyUrl = `${siteUrl}/download?url=${encodeURIComponent(imageUrl)}`
+  const res = await fetch(proxyUrl, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`Download failed (${res.status})`)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // Fetch each design's best image through the /download proxy (which fences URLs
 // to our R2 bucket and is CORS-enabled), then bundle them into one zip. Names
 // collide-safely on the prompt title.
@@ -217,16 +240,13 @@ function DesignLibrary() {
     setSelectedIds(new Set())
   }
 
-  const handleDownload = (imageUrl: string, title: string) => {
-    const filename = `${title.replace(/[^\w\s-]/g, '').trim()}.png`
-    const siteUrl = import.meta.env.VITE_CONVEX_SITE_URL as string
-    const proxyUrl = `${siteUrl}/download?url=${encodeURIComponent(imageUrl)}&filename=${encodeURIComponent(filename)}`
-    const a = document.createElement('a')
-    a.href = proxyUrl
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+  const handleDownload = async (imageUrl: string, title: string) => {
+    try {
+      await downloadImageThroughProxy(imageUrl, `${sanitizeName(title)}.png`)
+    } catch (err) {
+      console.error('[download] single failed', err)
+      alert(err instanceof Error ? err.message : 'Download failed')
+    }
   }
 
   const SELECTED_KEY = '__selected__'
