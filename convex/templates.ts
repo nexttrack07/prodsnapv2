@@ -187,6 +187,29 @@ export const listPublished = query({
 })
 
 /**
+ * Fetch a single template by id for the preview drawer. Returns the row only
+ * if the caller may view it: a curated row (no owner), an admin-approved public
+ * custom row, or the caller's own upload. Returns null otherwise (unknown id,
+ * not published, or someone else's private/pending template).
+ *
+ * This lets the templates page open a preview reliably from a `?preview=<id>`
+ * deep link (e.g. the home shelf) without depending on the clicked template
+ * happening to be in the first page of the paginated browse query.
+ */
+export const getViewableById = query({
+  args: { id: v.id('adTemplates') },
+  handler: async (ctx, { id }) => {
+    const tpl = await ctx.db.get(id)
+    if (!tpl || tpl.status !== 'published') return null
+    if (!tpl.ownerUserId) return tpl // curated library row
+    if (tpl.visibility === 'public') return tpl
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity && tpl.ownerUserId === identity.tokenIdentifier) return tpl
+    return null
+  },
+})
+
+/**
  * Paginated list of templates for the admin grid (newest first).
  * Replaces the old non-paginated `listAll`. Admin-only.
  */

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useQuery } from 'convex/react'
 import { useMediaQuery } from '@mantine/hooks'
 import { Masonry } from 'masonic'
@@ -62,12 +62,25 @@ function LibraryPage() {
     { paginationOpts: { numItems, cursor: null } },
   )
 
+  // Keep the already-loaded page on screen while a larger "Load more" query is
+  // in flight. Growing `numItems` changes the query args, so Convex returns
+  // `undefined` until the bigger page resolves. Without this the grid would
+  // unmount, the page would collapse to a tiny loader, and the browser would
+  // clamp the scroll position to the top on every "Load more" click.
+  const lastLoadedRef = useRef<typeof paginatedResult>(undefined)
+  if (paginatedResult !== undefined) lastLoadedRef.current = paginatedResult
+  const effectiveResult = paginatedResult ?? lastLoadedRef.current
+
   // Products list for filter dropdown
   const products = useQuery(api.products.listProducts, {})
 
-  const isLoading = paginatedResult === undefined
-  const allAds = paginatedResult?.page ?? []
-  const isDone = paginatedResult?.isDone ?? true
+  // Full-page loader only on the very first load; later "Load more" fetches
+  // keep the existing grid mounted and just spin the button.
+  const isLoading = effectiveResult === undefined
+  const isLoadingMore =
+    paginatedResult === undefined && effectiveResult !== undefined
+  const allAds = effectiveResult?.page ?? []
+  const isDone = effectiveResult?.isDone ?? true
 
   // Derive product options for the filter dropdown
   const productOptions = useMemo(() => {
@@ -91,6 +104,16 @@ function LibraryPage() {
   }, [allAds, productFilter, winnersOnly])
 
   const winnerCount = allAds.filter((ad) => ad.isWinner).length
+
+  // masonic indexes cell positions and throws if the items array shrinks, so
+  // we remount it whenever the count DROPS (a filter toggle or a reactive
+  // deletion). We must NOT remount when it GROWS via "Load more" — remounting
+  // on grow is what jumped the scroll back to the top. Bumping a key only on
+  // shrink keeps masonic crash-safe while letting growth append in place.
+  const shrinkKey = useRef(0)
+  const prevLenRef = useRef(filteredAds.length)
+  if (filteredAds.length < prevLenRef.current) shrinkKey.current += 1
+  prevLenRef.current = filteredAds.length
 
   // Ad detail panel
   const openAd = (id: string) =>
@@ -199,11 +222,11 @@ function LibraryPage() {
           </Paper>
         ) : (
           <>
-            {/* Masonic caches cell positions and crashes when the items
-                array shrinks. Re-key on filter changes so it remounts
-                with a fresh cache. See masonic README "Items" caveat. */}
+            {/* Re-key only on filter changes and shrinks (see shrinkKey) so
+                masonic stays crash-safe without remounting — and jumping the
+                scroll — when "Load more" appends rows. */}
             <Masonry
-              key={`${productFilter ?? 'all'}:${winnersOnly ? 'win' : 'all'}:${filteredAds.length}`}
+              key={`${productFilter ?? 'all'}:${winnersOnly ? 'win' : 'all'}:${shrinkKey.current}`}
               items={filteredAds}
               columnCount={isMobile ? 2 : 4}
               columnGutter={1}
@@ -219,6 +242,7 @@ function LibraryPage() {
                 <Button
                   variant="default"
                   size="md"
+                  loading={isLoadingMore}
                   onClick={() => setNumItems((n) => n + PAGE_SIZE)}
                 >
                   Load more

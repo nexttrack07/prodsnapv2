@@ -533,6 +533,13 @@ function ProductHeader({
   })()
   const originalCount = originals.length
 
+  // Inspiration count for the tab badge. Reuses the same query key as the
+  // Inspiration panel, so react-query dedupes it — no extra backend cost.
+  const { data: inspirations } = useQuery(
+    convexQuery(api.productInspirations.listInspirationsForProduct, { productId }),
+  )
+  const inspirationCount = inspirations?.length ?? 0
+
   async function handleSaveName() {
     if (!editedName.trim()) return
     try {
@@ -648,6 +655,13 @@ function ProductHeader({
           <Tabs.Tab
             value="inspiration"
             leftSection={<Box visibleFrom="sm"><IconBookmark size={14} /></Box>}
+            rightSection={
+              inspirationCount > 0 ? (
+                <Badge size="xs" variant="light" color="gray" radius="sm">
+                  {inspirationCount}
+                </Badge>
+              ) : null
+            }
           >
             Inspiration
           </Tabs.Tab>
@@ -2999,6 +3013,23 @@ function GenerateWizard({
   )
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null)
 
+  // Ensure the prefilled template ends up selected even when this wizard was
+  // NOT freshly mounted — e.g. navigating from the Inspiration tab's "Generate
+  // ad inspired by this" stays on /studio/$productId, so the useState
+  // initializer above may not re-run. Applies once per prefill id and never
+  // fights a later manual deselect.
+  const appliedPrefillRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!prefillTemplateId) return
+    if (appliedPrefillRef.current === (prefillTemplateId as string)) return
+    appliedPrefillRef.current = prefillTemplateId as string
+    setPickedIds((prev) =>
+      prev.includes(prefillTemplateId)
+        ? prev
+        : [prefillTemplateId, ...prev].slice(0, 3),
+    )
+  }, [prefillTemplateId])
+
   // ── Prompt builder + suggestion state ─────────────────────────────────────
   const [builderOpen, setBuilderOpen] = useState(false)
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
@@ -3222,6 +3253,24 @@ function GenerateWizard({
   const templates = mySavesOnly
     ? allTemplates.filter((t) => savedTemplateIdsForProduct.has(t._id as string))
     : allTemplates
+
+  // Fetch the prefilled template directly so it can be pinned (already
+  // selected) at the top of the picker. Without this it's invisible unless it
+  // happens to be on the first loaded page — which reads as "not pre-selected"
+  // even though it is. Mirrors the templates-gallery deep-link behaviour.
+  const { data: prefillTemplate } = useQuery({
+    ...convexQuery(api.templates.getViewableById, {
+      id: (prefillTemplateId ?? undefined) as Id<'adTemplates'>,
+    }),
+    enabled: !!prefillTemplateId,
+  })
+  const pinnedPrefill =
+    prefillTemplate && !templates.some((t) => t._id === prefillTemplate._id)
+      ? prefillTemplate
+      : null
+  const displayTemplates = pinnedPrefill
+    ? [pinnedPrefill, ...templates]
+    : templates
 
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useCallback(
@@ -4089,7 +4138,7 @@ function GenerateWizard({
                 )}
               </Group>
 
-              {templatesLoading && templates.length === 0 ? (
+              {templatesLoading && displayTemplates.length === 0 ? (
                 <Box style={{
                   display: 'grid',
                   gridTemplateColumns: isMobile
@@ -4108,7 +4157,7 @@ function GenerateWizard({
                     />
                   ))}
                 </Box>
-              ) : templates.length === 0 ? (
+              ) : displayTemplates.length === 0 ? (
                 <Text c="dark.2" ta="center" py={48}>No templates available.</Text>
               ) : (
                 <>
@@ -4125,7 +4174,7 @@ function GenerateWizard({
                       columnGap: 1,
                     }}
                   >
-                    {templates.map((tpl) => {
+                    {displayTemplates.map((tpl) => {
                       const picked = pickedIds.includes(tpl._id)
                       const aspectRatio =
                         tpl.aspectRatio === '4:5'
@@ -5232,12 +5281,12 @@ function AddInspirationModal({
     <Modal
       opened={opened}
       onClose={handleClose}
-      size={isMobile ? '100%' : 'xl'}
+      size={isMobile ? '100%' : 'min(1100px, 92vw)'}
       fullScreen={isMobile}
       radius="md"
       title="Add inspiration"
       styles={{
-        body: { padding: 'var(--mantine-spacing-md)', minHeight: 400 },
+        body: { padding: 'var(--mantine-spacing-md)' },
       }}
     >
       <Tabs defaultValue="browse">
@@ -5273,7 +5322,10 @@ function AddInspirationModal({
           ) : tplItems.length === 0 ? (
             <Text c="dark.2" ta="center" py="xl">No templates found.</Text>
           ) : (
-            <ScrollArea h={isMobile ? 300 : 400} scrollbarSize={4}>
+            <ScrollArea
+              h={isMobile ? 'calc(100dvh - 200px)' : 'min(72vh, 760px)'}
+              scrollbarSize={4}
+            >
               <Box style={{
                 display: 'grid',
                 gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
