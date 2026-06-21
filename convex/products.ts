@@ -11,7 +11,7 @@ import {
 } from './_generated/server'
 import { internal } from './_generated/api'
 import { workflow } from './studio'
-import type { Id } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import {
   CAPABILITIES,
   requireCapability,
@@ -1195,27 +1195,45 @@ export const listTemplates = query({
 
     if (!hasFilter) {
       // Fast path: cursor-based pagination over the by_status index.
-      let q = ctx.db
-        .query('adTemplates')
-        .withIndex('by_status', (q) => q.eq('status', 'published'))
-        .order('desc')
+      //
+      // Browse shows curated + anyone's public custom templates; private
+      // custom rows (a user's own un-shared uploads) never appear here. The
+      // visibility filter has to run AFTER the index read, so a single
+      // take(limit + 1) is wrong: one private upload inside that window drops
+      // the post-filter count to `limit`, flips hasMore to false, and strands
+      // every older curated template behind a dead cursor (the "only 24
+      // templates" bug). Instead, keep paging the index in batches until we've
+      // collected limit + 1 *visible* rows or run out.
+      let boundTime: number | undefined
       if (cursor) {
         const cursorDoc = await ctx.db.get(cursor as Id<'adTemplates'>)
-        if (cursorDoc) {
-          q = ctx.db
-            .query('adTemplates')
-            .withIndex('by_status', (q) => q.eq('status', 'published'))
-            .order('desc')
-            .filter((q) => q.lt(q.field('_creationTime'), cursorDoc._creationTime))
-        }
+        // Missing cursor doc (deleted since) → start from the top rather than
+        // returning an empty, dead-end page.
+        boundTime = cursorDoc?._creationTime
       }
-      // Browse shows curated + anyone's public custom templates; private
-      // custom rows (a user's own un-shared uploads) never appear here.
-      const results = (await q.take(limit + 1)).filter(
-        (t) => !t.ownerUserId || t.visibility === 'public',
-      )
-      const hasMore = results.length > limit
-      const items = hasMore ? results.slice(0, limit) : results
+
+      const visible: Doc<'adTemplates'>[] = []
+      while (visible.length < limit + 1) {
+        let q = ctx.db
+          .query('adTemplates')
+          .withIndex('by_status', (x) => x.eq('status', 'published'))
+          .order('desc')
+        if (boundTime !== undefined) {
+          const t = boundTime
+          q = q.filter((x) => x.lt(x.field('_creationTime'), t))
+        }
+        const batch = await q.take(limit + 1)
+        if (batch.length === 0) break
+        for (const row of batch) {
+          boundTime = row._creationTime
+          if (!row.ownerUserId || row.visibility === 'public') visible.push(row)
+        }
+        // Fewer than a full batch came back → the index is exhausted.
+        if (batch.length < limit + 1) break
+      }
+
+      const hasMore = visible.length > limit
+      const items = hasMore ? visible.slice(0, limit) : visible
       const nextCursor = hasMore ? items[items.length - 1]._id : null
       return { items, nextCursor, hasMore }
     }
@@ -1267,6 +1285,63 @@ export const listTemplates = query({
     const items = hasMore ? slice.slice(0, limit) : slice
     const nextCursor = hasMore ? items[items.length - 1]._id : null
     return { items, nextCursor, hasMore }
+  },
+})
+
+/**
+ * Exact count of browse-visible templates (curated + anyone's public custom),
+ * optionally narrowed by the same filters as `listTemplates`. Used for the
+ * header tagline so it shows the full library size instead of the paginated
+ * "24+" loaded count. Scans all published rows once — cheap at current size;
+ * revisit (e.g. a maintained counter) past ~10k rows.
+ */
+export const countTemplates = query({
+  args: {
+    search: v.optional(v.string()),
+    productCategory: v.optional(v.string()),
+    imageStyle: v.optional(v.string()),
+    setting: v.optional(v.string()),
+    primaryColor: v.optional(v.string()),
+    aspectRatio: v.optional(aspectRatioValidator),
+    angleType: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    { search, productCategory, imageStyle, setting, primaryColor, aspectRatio, angleType },
+  ) => {
+    const all = await ctx.db
+      .query('adTemplates')
+      .withIndex('by_status', (q) => q.eq('status', 'published'))
+      .collect()
+    const needle = (search ?? '').trim().toLowerCase()
+    let count = 0
+    for (const t of all) {
+      // Mirror listTemplates' visibility + filter predicate exactly.
+      if (t.ownerUserId && t.visibility !== 'public') continue
+      if (productCategory && t.productCategory !== productCategory) continue
+      if (imageStyle && t.imageStyle !== imageStyle) continue
+      if (setting && t.setting !== setting) continue
+      if (primaryColor && t.primaryColor !== primaryColor) continue
+      if (aspectRatio && t.aspectRatio !== aspectRatio) continue
+      if (angleType && t.angleType !== angleType) continue
+      if (needle) {
+        const haystack = [
+          t.productCategory,
+          t.subcategory,
+          t.imageStyle,
+          t.setting,
+          t.composition,
+          t.primaryColor,
+          t.sceneDescription,
+        ]
+          .filter((v): v is string => typeof v === 'string')
+          .join(' ')
+          .toLowerCase()
+        if (!haystack.includes(needle)) continue
+      }
+      count++
+    }
+    return count
   },
 })
 

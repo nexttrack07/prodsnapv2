@@ -8,12 +8,14 @@ import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { Masonry } from 'masonic'
 import {
+  ActionIcon,
   AspectRatio,
   Badge,
   Box,
   Button,
   Center,
   Container,
+  Drawer,
   Group,
   Image,
   Loader,
@@ -33,6 +35,7 @@ import {
   IconSearch,
   IconX,
   IconSparkles,
+  IconArrowLeft,
   IconArrowRight,
   IconBookmark,
   IconBookmarkFilled,
@@ -51,6 +54,22 @@ import { capitalizeWords } from '../utils/strings'
 import { useCustomTemplateUpload } from '../utils/customTemplateUpload'
 
 type TemplatesSearch = { preview?: string }
+
+// Shared shape for the preview/use drawer. Browse templates carry the full
+// metadata; custom "My Templates" uploads only carry the core fields, so every
+// metadata field is optional.
+type DrawerTemplate = {
+  _id: Id<'adTemplates'>
+  imageUrl: string
+  thumbnailUrl: string
+  aspectRatio: string
+  name?: string
+  productCategory?: string
+  imageStyle?: string
+  setting?: string
+  composition?: string
+  angleType?: string
+}
 
 export const Route = createFileRoute('/templates')({
   validateSearch: (search: Record<string, unknown>): TemplatesSearch => {
@@ -83,6 +102,8 @@ function getAspectRatioValue(ar?: string): number {
       return 4 / 5
     case '9:16':
       return 9 / 16
+    case '16:9':
+      return 16 / 9
     default:
       return 1
   }
@@ -134,6 +155,12 @@ function TemplatesBrowsePage() {
     !!filterArgs.angleType ||
     !!filterArgs.aspectRatio
 
+  // Exact count of the (optionally filtered) library — drives the header
+  // tagline so it shows the true total rather than the paginated loaded count.
+  const { data: templateCount } = useQuery(
+    convexQuery(api.products.countTemplates, filterArgs),
+  )
+
   function clearFilters() {
     setSearch('')
     // Cancel the pending debounced value too, so the query clears immediately
@@ -175,7 +202,6 @@ function TemplatesBrowsePage() {
   })
 
   const templates = templatesData?.pages.flatMap((page) => page.items) || []
-  const totalCount = templates.length
 
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useCallback(
@@ -290,26 +316,36 @@ function TemplatesBrowsePage() {
     }
   }
 
-  // ── Preview modal ──────────────────────────────────────────────────────────
-  const [previewTemplate, setPreviewTemplate] = useState<
-    (typeof templates)[number] | null
-  >(null)
-  const [productPickerOpen, setProductPickerOpen] = useState(false)
+  // ── Preview / use drawer ─────────────────────────────────────────────────
+  const [previewTemplate, setPreviewTemplate] = useState<DrawerTemplate | null>(
+    null,
+  )
 
-  // Auto-open preview when arriving with ?preview=<templateId> (from the
-  // home shelf). Only fires once per id once the matching template is in
-  // the loaded page.
+  // Auto-open preview when arriving with ?preview=<templateId> (e.g. from the
+  // home "Start from a proven format" shelf). Fetch the template by id directly
+  // rather than scanning the loaded browse pages — the home shelf and the
+  // browse grid use different queries/orderings, so the clicked template often
+  // isn't in the first page and the preview would silently never open.
   const { preview: previewIdFromUrl } = Route.useSearch()
+  const previewedById = useConvexQuery(
+    api.templates.getViewableById,
+    previewIdFromUrl
+      ? { id: previewIdFromUrl as Id<'adTemplates'> }
+      : 'skip',
+  )
   const lastConsumedPreviewId = useRef<string | null>(null)
   useEffect(() => {
-    if (!previewIdFromUrl) return
+    if (!previewIdFromUrl) {
+      // URL cleared (e.g. drawer closed) — allow the same id to re-open later.
+      lastConsumedPreviewId.current = null
+      return
+    }
     if (lastConsumedPreviewId.current === previewIdFromUrl) return
-    const match = templates.find((t) => (t._id as string) === previewIdFromUrl)
-    if (match) {
-      setPreviewTemplate(match)
+    if (previewedById) {
+      setPreviewTemplate(previewedById)
       lastConsumedPreviewId.current = previewIdFromUrl
     }
-  }, [previewIdFromUrl, templates])
+  }, [previewIdFromUrl, previewedById])
 
   return (
     <Container size="xl" py="md">
@@ -321,9 +357,11 @@ function TemplatesBrowsePage() {
           </Title>
           <Text size="sm" c="dark.2">
             {activeTab === 'browse'
-              ? templatesLoading
+              ? templateCount === undefined
                 ? 'Loading...'
-                : `${totalCount}${hasNextPage ? '+' : ''} templates`
+                : filtersActive
+                  ? `${templateCount} matching template${templateCount === 1 ? '' : 's'}`
+                  : `${templateCount} hand-picked, high-performing ad templates from real brands`
               : 'Your uploaded templates'}
           </Text>
         </Box>
@@ -542,41 +580,36 @@ function TemplatesBrowsePage() {
         </Tabs.Panel>
 
         <Tabs.Panel value="my-templates" pt="lg">
-          <MyTemplatesPanel isMobile={!!isMobile} />
+          <MyTemplatesPanel
+            isMobile={!!isMobile}
+            onUseTemplate={setPreviewTemplate}
+          />
         </Tabs.Panel>
       </Tabs>
 
-      {/* Preview modal */}
-      <TemplatePreviewModal
+      {/* Preview / use drawer — slides in from the right (Jira/Slack style) and
+          holds the "use this template" flow as an inline wizard. */}
+      <TemplateDrawer
         template={previewTemplate}
         onClose={() => {
           setPreviewTemplate(null)
-          setProductPickerOpen(false)
           // Strip ?preview=<id> so re-clicking the same tile from home
           // remounts cleanly and the auto-open effect fires again.
           if (previewIdFromUrl) {
             navigate({ to: '/templates', search: {}, replace: true })
           }
         }}
-        onUseTemplate={() => setProductPickerOpen(true)}
+        onSelectProduct={(productId) => {
+          const tpl = previewTemplate
+          setPreviewTemplate(null)
+          if (!tpl) return
+          navigate({
+            to: '/studio/$productId',
+            params: { productId },
+            search: { compose: 'true', template: tpl._id },
+          })
+        }}
       />
-
-      {/* Product picker modal */}
-      {previewTemplate && (
-        <ProductPickerModal
-          opened={productPickerOpen}
-          onClose={() => setProductPickerOpen(false)}
-          onSelectProduct={(productId) => {
-            setProductPickerOpen(false)
-            setPreviewTemplate(null)
-            navigate({
-              to: '/studio/$productId',
-              params: { productId },
-              search: { compose: 'true', template: previewTemplate._id },
-            })
-          }}
-        />
-      )}
     </Container>
   )
 }
@@ -597,7 +630,13 @@ type CustomTemplate = {
   height: number
 }
 
-function MyTemplatesPanel({ isMobile }: { isMobile: boolean }) {
+function MyTemplatesPanel({
+  isMobile,
+  onUseTemplate,
+}: {
+  isMobile: boolean
+  onUseTemplate: (template: DrawerTemplate) => void
+}) {
   const [uploadName, setUploadName] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Id<'adTemplates'> | null>(null)
   const [pendingAction, setPendingAction] = useState<Id<'adTemplates'> | null>(null)
@@ -840,16 +879,23 @@ function MyTemplatesPanel({ isMobile }: { isMobile: boolean }) {
                   backgroundColor: 'var(--mantine-color-dark-7)',
                 }}
               >
-                <Box style={{ aspectRatio: aspectRatioCss, position: 'relative' }}>
-                  <Image
-                    src={t.thumbnailUrl}
-                    alt={t.name ?? 'Custom template'}
-                    fit="cover"
-                    h="100%"
-                    w="100%"
-                    style={{ display: 'block' }}
-                  />
-                </Box>
+                <UnstyledButton
+                  onClick={() => onUseTemplate(t)}
+                  w="100%"
+                  style={{ display: 'block' }}
+                  aria-label={`Use ${t.name ?? 'template'}`}
+                >
+                  <Box style={{ aspectRatio: aspectRatioCss, position: 'relative' }}>
+                    <Image
+                      src={t.thumbnailUrl}
+                      alt={t.name ?? 'Custom template'}
+                      fit="cover"
+                      h="100%"
+                      w="100%"
+                      style={{ display: 'block' }}
+                    />
+                  </Box>
+                </UnstyledButton>
                 <Box p="xs">
                   <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
                     <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
@@ -871,6 +917,13 @@ function MyTemplatesPanel({ isMobile }: { isMobile: boolean }) {
                         </Button>
                       </Menu.Target>
                       <Menu.Dropdown>
+                        <Menu.Item
+                          leftSection={<IconSparkles size={14} />}
+                          onClick={() => onUseTemplate(t)}
+                        >
+                          Use this template
+                        </Menu.Item>
+                        <Menu.Divider />
                         {t.visibility === 'private' && (
                           <Menu.Item
                             leftSection={<IconEye size={14} />}
@@ -1129,133 +1182,178 @@ function TemplateTile({
   )
 }
 
-// ── Template Preview Modal ──────────────────────────────────────────────────
+// ── Template Drawer (preview → choose product wizard) ───────────────────────
 
-function TemplatePreviewModal({
+function TemplateDrawer({
   template,
-  onClose,
-  onUseTemplate,
-}: {
-  template: {
-    _id: Id<'adTemplates'>
-    imageUrl: string
-    thumbnailUrl: string
-    aspectRatio: string
-    productCategory?: string
-    imageStyle?: string
-    setting?: string
-    composition?: string
-    angleType?: string
-  } | null
-  onClose: () => void
-  onUseTemplate: () => void
-}) {
-  const isMobilePreview = useMediaQuery('(max-width: 768px)')
-  if (!template) return null
-
-  return (
-    <Modal
-      opened={!!template}
-      onClose={onClose}
-      size={isMobilePreview ? '100%' : 'lg'}
-      fullScreen={isMobilePreview}
-      radius="md"
-      centered
-      title="Template preview"
-      styles={{
-        body: { padding: 'var(--mantine-spacing-md)' },
-      }}
-    >
-      <Stack gap="md">
-        <Box
-          style={{
-            borderRadius: 'var(--mantine-radius-md)',
-            overflow: 'hidden',
-            border: '1px solid var(--mantine-color-dark-5)',
-          }}
-        >
-          <AspectRatio ratio={getAspectRatioValue(template.aspectRatio)}>
-            <Image
-              src={template.imageUrl}
-              alt="Template preview"
-              fit="contain"
-              style={{ display: 'block' }}
-            />
-          </AspectRatio>
-        </Box>
-
-        {/* Metadata */}
-        <Group gap="xs" wrap="wrap">
-          {template.productCategory && (
-            <Badge variant="light" color="gray" size="sm">
-              {capitalizeWords(template.productCategory)}
-            </Badge>
-          )}
-          {template.imageStyle && (
-            <Badge variant="light" color="teal" size="sm">
-              {capitalizeWords(template.imageStyle)}
-            </Badge>
-          )}
-          {template.setting && (
-            <Badge variant="light" color="indigo" size="sm">
-              {capitalizeWords(template.setting)}
-            </Badge>
-          )}
-          {template.composition && (
-            <Badge variant="light" color="violet" size="sm">
-              {capitalizeWords(template.composition)}
-            </Badge>
-          )}
-          {template.angleType && (
-            <Badge
-              variant="light"
-              color={angleTypeColor(template.angleType)}
-              size="sm"
-            >
-              {angleTypeLabel(template.angleType)}
-            </Badge>
-          )}
-          <Badge variant="light" color="brand" size="sm">
-            {template.aspectRatio}
-          </Badge>
-        </Group>
-
-        <Button
-          fullWidth
-          size="md"
-          color="brand"
-          leftSection={<IconSparkles size={18} />}
-          onClick={onUseTemplate}
-        >
-          Use this template
-        </Button>
-      </Stack>
-    </Modal>
-  )
-}
-
-// ── Product Picker Modal ────────────────────────────────────────────────────
-
-function ProductPickerModal({
-  opened,
   onClose,
   onSelectProduct,
 }: {
-  opened: boolean
+  template: DrawerTemplate | null
   onClose: () => void
+  onSelectProduct: (productId: string) => void
+}) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const [step, setStep] = useState<'preview' | 'product'>('preview')
+
+  // Reset to the first step whenever a different template is opened (or the
+  // drawer is closed), so re-opening never lands mid-wizard.
+  useEffect(() => {
+    setStep('preview')
+  }, [template?._id])
+
+  return (
+    <Drawer
+      opened={!!template}
+      onClose={onClose}
+      position="right"
+      size={isMobile ? '100%' : 460}
+      title={
+        step === 'product' ? (
+          <Group gap="xs">
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setStep('preview')}
+              aria-label="Back to preview"
+            >
+              <IconArrowLeft size={18} />
+            </ActionIcon>
+            <Text fw={600}>Choose a product</Text>
+          </Group>
+        ) : (
+          <Text fw={600}>Template preview</Text>
+        )
+      }
+      styles={{ body: { padding: 'var(--mantine-spacing-md)' } }}
+    >
+      {template &&
+        (step === 'preview' ? (
+          <TemplatePreviewStep
+            template={template}
+            onUseTemplate={() => setStep('product')}
+          />
+        ) : (
+          <ProductPickerStep
+            template={template}
+            onSelectProduct={onSelectProduct}
+          />
+        ))}
+    </Drawer>
+  )
+}
+
+function TemplatePreviewStep({
+  template,
+  onUseTemplate,
+}: {
+  template: DrawerTemplate
+  onUseTemplate: () => void
+}) {
+  return (
+    <Stack gap="md">
+      <Box
+        style={{
+          borderRadius: 'var(--mantine-radius-md)',
+          overflow: 'hidden',
+          border: '1px solid var(--mantine-color-dark-5)',
+        }}
+      >
+        <AspectRatio ratio={getAspectRatioValue(template.aspectRatio)}>
+          <Image
+            src={template.imageUrl}
+            alt="Template preview"
+            fit="contain"
+            style={{ display: 'block' }}
+          />
+        </AspectRatio>
+      </Box>
+
+      {template.name && (
+        <Text fw={600} c="white">
+          {template.name}
+        </Text>
+      )}
+
+      {/* Metadata */}
+      <Group gap="xs" wrap="wrap">
+        {template.productCategory && (
+          <Badge variant="light" color="gray" size="sm">
+            {capitalizeWords(template.productCategory)}
+          </Badge>
+        )}
+        {template.imageStyle && (
+          <Badge variant="light" color="teal" size="sm">
+            {capitalizeWords(template.imageStyle)}
+          </Badge>
+        )}
+        {template.setting && (
+          <Badge variant="light" color="indigo" size="sm">
+            {capitalizeWords(template.setting)}
+          </Badge>
+        )}
+        {template.composition && (
+          <Badge variant="light" color="violet" size="sm">
+            {capitalizeWords(template.composition)}
+          </Badge>
+        )}
+        {template.angleType && (
+          <Badge
+            variant="light"
+            color={angleTypeColor(template.angleType)}
+            size="sm"
+          >
+            {angleTypeLabel(template.angleType)}
+          </Badge>
+        )}
+        <Badge variant="light" color="brand" size="sm">
+          {template.aspectRatio}
+        </Badge>
+      </Group>
+
+      <Button
+        fullWidth
+        size="md"
+        color="brand"
+        leftSection={<IconSparkles size={18} />}
+        onClick={onUseTemplate}
+      >
+        Use this template
+      </Button>
+    </Stack>
+  )
+}
+
+function ProductPickerStep({
+  template,
+  onSelectProduct,
+}: {
+  template: DrawerTemplate
   onSelectProduct: (productId: string) => void
 }) {
   const products = useConvexQuery(api.products.listProducts, {})
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title="Choose a product"
-      size="md"
-      radius="md"
-      centered
-    >
+    <Stack gap="md">
+      {/* Wizard context — which template we're generating from */}
+      <Group gap="sm" wrap="nowrap" align="center">
+        <Box
+          w={40}
+          h={40}
+          style={{
+            borderRadius: 6,
+            overflow: 'hidden',
+            flexShrink: 0,
+            border: '1px solid var(--mantine-color-dark-5)',
+          }}
+        >
+          <Image src={template.thumbnailUrl} alt="" fit="cover" w={40} h={40} />
+        </Box>
+        <Text size="sm" c="dark.1">
+          Pick the product to generate from this template.
+        </Text>
+      </Group>
+
       <Stack gap="sm">
         {products === undefined ? (
           <Center py="xl">
@@ -1354,6 +1452,6 @@ function ProductPickerModal({
           ))
         )}
       </Stack>
-    </Modal>
+    </Stack>
   )
 }
