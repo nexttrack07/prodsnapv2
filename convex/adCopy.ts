@@ -16,12 +16,16 @@ export const checkAdCopyRateLimit = internalQuery({
   args: { userId: v.string() },
   handler: async (ctx, { userId }) => {
     const since = Date.now() - RATE_LIMIT_WINDOW_MS
+    // Count ONLY ad-copy events. Previously this counted every `usage` event,
+    // so generating images / removing backgrounds (which also log `usage`)
+    // would exhaust the ad-copy quota — cross-contamination across features.
     const recent = await ctx.db
       .query('billingEvents')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .filter((q) =>
         q.and(
           q.gte(q.field('timestamp'), since),
+          q.eq(q.field('mutationName'), 'generateAdCopy'),
           q.or(
             q.eq(q.field('context'), 'usage'),
             q.eq(q.field('context'), 'rate-limited'),
@@ -30,6 +34,25 @@ export const checkAdCopyRateLimit = internalQuery({
       )
       .collect()
     return recent.length
+  },
+})
+
+/**
+ * Records a successful ad-copy attempt so checkAdCopyRateLimit has something to
+ * count. Without this the limiter only saw `rate-limited` rows and never fired
+ * once the cross-feature `usage` rows were filtered out. Logged at attempt time
+ * (before the LLM call) so concurrent bursts are counted immediately.
+ */
+export const recordAdCopyUsage = internalMutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    await ctx.db.insert('billingEvents', {
+      userId,
+      mutationName: 'generateAdCopy',
+      allowed: true,
+      timestamp: Date.now(),
+      context: 'usage',
+    })
   },
 })
 
@@ -76,6 +99,7 @@ export const generateAdCopy = action({
         'Too many requests — please wait a moment before generating again.',
       )
     }
+    await ctx.runMutation(internal.adCopy.recordAdCopyUsage, { userId })
 
     const product = await ctx.runQuery(api.products.getProduct, { productId })
     // Returns "Product not found" rather than "Not authorized" to avoid leaking
@@ -146,6 +170,7 @@ export const generateAdCopyForGeneration = action({
         'Too many requests — please wait a moment before generating again.',
       )
     }
+    await ctx.runMutation(internal.adCopy.recordAdCopyUsage, { userId })
 
     // Ownership check via the parent generation row.
     const gen = await ctx.runQuery(internal.adCopy.getGenerationOwner, { generationId })

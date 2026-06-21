@@ -386,6 +386,9 @@ const schema = defineSchema({
     .index('by_product', ['productId'])
     .index('by_productImage', ['productImageId'])
     .index('by_userId', ['userId'])
+    // Lets the library paginate completed ads directly, so a page is never
+    // diluted by queued/failed rows filtered out after the pagination slice.
+    .index('by_userId_status', ['userId', 'status'])
     .index('by_run', ['runId']) // legacy, keep for migration
     .index('by_template', ['templateId']),
   // ─── Brand kits (N per user, optionally tagged to products) ─────────────

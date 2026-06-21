@@ -213,6 +213,13 @@ export const uploadProductImage = action({
     // Security: claimed content-type must at least be an allowed image type
     validateContentType(contentType)
 
+    // Reject oversized payloads BEFORE allocating the decode buffer. base64
+    // inflates bytes by ~4/3, so a 10 MB image is ~13.4 MB of base64; cap the
+    // string with slack so a malicious client can't force a huge allocation
+    // (the post-decode check below still enforces the exact 10 MB byte limit).
+    const MAX_BASE64_LEN = 15 * 1024 * 1024
+    if (base64.length > MAX_BASE64_LEN) throw new Error('Image exceeds 10 MB')
+
     const buf = Buffer.from(base64, 'base64')
     if (buf.length === 0) throw new Error('Empty upload')
     if (buf.length > 10 * 1024 * 1024) throw new Error('Image exceeds 10 MB')

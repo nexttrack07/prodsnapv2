@@ -39,6 +39,7 @@ import type * as lib_billing_provider from "../lib/billing/provider.js";
 import type * as lib_billing_seedPricing from "../lib/billing/seedPricing.js";
 import type * as lib_email_index from "../lib/email/index.js";
 import type * as lib_imageUrls from "../lib/imageUrls.js";
+import type * as lib_ssrf from "../lib/ssrf.js";
 import type * as migrations from "../migrations.js";
 import type * as onboardingProfiles from "../onboardingProfiles.js";
 import type * as productImages from "../productImages.js";
@@ -97,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   "lib/billing/seedPricing": typeof lib_billing_seedPricing;
   "lib/email/index": typeof lib_email_index;
   "lib/imageUrls": typeof lib_imageUrls;
+  "lib/ssrf": typeof lib_ssrf;
   migrations: typeof migrations;
   onboardingProfiles: typeof onboardingProfiles;
   productImages: typeof productImages;

@@ -87,6 +87,15 @@ function TemplatesBrowsePage() {
 
   // ── Filters ──────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('')
+  // Debounced copy of `search` that actually drives the query. The input binds
+  // to `search` for instant feedback; the backend only sees the value after a
+  // 300ms pause, so typing no longer fires a listTemplates query per keystroke
+  // (each of which scans all published templates server-side).
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(id)
+  }, [search])
   const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const [filterImageStyle, setFilterImageStyle] = useState<string | null>(null)
   const [filterSetting, setFilterSetting] = useState<string | null>(null)
@@ -98,7 +107,7 @@ function TemplatesBrowsePage() {
   )
 
   const filterArgs = {
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     productCategory: filterCategory ?? undefined,
     imageStyle: filterImageStyle ?? undefined,
     setting: filterSetting ?? undefined,
@@ -107,7 +116,9 @@ function TemplatesBrowsePage() {
       (filterAspectRatio as '1:1' | '4:5' | '9:16' | undefined) ?? undefined,
   }
   const filtersActive =
-    !!filterArgs.search ||
+    // Use the immediate `search` (not the debounced value) so the "Clear
+    // filters" affordance appears as soon as the user types, not 300ms later.
+    !!search.trim() ||
     !!filterArgs.productCategory ||
     !!filterArgs.imageStyle ||
     !!filterArgs.setting ||
@@ -116,6 +127,9 @@ function TemplatesBrowsePage() {
 
   function clearFilters() {
     setSearch('')
+    // Cancel the pending debounced value too, so the query clears immediately
+    // rather than re-running with stale text for up to 300ms.
+    setDebouncedSearch('')
     setFilterCategory(null)
     setFilterImageStyle(null)
     setFilterSetting(null)

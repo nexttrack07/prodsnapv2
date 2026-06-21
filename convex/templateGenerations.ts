@@ -94,16 +94,21 @@ export const listAllAdsForUser = query({
       return { page: [], isDone: true, continueCursor: '' }
     }
 
+    // Paginate completed ads directly via the compound index so each page is
+    // full. Filtering status AFTER .paginate() (the old approach) returned
+    // sparse pages — a page of 24 raw rows could yield only a handful of
+    // completed ads, forcing repeated "Load more" clicks past failed/queued runs.
     const result = await ctx.db
       .query('templateGenerations')
-      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .withIndex('by_userId_status', (q) =>
+        q.eq('userId', userId).eq('status', 'complete'),
+      )
       .order('desc')
       .paginate(paginationOpts)
 
-    // Filter to complete ads only, then enrich with product data
-    const completePage = result.page.filter(
-      (ad) => ad.status === 'complete' && !!ad.outputUrl,
-    )
+    // outputUrl should always be set once status === 'complete'; guard the rare
+    // edge where it isn't rather than render a broken tile.
+    const completePage = result.page.filter((ad) => !!ad.outputUrl)
 
     // Batch-lookup unique products referenced by this page
     const productIds = [
