@@ -233,13 +233,16 @@ export const matchTemplates = query({
     const pageSize = limit ?? 24
     const startOffset = offset ?? 0
 
-    // Query published templates with matching aspect ratio
-    const all = await ctx.db
-      .query('adTemplates')
-      .withIndex('by_aspect_status', (q) =>
-        q.eq('aspectRatio', aspectRatio).eq('status', 'published'),
-      )
-      .collect()
+    // Query published templates with matching aspect ratio (curated only —
+    // exclude user-owned custom templates from this legacy run path).
+    const all = (
+      await ctx.db
+        .query('adTemplates')
+        .withIndex('by_aspect_status', (q) =>
+          q.eq('aspectRatio', aspectRatio).eq('status', 'published'),
+        )
+        .collect()
+    ).filter((t) => !t.ownerUserId)
 
     // Add a score of 1.0 for all (no vector ranking)
     let filtered = all.map((tpl) => ({ ...tpl, _score: 1.0 }))

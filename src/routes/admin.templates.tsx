@@ -130,12 +130,199 @@ function AdminTemplatesPage() {
 
       <UploadArea />
 
+      <PendingSubmissionsPanel />
+
       <TemplatesTable
         rows={rows}
         pageStatus={pageStatus}
         loadMore={() => loadMore(PAGE_SIZE)}
       />
     </Container>
+  )
+}
+
+interface PendingTemplateRow {
+  _id: Id<'adTemplates'>
+  _creationTime: number
+  imageUrl: string
+  thumbnailUrl: string
+  name?: string
+  ownerUserId?: string
+  aspectRatio: string
+}
+
+/**
+ * Admin review queue for user-submitted custom templates awaiting publication
+ * (visibility === 'pending'). Renders nothing when the queue is empty so the
+ * page stays uncluttered. Each card surfaces the preview, name, owner id and
+ * aspect ratio with Approve (-> public) / Reject (-> private) actions.
+ */
+function PendingSubmissionsPanel() {
+  const { data: pending } = useQuery(
+    convexQuery(api.customTemplates.listPendingCustomTemplates, {}),
+  ) as { data: PendingTemplateRow[] | undefined }
+
+  const approveMutation = useMutation({
+    mutationFn: useConvexMutation(api.customTemplates.approveCustomTemplate),
+  })
+  const rejectMutation = useMutation({
+    mutationFn: useConvexMutation(api.customTemplates.rejectCustomTemplate),
+  })
+
+  // Track which row + action is in flight so only that button shows a spinner.
+  const [pendingAction, setPendingAction] = useState<{
+    id: Id<'adTemplates'>
+    action: 'approve' | 'reject'
+  } | null>(null)
+
+  // Render nothing while loading or when there's no work to review.
+  if (!pending || pending.length === 0) return null
+
+  const handleApprove = async (t: PendingTemplateRow) => {
+    setPendingAction({ id: t._id, action: 'approve' })
+    try {
+      await approveMutation.mutateAsync({ templateId: t._id })
+      notifications.show({
+        title: 'Template approved',
+        message: `"${t.name ?? 'Untitled'}" is now public.`,
+        color: 'green',
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Approval failed',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+        color: 'red',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const handleReject = async (t: PendingTemplateRow) => {
+    setPendingAction({ id: t._id, action: 'reject' })
+    try {
+      await rejectMutation.mutateAsync({ templateId: t._id })
+      notifications.show({
+        title: 'Submission rejected',
+        message: `"${t.name ?? 'Untitled'}" was returned to private.`,
+        color: 'yellow',
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Rejection failed',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+        color: 'red',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  return (
+    <Box mb="xl">
+      <Group justify="space-between" mb="md">
+        <Title order={2} size="lg" fw={600} c="white">
+          Pending public submissions
+        </Title>
+        <Badge size="md" variant="light" color="brand">
+          {pending.length} awaiting review
+        </Badge>
+      </Group>
+      <Box
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '1rem',
+          alignItems: 'start',
+        }}
+      >
+        {pending.map((t) => {
+          const isApproving =
+            pendingAction?.id === t._id && pendingAction.action === 'approve'
+          const isRejecting =
+            pendingAction?.id === t._id && pendingAction.action === 'reject'
+          const isBusy = pendingAction?.id === t._id
+          return (
+            <Paper
+              key={t._id}
+              radius="lg"
+              withBorder
+              style={{
+                overflow: 'hidden',
+                borderColor: 'var(--mantine-color-dark-5)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                transition: 'border-color 200ms ease, box-shadow 200ms ease',
+              }}
+              styles={{
+                root: {
+                  '&:hover': {
+                    borderColor: 'var(--mantine-color-dark-4)',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+                  },
+                },
+              }}
+            >
+              <AspectRatio ratio={getAspectRatioValue(t.aspectRatio)}>
+                <Box pos="relative" bg="dark.6" w="100%" h="100%">
+                  <Image
+                    src={t.thumbnailUrl}
+                    alt={`Pending submission: ${t.name ?? t.aspectRatio}`}
+                    fit="cover"
+                    h="100%"
+                    w="100%"
+                    loading="lazy"
+                  />
+                  <Badge
+                    pos="absolute"
+                    top={8}
+                    right={8}
+                    size="xs"
+                    variant="filled"
+                    color="yellow"
+                    tt="uppercase"
+                    leftSection={<IconClock size={12} />}
+                  >
+                    Pending
+                  </Badge>
+                </Box>
+              </AspectRatio>
+              <Box p="md">
+                <Text size="sm" fw={600} c="white" lineClamp={1}>
+                  {t.name ?? 'Untitled'}
+                </Text>
+                <Text size="xs" c="dark.2" mt={2} lineClamp={1}>
+                  {t.aspectRatio} · Owner: {t.ownerUserId ?? 'unknown'}
+                </Text>
+                <Group justify="flex-end" gap={8} mt="sm">
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="red"
+                    leftSection={<IconX size={14} />}
+                    onClick={() => handleReject(t)}
+                    loading={isRejecting}
+                    disabled={isBusy && !isRejecting}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="teal"
+                    leftSection={<IconCheck size={14} />}
+                    onClick={() => handleApprove(t)}
+                    loading={isApproving}
+                    disabled={isBusy && !isApproving}
+                  >
+                    Approve
+                  </Button>
+                </Group>
+              </Box>
+            </Paper>
+          )
+        })}
+      </Box>
+    </Box>
   )
 }
 

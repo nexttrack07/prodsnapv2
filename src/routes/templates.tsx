@@ -23,6 +23,7 @@ import {
   Select,
   Skeleton,
   Stack,
+  Tabs,
   Text,
   TextInput,
   Title,
@@ -37,10 +38,17 @@ import {
   IconBookmarkFilled,
   IconCheck,
   IconDownload,
+  IconPhoto,
+  IconUpload,
+  IconTrash,
+  IconEye,
+  IconEyeOff,
+  IconClock,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
+import { useCustomTemplateUpload } from '../utils/customTemplateUpload'
 
 type TemplatesSearch = { preview?: string }
 
@@ -81,6 +89,7 @@ function getAspectRatioValue(ar?: string): number {
 }
 
 function TemplatesBrowsePage() {
+  const [activeTab, setActiveTab] = useState<string | null>('browse')
   const isMobile = useMediaQuery('(max-width: 768px)')
   const navigate = useNavigate()
   const convex = useConvex()
@@ -311,195 +320,231 @@ function TemplatesBrowsePage() {
             Templates
           </Title>
           <Text size="sm" c="dark.2">
-            {templatesLoading
-              ? 'Loading...'
-              : `${totalCount}${hasNextPage ? '+' : ''} templates`}
+            {activeTab === 'browse'
+              ? templatesLoading
+                ? 'Loading...'
+                : `${totalCount}${hasNextPage ? '+' : ''} templates`
+              : 'Your uploaded templates'}
           </Text>
         </Box>
       </Group>
 
-      {/* Filters */}
-      <Paper
-        radius="md"
-        p="md"
+      {/* Tab switcher */}
+      <Tabs
+        value={activeTab}
+        onChange={setActiveTab}
         mb="lg"
-        style={{
-          border: '1px solid var(--mantine-color-dark-6)',
-          background: 'rgba(255,255,255,0.02)',
+        styles={{
+          tab: {
+            color: 'var(--mantine-color-dark-2)',
+            '&[data-active]': {
+              color: 'white',
+              borderColor: 'var(--mantine-color-brand-5)',
+            },
+          },
+          list: {
+            borderBottom: '1px solid var(--mantine-color-dark-6)',
+          },
         }}
       >
-        <Group gap="sm" wrap="wrap" align="flex-end">
-          <TextInput
-            placeholder="Search templates..."
-            leftSection={<IconSearch size={14} />}
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            style={{ flex: 1, minWidth: 180 }}
-            size="sm"
-          />
-          <Select
-            placeholder="Category"
-            data={
-              filterOptions?.productCategories.map((v) => ({
-                value: v,
-                label: capitalizeWords(v),
-              })) ?? []
-            }
-            value={filterCategory}
-            onChange={setFilterCategory}
-            clearable
-            size="sm"
-            w={isMobile ? '100%' : 150}
-          />
-          <Select
-            placeholder="Image style"
-            data={
-              filterOptions?.imageStyles.map((v) => ({
-                value: v,
-                label: capitalizeWords(v),
-              })) ?? []
-            }
-            value={filterImageStyle}
-            onChange={setFilterImageStyle}
-            clearable
-            size="sm"
-            w={isMobile ? '100%' : 150}
-          />
-          <Select
-            placeholder="Setting"
-            data={
-              filterOptions?.settings.map((v) => ({
-                value: v,
-                label: capitalizeWords(v),
-              })) ?? []
-            }
-            value={filterSetting}
-            onChange={setFilterSetting}
-            clearable
-            size="sm"
-            w={isMobile ? '100%' : 150}
-          />
-          <Select
-            placeholder="Angle type"
-            data={
-              filterOptions?.angleTypes.map((v) => ({
-                value: v,
-                label: angleTypeLabel(v),
-              })) ?? []
-            }
-            value={filterAngleType}
-            onChange={setFilterAngleType}
-            clearable
-            size="sm"
-            w={isMobile ? '100%' : 150}
-          />
-          <Select
-            placeholder="Aspect ratio"
-            data={[
-              { value: '1:1', label: '1:1' },
-              { value: '4:5', label: '4:5' },
-              { value: '9:16', label: '9:16' },
-            ]}
-            value={filterAspectRatio}
-            onChange={setFilterAspectRatio}
-            clearable
-            size="sm"
-            w={isMobile ? '100%' : 120}
-          />
-          {filtersActive && (
-            <Button
-              variant="subtle"
-              color="gray"
-              size="sm"
-              leftSection={<IconX size={14} />}
-              onClick={clearFilters}
-            >
-              Clear filters
-            </Button>
-          )}
-        </Group>
-      </Paper>
+        <Tabs.List>
+          <Tabs.Tab value="browse" leftSection={<IconPhoto size={14} />}>
+            Browse
+          </Tabs.Tab>
+          <Tabs.Tab value="my-templates" leftSection={<IconUpload size={14} />}>
+            My Templates
+          </Tabs.Tab>
+        </Tabs.List>
 
-      {/* Grid */}
-      {templatesLoading ? (
-        <Box
-          style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-            gap: 1,
-          }}
-        >
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton
-              key={i}
-              h={i % 3 === 0 ? 240 : i % 3 === 1 ? 320 : 200}
-              radius="sm"
-            />
-          ))}
-        </Box>
-      ) : templates.length === 0 ? (
-        <Paper
-          radius="lg"
-          p={60}
-          ta="center"
-          withBorder
-          style={{
-            borderStyle: 'dashed',
-            borderWidth: 2,
-            borderColor: 'var(--mantine-color-dark-5)',
-            background:
-              'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
-          }}
-        >
-          <Text size="lg" fw={500} c="dark.1" mb="xs">
-            No templates match
-          </Text>
-          <Text size="sm" c="dark.3">
-            Try clearing a filter.
-          </Text>
-        </Paper>
-      ) : (
-        <>
-          {/* Masonic caches cell positions and crashes when items shrink.
-              Re-key on filter changes so it remounts with a fresh cache. */}
-          <Masonry
-            key={[
-              filterArgs.search ?? '',
-              filterArgs.productCategory ?? '',
-              filterArgs.imageStyle ?? '',
-              filterArgs.setting ?? '',
-              filterArgs.angleType ?? '',
-              filterArgs.aspectRatio ?? '',
-            ].join('|')}
-            items={templates}
-            columnCount={isMobile ? 2 : 4}
-            columnGutter={1}
-            rowGutter={1}
-            render={({ data: t }) => (
-              <TemplateTile
-                template={t}
-                onClick={() => setPreviewTemplate(t)}
-                isSaved={isTemplateSavedAnywhere(t._id)}
-                products={products ?? []}
-                isTemplateSavedToProduct={isTemplateSavedToProduct}
-                onToggleSave={handleToggleSave}
+        <Tabs.Panel value="browse" pt="lg">
+          {/* Filters */}
+          <Paper
+            radius="md"
+            p="md"
+            mb="lg"
+            style={{
+              border: '1px solid var(--mantine-color-dark-6)',
+              background: 'rgba(255,255,255,0.02)',
+            }}
+          >
+            <Group gap="sm" wrap="wrap" align="flex-end">
+              <TextInput
+                placeholder="Search templates..."
+                leftSection={<IconSearch size={14} />}
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+                style={{ flex: 1, minWidth: 180 }}
+                size="sm"
               />
-            )}
-          />
-          {/* Infinite scroll sentinel */}
-          {hasNextPage && (
-            <Center ref={loadMoreRef} py="xl">
-              {isFetchingNextPage ? (
-                <Loader size="sm" color="brand" />
-              ) : (
-                <Text size="sm" c="dark.3">
-                  Scroll for more
-                </Text>
+              <Select
+                placeholder="Category"
+                data={
+                  filterOptions?.productCategories.map((v) => ({
+                    value: v,
+                    label: capitalizeWords(v),
+                  })) ?? []
+                }
+                value={filterCategory}
+                onChange={setFilterCategory}
+                clearable
+                size="sm"
+                w={isMobile ? '100%' : 150}
+              />
+              <Select
+                placeholder="Image style"
+                data={
+                  filterOptions?.imageStyles.map((v) => ({
+                    value: v,
+                    label: capitalizeWords(v),
+                  })) ?? []
+                }
+                value={filterImageStyle}
+                onChange={setFilterImageStyle}
+                clearable
+                size="sm"
+                w={isMobile ? '100%' : 150}
+              />
+              <Select
+                placeholder="Setting"
+                data={
+                  filterOptions?.settings.map((v) => ({
+                    value: v,
+                    label: capitalizeWords(v),
+                  })) ?? []
+                }
+                value={filterSetting}
+                onChange={setFilterSetting}
+                clearable
+                size="sm"
+                w={isMobile ? '100%' : 150}
+              />
+              <Select
+                placeholder="Angle type"
+                data={
+                  filterOptions?.angleTypes.map((v) => ({
+                    value: v,
+                    label: angleTypeLabel(v),
+                  })) ?? []
+                }
+                value={filterAngleType}
+                onChange={setFilterAngleType}
+                clearable
+                size="sm"
+                w={isMobile ? '100%' : 150}
+              />
+              <Select
+                placeholder="Aspect ratio"
+                data={[
+                  { value: '1:1', label: '1:1' },
+                  { value: '4:5', label: '4:5' },
+                  { value: '9:16', label: '9:16' },
+                ]}
+                value={filterAspectRatio}
+                onChange={setFilterAspectRatio}
+                clearable
+                size="sm"
+                w={isMobile ? '100%' : 120}
+              />
+              {filtersActive && (
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  leftSection={<IconX size={14} />}
+                  onClick={clearFilters}
+                >
+                  Clear filters
+                </Button>
               )}
-            </Center>
+            </Group>
+          </Paper>
+
+          {/* Grid */}
+          {templatesLoading ? (
+            <Box
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+                gap: 1,
+              }}
+            >
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton
+                  key={i}
+                  h={i % 3 === 0 ? 240 : i % 3 === 1 ? 320 : 200}
+                  radius="sm"
+                />
+              ))}
+            </Box>
+          ) : templates.length === 0 ? (
+            <Paper
+              radius="lg"
+              p={60}
+              ta="center"
+              withBorder
+              style={{
+                borderStyle: 'dashed',
+                borderWidth: 2,
+                borderColor: 'var(--mantine-color-dark-5)',
+                background:
+                  'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
+              }}
+            >
+              <Text size="lg" fw={500} c="dark.1" mb="xs">
+                No templates match
+              </Text>
+              <Text size="sm" c="dark.3">
+                Try clearing a filter.
+              </Text>
+            </Paper>
+          ) : (
+            <>
+              {/* Masonic caches cell positions and crashes when items shrink.
+                  Re-key on filter changes so it remounts with a fresh cache. */}
+              <Masonry
+                key={[
+                  filterArgs.search ?? '',
+                  filterArgs.productCategory ?? '',
+                  filterArgs.imageStyle ?? '',
+                  filterArgs.setting ?? '',
+                  filterArgs.angleType ?? '',
+                  filterArgs.aspectRatio ?? '',
+                ].join('|')}
+                items={templates}
+                columnCount={isMobile ? 2 : 4}
+                columnGutter={1}
+                rowGutter={1}
+                render={({ data: t }) => (
+                  <TemplateTile
+                    template={t}
+                    onClick={() => setPreviewTemplate(t)}
+                    isSaved={isTemplateSavedAnywhere(t._id)}
+                    products={products ?? []}
+                    isTemplateSavedToProduct={isTemplateSavedToProduct}
+                    onToggleSave={handleToggleSave}
+                  />
+                )}
+              />
+              {/* Infinite scroll sentinel */}
+              {hasNextPage && (
+                <Center ref={loadMoreRef} py="xl">
+                  {isFetchingNextPage ? (
+                    <Loader size="sm" color="brand" />
+                  ) : (
+                    <Text size="sm" c="dark.3">
+                      Scroll for more
+                    </Text>
+                  )}
+                </Center>
+              )}
+            </>
           )}
-        </>
-      )}
+        </Tabs.Panel>
+
+        <Tabs.Panel value="my-templates" pt="lg">
+          <MyTemplatesPanel isMobile={!!isMobile} />
+        </Tabs.Panel>
+      </Tabs>
 
       {/* Preview modal */}
       <TemplatePreviewModal
@@ -533,6 +578,369 @@ function TemplatesBrowsePage() {
         />
       )}
     </Container>
+  )
+}
+
+// ── My Templates Panel ───────────────────────────────────────────────────────
+
+type CustomTemplate = {
+  _id: Id<'adTemplates'>
+  _creationTime: number
+  imageUrl: string
+  thumbnailUrl: string
+  name?: string
+  aspectRatio: '1:1' | '4:5' | '9:16' | '16:9'
+  visibility: 'private' | 'pending' | 'public'
+  status: string
+  ownerUserId: string
+  width: number
+  height: number
+}
+
+function MyTemplatesPanel({ isMobile }: { isMobile: boolean }) {
+  const [uploadName, setUploadName] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<Id<'adTemplates'> | null>(null)
+  const [pendingAction, setPendingAction] = useState<Id<'adTemplates'> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const myTemplates = useConvexQuery(
+    api.customTemplates.listMyCustomTemplates,
+    {},
+  ) as CustomTemplate[] | undefined
+
+  const { uploadCustomTemplate, isUploading } = useCustomTemplateUpload()
+
+  const requestPublic = useConvexMutationHook(
+    api.customTemplates.requestPublicTemplate,
+  )
+  const makePrivate = useConvexMutationHook(
+    api.customTemplates.makeTemplatePrivate,
+  )
+  const deleteTemplate = useConvexMutationHook(
+    api.customTemplates.deleteCustomTemplate,
+  )
+
+  async function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset so the same file can be re-selected after an error
+    e.target.value = ''
+    try {
+      await uploadCustomTemplate(file, uploadName)
+      notifications.show({
+        title: 'Template uploaded',
+        message: 'Your template has been saved.',
+        color: 'green',
+        autoClose: 4000,
+      })
+      setUploadName('')
+    } catch (err) {
+      notifications.show({
+        title: 'Upload failed',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+        color: 'red',
+        autoClose: 6000,
+      })
+    }
+  }
+
+  async function handleRequestPublic(templateId: Id<'adTemplates'>) {
+    setPendingAction(templateId)
+    try {
+      await requestPublic({ templateId })
+      notifications.show({
+        title: 'Request submitted',
+        message: 'An admin will review your template before it goes public.',
+        color: 'yellow',
+        autoClose: 5000,
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+        color: 'red',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleMakePrivate(templateId: Id<'adTemplates'>) {
+    setPendingAction(templateId)
+    try {
+      await makePrivate({ templateId })
+      notifications.show({
+        message: 'Template set to private.',
+        color: 'gray',
+        autoClose: 3000,
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+        color: 'red',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleDelete(templateId: Id<'adTemplates'>) {
+    setPendingAction(templateId)
+    try {
+      await deleteTemplate({ templateId })
+      notifications.show({
+        message: 'Template deleted.',
+        color: 'gray',
+        autoClose: 3000,
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+        color: 'red',
+      })
+    } finally {
+      setPendingAction(null)
+      setDeleteTarget(null)
+    }
+  }
+
+  function visibilityBadge(visibility: CustomTemplate['visibility']) {
+    if (visibility === 'public') {
+      return (
+        <Badge size="xs" color="green" variant="light" leftSection={<IconEye size={10} />}>
+          Public
+        </Badge>
+      )
+    }
+    if (visibility === 'pending') {
+      return (
+        <Badge size="xs" color="yellow" variant="light" leftSection={<IconClock size={10} />}>
+          Pending review
+        </Badge>
+      )
+    }
+    return (
+      <Badge size="xs" color="gray" variant="light" leftSection={<IconEyeOff size={10} />}>
+        Private
+      </Badge>
+    )
+  }
+
+  return (
+    <>
+      {/* Upload control */}
+      <Paper
+        radius="md"
+        p="md"
+        mb="lg"
+        style={{
+          border: '1px solid var(--mantine-color-dark-6)',
+          background: 'rgba(255,255,255,0.02)',
+        }}
+      >
+        <Stack gap="sm">
+          <Text size="sm" fw={500} c="white">
+            Upload a template
+          </Text>
+          <Group gap="sm" wrap="wrap" align="flex-end">
+            <TextInput
+              placeholder="Template name (optional)"
+              value={uploadName}
+              onChange={(e) => setUploadName(e.currentTarget.value)}
+              size="sm"
+              style={{ flex: 1, minWidth: 180 }}
+            />
+            <Button
+              size="sm"
+              leftSection={<IconUpload size={14} />}
+              loading={isUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Choose image
+            </Button>
+          </Group>
+          <Text size="xs" c="dark.3">
+            Accepted: JPEG, PNG, WebP · Max 20 MB
+          </Text>
+        </Stack>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/*"
+          style={{ display: 'none' }}
+          onChange={handleFileChosen}
+        />
+      </Paper>
+
+      {/* Grid */}
+      {myTemplates === undefined ? (
+        <Box
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+            gap: 12,
+          }}
+        >
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} h={200} radius="sm" />
+          ))}
+        </Box>
+      ) : myTemplates.length === 0 ? (
+        <Paper
+          radius="lg"
+          p={60}
+          ta="center"
+          withBorder
+          style={{
+            borderStyle: 'dashed',
+            borderWidth: 2,
+            borderColor: 'var(--mantine-color-dark-5)',
+            background:
+              'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
+          }}
+        >
+          <IconPhoto size={32} color="var(--mantine-color-dark-3)" />
+          <Text size="lg" fw={500} c="dark.1" mt="sm" mb="xs">
+            No custom templates yet
+          </Text>
+          <Text size="sm" c="dark.3">
+            Upload your own ad as a template to generate from it.
+          </Text>
+        </Paper>
+      ) : (
+        <Box
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile
+              ? 'repeat(2, 1fr)'
+              : 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {myTemplates.map((t) => {
+            const aspectRatioCss =
+              t.aspectRatio === '4:5'
+                ? '4/5'
+                : t.aspectRatio === '9:16'
+                  ? '9/16'
+                  : t.aspectRatio === '16:9'
+                    ? '16/9'
+                    : '1/1'
+            const isActing = pendingAction === t._id
+
+            return (
+              <Paper
+                key={t._id}
+                radius="sm"
+                style={{
+                  overflow: 'hidden',
+                  border: '1px solid var(--mantine-color-dark-6)',
+                  backgroundColor: 'var(--mantine-color-dark-7)',
+                }}
+              >
+                <Box style={{ aspectRatio: aspectRatioCss, position: 'relative' }}>
+                  <Image
+                    src={t.thumbnailUrl}
+                    alt={t.name ?? 'Custom template'}
+                    fit="cover"
+                    h="100%"
+                    w="100%"
+                    style={{ display: 'block' }}
+                  />
+                </Box>
+                <Box p="xs">
+                  <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+                    <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
+                      <Text size="xs" fw={500} c="white" lineClamp={1}>
+                        {t.name ?? 'Untitled'}
+                      </Text>
+                      {visibilityBadge(t.visibility)}
+                    </Stack>
+                    <Menu shadow="md" width={200} position="bottom-end" withinPortal>
+                      <Menu.Target>
+                        <Button
+                          size="compact-xs"
+                          variant="subtle"
+                          color="gray"
+                          loading={isActing}
+                          px={6}
+                        >
+                          •••
+                        </Button>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        {t.visibility === 'private' && (
+                          <Menu.Item
+                            leftSection={<IconEye size={14} />}
+                            onClick={() => handleRequestPublic(t._id)}
+                          >
+                            Request to publicize
+                          </Menu.Item>
+                        )}
+                        {t.visibility === 'pending' && (
+                          <Menu.Item
+                            leftSection={<IconEyeOff size={14} />}
+                            onClick={() => handleMakePrivate(t._id)}
+                          >
+                            Withdraw request
+                          </Menu.Item>
+                        )}
+                        {t.visibility === 'public' && (
+                          <Menu.Item
+                            leftSection={<IconEyeOff size={14} />}
+                            onClick={() => handleMakePrivate(t._id)}
+                          >
+                            Make private
+                          </Menu.Item>
+                        )}
+                        <Menu.Divider />
+                        <Menu.Item
+                          color="red"
+                          leftSection={<IconTrash size={14} />}
+                          onClick={() => setDeleteTarget(t._id)}
+                        >
+                          Delete
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+                  </Group>
+                </Box>
+              </Paper>
+            )
+          })}
+        </Box>
+      )}
+
+      {/* Delete confirm modal */}
+      <Modal
+        opened={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete template?"
+        size="sm"
+        centered
+        radius="md"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dark.1">
+            This will permanently delete the template and its stored image. This cannot be undone.
+          </Text>
+          <Group justify="flex-end" gap="sm">
+            <Button variant="subtle" color="gray" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              loading={pendingAction === deleteTarget}
+              onClick={() => deleteTarget && handleDelete(deleteTarget)}
+            >
+              Delete
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
   )
 }
 

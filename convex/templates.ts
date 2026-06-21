@@ -180,7 +180,9 @@ export const listPublished = query({
             x.eq('aspectRatio', aspectRatio).eq('status', 'published'),
           )
       : ctx.db.query('adTemplates').withIndex('by_status', (x) => x.eq('status', 'published'))
-    return await q.take(1000)
+    const rows = await q.take(1000)
+    // Curated library only — never leak user-owned custom templates here.
+    return rows.filter((t) => !t.ownerUserId)
   },
 })
 
@@ -210,7 +212,10 @@ export const getCounts = query({
   args: {},
   handler: async (ctx) => {
     await requireAdminIdentity(ctx)
-    const all = await ctx.db.query('adTemplates').collect()
+    // Admin stats cover the curated library only — exclude custom rows.
+    const all = (await ctx.db.query('adTemplates').collect()).filter(
+      (t) => !t.ownerUserId,
+    )
     let published = 0
     let pending = 0
     let failed = 0
@@ -236,7 +241,10 @@ export const getExistingHashes = query({
   args: {},
   handler: async (ctx) => {
     await requireAdminIdentity(ctx)
-    const templates = await ctx.db.query('adTemplates').collect()
+    // Dedup is curated-library only — custom uploads don't participate.
+    const templates = (await ctx.db.query('adTemplates').collect()).filter(
+      (t) => !t.ownerUserId,
+    )
     return templates
       .map((t) => t.contentHash)
       .filter((h): h is string => h != null)

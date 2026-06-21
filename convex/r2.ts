@@ -379,6 +379,83 @@ export const uploadTemplateImage = action({
   },
 })
 
+/**
+ * User upload for a custom template (their own ad image to generate from).
+ *
+ * Mirrors uploadTemplateImage but:
+ *   - auth-gated (any signed-in user), not admin-only;
+ *   - snaps to the closest aspect ratio instead of rejecting "other", so any
+ *     image the user owns is accepted — the seed image just needs to exist.
+ *
+ * Security: requires auth, validates content-type + magic bytes.
+ */
+export const uploadCustomTemplateImage = action({
+  args: {
+    name: v.string(),
+    contentType: v.string(),
+    base64: v.string(),
+    width: v.number(),
+    height: v.number(),
+    thumbnailBase64: v.optional(v.string()),
+    thumbnailContentType: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    { name, contentType, base64, width, height, thumbnailBase64, thumbnailContentType },
+  ) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+
+    validateContentType(contentType)
+
+    const buf = Buffer.from(base64, 'base64')
+    if (buf.length === 0) throw new Error('Empty upload')
+    // KEEP IN SYNC with src/utils/constants.ts MAX_TEMPLATE_IMAGE_SIZE.
+    if (buf.length > 20 * 1024 * 1024) throw new Error('Template exceeds 20 MB')
+
+    // Trust the bytes, not the extension — same rationale as uploadProductImage.
+    const actualType = detectImageType(buf)
+    if (!actualType) {
+      throw new Error(
+        'Unsupported or unreadable image. Please upload a PNG, JPG, GIF, or WebP file.',
+      )
+    }
+
+    // Snap to nearest of our four ratios; never reject. The batch's output
+    // aspect ratio is chosen separately at generation time.
+    const aspectRatio = snapAspectRatio(width, height)
+
+    const safeName = name.replace(/[^\w.\-]/g, '_').slice(0, 80)
+    const id = nanoid()
+    const imageKey = `custom-templates/${id}-${safeName}`
+    const imageUrl = await uploadToR2(buf, imageKey, actualType)
+
+    let thumbnailUrl = imageUrl
+    let thumbnailKey: string | undefined
+
+    if (thumbnailBase64 && thumbnailContentType) {
+      validateContentType(thumbnailContentType)
+      const thumbBuf = Buffer.from(thumbnailBase64, 'base64')
+      if (thumbBuf.length > 0 && thumbBuf.length <= 2 * 1024 * 1024) {
+        validateMagicBytes(thumbBuf, thumbnailContentType)
+        const ext = thumbnailContentType === 'image/webp' ? 'webp' : 'jpg'
+        thumbnailKey = `custom-templates/thumbs/${id}.${ext}`
+        thumbnailUrl = await uploadToR2(thumbBuf, thumbnailKey, thumbnailContentType)
+      }
+    }
+
+    return {
+      imageUrl,
+      thumbnailUrl,
+      imageStorageKey: imageKey,
+      thumbnailStorageKey: thumbnailKey,
+      aspectRatio,
+      width,
+      height,
+    }
+  },
+})
+
 export async function deleteFromR2(key: string): Promise<void> {
   const bucket = process.env.R2_BUCKET_NAME!
   await getR2Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
@@ -444,4 +521,25 @@ function classifyAspectRatio(
   }
   if (best && best.dist <= 0.12) return best.label
   return 'other'
+}
+
+/**
+ * Like classifyAspectRatio but always returns the closest canonical ratio,
+ * never 'other'. Used for user-uploaded custom templates where we accept any
+ * image rather than rejecting unusual crops.
+ */
+function snapAspectRatio(width: number, height: number): '1:1' | '4:5' | '9:16' | '16:9' {
+  const ratio = width / height
+  const candidates: Array<{ label: '1:1' | '4:5' | '9:16' | '16:9'; value: number }> = [
+    { label: '1:1', value: 1 },
+    { label: '4:5', value: 4 / 5 },
+    { label: '9:16', value: 9 / 16 },
+    { label: '16:9', value: 16 / 9 },
+  ]
+  let best: { label: (typeof candidates)[number]['label']; dist: number } | null = null
+  for (const c of candidates) {
+    const dist = Math.abs(ratio - c.value) / c.value
+    if (best === null || dist < best.dist) best = { label: c.label, dist }
+  }
+  return best ? best.label : '1:1'
 }

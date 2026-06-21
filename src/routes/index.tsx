@@ -412,7 +412,7 @@ function LoopSection() {
             <span style={{ color: T.brand }}>Winners feed swipe.</span>
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 18, lineHeight: 1.55, color: T.textOnCreamMuted, margin: '24px auto 0', maxWidth: 680 }}>
-            Every reference, winner, and extracted angle is already in the prompt by default.
+            Your brand kit, voice of customer, and extracted angles ride along by default. Pick a saved template or winner to seed each batch.
           </p>
         </div>
 
@@ -476,7 +476,7 @@ function LoopSection() {
                 lineHeight: 1.7,
               }}>
                 <div><span style={{ color: T.brandSoft }}>prompt</span> "split-frame compare"</div>
-                <div><span style={{ color: T.teal }}>+ refs</span> 3 from swipe file</div>
+                <div><span style={{ color: T.teal }}>+ template</span> picked as seed</div>
                 <div><span style={{ color: T.teal }}>+ voc</span> "I bought this twice"</div>
                 <div><span style={{ color: T.teal }}>+ brand</span> harry's kit</div>
                 <div><span style={{ color: T.teal }}>+ angle</span> comparison</div>
@@ -489,7 +489,7 @@ function LoopSection() {
             {/* WINNERS */}
             <LoopCard
               tag="step 03 · winners loop"
-              title="Star → next batch references it"
+              title="Star → seed the next batch"
               sub="Cross-product library. Filter by ★. Build on what works."
             >
               {/* CSS-columns masonry: variants are uniform 1024×1024 so
@@ -1392,11 +1392,11 @@ function FeatureGrid() {
           {[
             { tag: 'BRANDS', t: 'Multi-brand kits', d: 'Per-product colors, fonts, voice. Run 10 client brands without mixing them up.' },
             { tag: 'LIBRARY', t: 'Cross-product winners', d: '/library shows every gen, every brand. Filter by ★. Build on what works.' },
-            { tag: 'MODELS', t: 'Premium image generation', d: 'ProdSnap Fast (fast, default) and ProdSnap Pro (slower, higher fidelity) AI models.' },
+            { tag: 'MODELS', t: 'Premium image generation', d: 'A state-of-the-art AI image model tuned for product ads.' },
             { tag: 'RATIOS', t: 'Every Meta ratio', d: '1:1 / 4:5 / 9:16 in one batch. No Canva detour.' },
-            { tag: 'OUTPUT', t: 'PNG / WebP / JPG', d: 'Per ad, per ratio. Ready for Ads Manager.' },
+            { tag: 'OUTPUT', t: 'Meta-ready PNG', d: 'High-res PNG per ad, per ratio. Drops straight into Ads Manager.' },
             { tag: 'COPY', t: 'Optional ad copy', d: 'Headlines, primary texts, CTAs following Meta best practices. Opt-in.' },
-            { tag: 'INGEST', t: 'Multi-URL onboarding', d: 'Paste several brand or competitor URLs at once. ProdSnap ingests them all.' },
+            { tag: 'INGEST', t: 'URL onboarding', d: 'Paste a product or competitor URL — ProdSnap scrapes the images, copy, and details.' },
             { tag: 'PHOTOS', t: 'Multi-photo per product', d: 'Front / side / lifestyle / packaging. Pick which one drives each batch.' },
           ].map((f, i) => (
             <div key={i} style={{ background: T.bgElev, padding: 24 }}>
@@ -1435,7 +1435,7 @@ function PricingSection() {
       features: [
         { label: `${PLAN_CONFIG.lite.brandKitLimit} brand kits`, on: true },
         { label: `${PLAN_CONFIG.lite.imageCredits / 10} image generations / month`, on: true },
-        { label: 'ProdSnap Fast & Pro image models', on: true },
+        { label: 'Premium AI image model', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },
@@ -1452,7 +1452,7 @@ function PricingSection() {
       features: [
         { label: `${PLAN_CONFIG.pro.brandKitLimit} brand kits`, on: true },
         { label: `${PLAN_CONFIG.pro.imageCredits / 10} image generations / month`, on: true },
-        { label: 'ProdSnap Fast & Pro image models', on: true },
+        { label: 'Premium AI image model', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },
@@ -1468,7 +1468,7 @@ function PricingSection() {
       features: [
         { label: 'Unlimited brand kits', on: true },
         { label: `${PLAN_CONFIG.max.imageCredits / 10} image generations / month`, on: true },
-        { label: 'ProdSnap Fast & Pro image models', on: true },
+        { label: 'Premium AI image model', on: true },
         { label: 'All Meta aspect ratios', on: true },
         { label: 'Swipe file + angle extraction', on: true },
         { label: 'Voice of customer', on: true },
@@ -1611,9 +1611,9 @@ function FAQSection() {
   const items: FAQItem[] = [
     { q: 'Why card-required for the trial?', a: "Anti-abuse, not a trick. ProdSnap generates with paid AI models — without a card, the trial gets farmed in 24 hours and the price has to go up for everyone. Cancel anytime in the 7 days, you won't be charged." },
     { q: 'Is this the same as AdCreative or Glorify?', a: "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want a fast prompt-to-output flow. ProdSnap is built for performance teams — if you're testing 5+ angles a week, this is for you. Angle testing, swipe files, voice of customer, winners loops — the muscles you build when you ship creative every week." },
-    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file. ProdSnap is a swipe file that feeds a generator. The references you save in ProdSnap actually shape the ads we generate — that loop doesn't exist anywhere else." },
-    { q: 'What about my brand consistency?', a: "Each brand keeps its own kit — colors, fonts, voice notes. Tag a product with the brand it belongs to, and the generator references that kit on every gen. Studio fits 8 brand kits, Agency is unlimited. Kits don't bleed into each other across products." },
-    { q: 'Will the output actually run on Meta?', a: "Yes — every output is in 1:1, 4:5, or 9:16 (you pick), exported as PNG / WebP / JPG, and meets Meta's Ads Manager spec. Optional ad copy generation follows Meta best practices for headlines, primary texts, and CTAs." },
+    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file. ProdSnap is a swipe file that feeds a generator. Save a winning ad as a template, then generate straight from it — your reference becomes the seed for new creative, not just a folder you scroll. That loop doesn't exist anywhere else." },
+    { q: 'What about my brand consistency?', a: "Each brand keeps its own kit — colors, fonts, voice notes. Tag a product with the brand it belongs to, and the generator pulls that kit's colors, voice, and offer into every batch. Lite includes 2 brand kits, Pro 10, Max unlimited. Kits don't bleed into each other across products." },
+    { q: 'Will the output actually run on Meta?', a: "Yes — every output is in 1:1, 4:5, or 9:16 (you pick), exported as high-res PNG, and meets Meta's Ads Manager spec. Optional ad copy generation follows Meta best practices for headlines, primary texts, and CTAs." },
     { q: 'Can I bring competitor ads as references?', a: "Yes. Paste URLs from Meta Ad Library, drag images in, or bookmark templates from our curated library. Per-product. They feed the generator on every batch for that product." },
   ]
 

@@ -21,6 +21,7 @@ import type * as billing_webhookHandler from "../billing/webhookHandler.js";
 import type * as brandKits from "../brandKits.js";
 import type * as credits from "../credits.js";
 import type * as crons from "../crons.js";
+import type * as customTemplates from "../customTemplates.js";
 import type * as designLab from "../designLab.js";
 import type * as designLabActions from "../designLabActions.js";
 import type * as http from "../http.js";
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   brandKits: typeof brandKits;
   credits: typeof credits;
   crons: typeof crons;
+  customTemplates: typeof customTemplates;
   designLab: typeof designLab;
   designLabActions: typeof designLabActions;
   http: typeof http;

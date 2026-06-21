@@ -1117,6 +1117,12 @@ export const generateFromProduct = mutation({
       if (tpl.status !== 'published') {
         throw new Error(`Template ${templateId} is not published`)
       }
+      // A user may generate from a curated template, their own custom
+      // template, or anyone's public custom template — but never from
+      // someone else's private upload.
+      if (tpl.ownerUserId && tpl.ownerUserId !== userId && tpl.visibility !== 'public') {
+        throw new Error(`Template ${templateId} is not available`)
+      }
 
       for (let v = 0; v < args.variationsPerTemplate; v++) {
         const genId = await ctx.db.insert('templateGenerations', {
@@ -1127,7 +1133,9 @@ export const generateFromProduct = mutation({
           productImageUrl,
           templateImageUrl: tpl.imageUrl,
           templateSnapshot: {
-            name: tpl.category || undefined,
+            // Custom templates carry a user-given name; curated rows fall back
+            // to their category label.
+            name: tpl.name || tpl.category || undefined,
             aspectRatio: tpl.aspectRatio,
           },
           aspectRatio: args.aspectRatio,
@@ -1201,7 +1209,11 @@ export const listTemplates = query({
             .filter((q) => q.lt(q.field('_creationTime'), cursorDoc._creationTime))
         }
       }
-      const results = await q.take(limit + 1)
+      // Browse shows curated + anyone's public custom templates; private
+      // custom rows (a user's own un-shared uploads) never appear here.
+      const results = (await q.take(limit + 1)).filter(
+        (t) => !t.ownerUserId || t.visibility === 'public',
+      )
       const hasMore = results.length > limit
       const items = hasMore ? results.slice(0, limit) : results
       const nextCursor = hasMore ? items[items.length - 1]._id : null
@@ -1218,6 +1230,8 @@ export const listTemplates = query({
     const needle = (search ?? '').trim().toLowerCase()
 
     const matched = all.filter((t) => {
+      // Browse shows curated + anyone's public custom; never private custom.
+      if (t.ownerUserId && t.visibility !== 'public') return false
       if (productCategory && t.productCategory !== productCategory) return false
       if (imageStyle && t.imageStyle !== imageStyle) return false
       if (setting && t.setting !== setting) return false
@@ -1274,6 +1288,8 @@ export const listTemplateFilterOptions = query({
     const primaryColors = new Set<string>()
     const angleTypes = new Set<string>()
     for (const r of rows) {
+      // Filter chips come from the curated library only (custom rows are untagged).
+      if (r.ownerUserId) continue
       if (r.productCategory) productCategories.add(r.productCategory)
       if (r.imageStyle) imageStyles.add(r.imageStyle)
       if (r.setting) settings.add(r.setting)
@@ -1297,7 +1313,9 @@ export const countPublishedTemplates = query({
       .query('adTemplates')
       .withIndex('by_status', (q) => q.eq('status', 'published'))
       .collect()
-    return { count: all.length }
+    // Match the discover browse: curated + public custom templates.
+    const count = all.filter((t) => !t.ownerUserId || t.visibility === 'public').length
+    return { count }
   },
 })
 
