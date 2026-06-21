@@ -29,7 +29,7 @@ import { getClerkClient } from '../lib/billing/provider.clerk'
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
 import type { ActionCtx, MutationCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
-import { isKnownPlan, PLAN_CONFIG } from '../lib/billing/planConfig'
+import { isKnownPlan, isUnlimited, PLAN_CONFIG } from '../lib/billing/planConfig'
 import { mcToCredits } from '../lib/billing/credits'
 
 /**
@@ -526,7 +526,9 @@ export const getBillingStatus = query({
       cancelScheduledAt: row?.cancelScheduledAt ?? null,
       periodEnd: row?.periodEnd ?? null,
       productCount: products.length,
-      productLimit: productLimit === Infinity ? null : productLimit,
+      // Convention: -1 means unlimited. Surface as null so the UI omits the
+      // cap (and renders "Unlimited") instead of leaking the raw sentinel.
+      productLimit: isUnlimited(productLimit) ? null : productLimit,
       creditsUsed,
       creditsTotal,
       resetsOn: nextReset,

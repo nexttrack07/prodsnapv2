@@ -1481,7 +1481,7 @@ function PricingSection() {
 
   const isMobile = useIsMobile()
   return (
-    <section aria-labelledby="pricing-title" style={{ background: T.cream, color: T.ink }}>
+    <section id="pricing" aria-labelledby="pricing-title" style={{ background: T.cream, color: T.ink, scrollMarginTop: 64 }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
           <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>start free · 07</Eyebrow>

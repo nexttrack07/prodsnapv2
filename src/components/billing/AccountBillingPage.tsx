@@ -229,7 +229,9 @@ export function AccountBillingPage() {
                 </Group>
                 <Text size="sm" c="dark.1">
                   {status.productCount}
-                  {status.productLimit != null ? ` / ${status.productLimit}` : ''}
+                  {status.productLimit != null
+                    ? ` / ${status.productLimit}`
+                    : ' / Unlimited'}
                 </Text>
               </Group>
               {status.productLimit != null && (

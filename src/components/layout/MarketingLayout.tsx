@@ -32,6 +32,19 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
   // skip the shared MarketingLayout footer there to avoid duplication.
   const renderSharedFooter = pathname !== '/'
 
+  // "Pricing" lives as a section on the landing page (#pricing) rather than a
+  // standalone route. When already on the landing page, smooth-scroll to it;
+  // otherwise let the Link navigate to "/#pricing" and the router's scroll
+  // restoration handles the jump.
+  const handlePricingClick = (e: React.MouseEvent) => {
+    if (pathname === '/') {
+      e.preventDefault()
+      document
+        .getElementById('pricing')
+        ?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
+
   return (
     <>
       <AppShell header={{ height: 64 }} padding={0}>
@@ -58,7 +71,9 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
                 </Anchor>
                 <Group gap={4} visibleFrom="sm">
                   <NavLink to="/">Home</NavLink>
-                  <NavLink to="/pricing">Pricing</NavLink>
+                  <NavLink to="/" hash="pricing" onClick={handlePricingClick}>
+                    Pricing
+                  </NavLink>
                 </Group>
               </Group>
               <Group gap="md">
@@ -113,7 +128,14 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
           <MobileNavLink to="/" onClick={closeMobileNav}>
             Home
           </MobileNavLink>
-          <MobileNavLink to="/pricing" onClick={closeMobileNav}>
+          <MobileNavLink
+            to="/"
+            hash="pricing"
+            onClick={(e) => {
+              handlePricingClick(e)
+              closeMobileNav()
+            }}
+          >
             Pricing
           </MobileNavLink>
           <Unauthenticated>
@@ -138,13 +160,27 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
   )
 }
 
-function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
+function NavLink({
+  to,
+  hash,
+  onClick,
+  children,
+}: {
+  to: string
+  hash?: string
+  onClick?: (e: React.MouseEvent) => void
+  children: React.ReactNode
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const isActive = to === '/' ? pathname === '/' : pathname.startsWith(to)
+  // Hash links (e.g. the in-page Pricing anchor) aren't tied to a route, so
+  // never render them as the active page.
+  const isActive = hash ? false : to === '/' ? pathname === '/' : pathname.startsWith(to)
   return (
     <Anchor
       component={Link}
       to={to}
+      hash={hash}
+      onClick={onClick}
       underline="never"
       px="sm"
       py={6}
@@ -172,19 +208,22 @@ function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
 
 function MobileNavLink({
   to,
+  hash,
   children,
   onClick,
 }: {
   to: string
+  hash?: string
   children: React.ReactNode
-  onClick: () => void
+  onClick: (e: React.MouseEvent) => void
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const isActive = to === '/' ? pathname === '/' : pathname.startsWith(to)
+  const isActive = hash ? false : to === '/' ? pathname === '/' : pathname.startsWith(to)
   return (
     <Anchor
       component={Link}
       to={to}
+      hash={hash}
       onClick={onClick}
       underline="never"
       px="md"
