@@ -29,16 +29,26 @@ import { IconCheck } from '@tabler/icons-react'
 import { useAction, useQuery } from 'convex/react'
 import { useClerk } from '@clerk/react'
 import { api } from '../../../convex/_generated/api'
-import { PLAN_CONFIG } from '../../../convex/lib/billing/planConfig'
+import { PLAN_CONFIG, isUnlimited } from '../../../convex/lib/billing/planConfig'
 import type { BillingPlanSummary } from './types'
 
 export type PlanCardProps = {
   plan: BillingPlanSummary
   period: 'month' | 'annual'
   isCurrent?: boolean
+  /** Marketing badge ("Most popular", "Best value"). */
+  badge?: string | null
+  /** Visually elevate this card above its siblings. */
+  highlight?: boolean
 }
 
-export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
+export function PlanCard({
+  plan,
+  period,
+  isCurrent = false,
+  badge = null,
+  highlight = false,
+}: PlanCardProps) {
   const limits = PLAN_CONFIG[plan.slug]
   const billingStatus = useQuery(api.billing.syncPlan.getBillingStatus)
   const syncPlan = useAction(api.billing.syncPlan.syncUserPlan)
@@ -62,6 +72,17 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
   const currencySymbol = plan.fee?.currencySymbol ?? '$'
   const trialDays = plan.freeTrialEnabled ? plan.freeTrialDays : null
 
+  // Annual savings, computed from Clerk's own amounts so the "sale" always
+  // matches what the user is charged at checkout (no fabricated discount).
+  // `amount` is in the currency's smallest unit (cents).
+  const monthlyAmount = plan.fee?.amount ?? 0
+  const annualMonthlyAmount = plan.annualMonthlyFee?.amount ?? 0
+  const yearlySavings =
+    monthlyAmount > 0 && annualMonthlyAmount > 0
+      ? Math.round(((monthlyAmount - annualMonthlyAmount) * 12) / 100)
+      : 0
+  const showAnnualSale = period === 'annual' && yearlySavings > 0
+
   const checkoutHref = `/checkout?planId=${encodeURIComponent(plan.id)}&period=${period}`
 
   // Has the user already subscribed to ANY paid plan? Our custom
@@ -76,16 +97,19 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
     !!billingStatus.plan &&
     billingStatus.plan !== 'free'
 
-  // Determine if this is a downgrade that would leave the user over-limit
+  // Determine if this is a downgrade that would leave the user over-limit.
+  // Unlimited (-1) target tiers can never be over-limit.
   const isProductOverLimit =
     !isCurrent &&
     limits != null &&
+    !isUnlimited(limits.productLimit) &&
     billingStatus?.signedIn &&
     billingStatus.productCount > limits.productLimit
 
   const isCreditsDowngrade =
     !isCurrent &&
     limits != null &&
+    !isUnlimited(limits.imageCredits) &&
     billingStatus?.signedIn &&
     billingStatus.creditsTotal > 0 &&
     billingStatus.creditsUsed > limits.imageCredits
@@ -121,14 +145,29 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
         radius="lg"
         padding="xl"
         style={{
-          borderColor: isCurrent
-            ? 'var(--mantine-color-brand-5)'
-            : 'var(--mantine-color-dark-5)',
-          borderWidth: isCurrent ? 2 : 1,
+          borderColor:
+            isCurrent || highlight
+              ? 'var(--mantine-color-brand-5)'
+              : 'var(--mantine-color-dark-5)',
+          borderWidth: isCurrent || highlight ? 2 : 1,
           backgroundColor: 'var(--mantine-color-dark-7)',
+          boxShadow: highlight ? 'var(--mantine-shadow-xl)' : undefined,
+          position: 'relative',
         }}
       >
         <Stack gap="md" h="100%">
+          {badge && (
+            <Badge
+              color={highlight ? 'brand' : 'gray'}
+              variant={highlight ? 'filled' : 'light'}
+              size="sm"
+              radius="sm"
+              style={{ alignSelf: 'flex-start' }}
+            >
+              {badge}
+            </Badge>
+          )}
+
           <Group justify="space-between" align="flex-start">
             <Title order={3} tt="capitalize">
               {plan.name}
@@ -146,15 +185,29 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
             </Text>
           )}
 
-          <Group gap={4} align="baseline">
-            <Text fw={800} fz={40}>
-              {currencySymbol}
-              {priceAmount ?? '—'}
-            </Text>
-            <Text size="sm" c="dark.2">
-              /mo{period === 'annual' ? ' billed annually' : ''}
-            </Text>
-          </Group>
+          <Stack gap={4}>
+            <Group gap={8} align="baseline">
+              {showAnnualSale && plan.fee?.amountFormatted && (
+                <Text fw={500} fz={22} c="dark.3" td="line-through">
+                  {currencySymbol}
+                  {plan.fee.amountFormatted}
+                </Text>
+              )}
+              <Text fw={800} fz={40}>
+                {currencySymbol}
+                {priceAmount ?? '—'}
+              </Text>
+              <Text size="sm" c="dark.2">
+                /mo{period === 'annual' ? ', billed annually' : ''}
+              </Text>
+            </Group>
+            {showAnnualSale && (
+              <Badge color="teal" variant="light" size="sm" w="fit-content">
+                Save {currencySymbol}
+                {yearlySavings}/year
+              </Badge>
+            )}
+          </Stack>
 
           {trialDays != null && (
             <Badge color="brand" variant="light" size="sm" w="fit-content">
@@ -169,20 +222,35 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
               icon={<IconCheck size={16} color="var(--mantine-color-brand-5)" />}
             >
               <List.Item>
-                <strong>{limits.productLimit}</strong> product
-                {limits.productLimit === 1 ? '' : 's'}
+                {isUnlimited(limits.productLimit) ? (
+                  <>
+                    <strong>Unlimited</strong> products
+                  </>
+                ) : (
+                  <>
+                    <strong>{limits.productLimit}</strong> product
+                    {limits.productLimit === 1 ? '' : 's'}
+                  </>
+                )}
               </List.Item>
               <List.Item>
-                <strong>{limits.imageCredits}</strong> credits / month
-                <Text
-                  component="span"
-                  display="block"
-                  size="xs"
-                  c="dark.3"
-                  fs="italic"
-                >
-                  ≈ {Math.floor(limits.imageCredits / 10)} image generations
-                </Text>
+                <strong>
+                  {isUnlimited(limits.imageCredits)
+                    ? 'Unlimited'
+                    : limits.imageCredits}
+                </strong>{' '}
+                credits / month
+                {!isUnlimited(limits.imageCredits) && (
+                  <Text
+                    component="span"
+                    display="block"
+                    size="xs"
+                    c="dark.3"
+                    fs="italic"
+                  >
+                    ≈ {Math.floor(limits.imageCredits / 10)} image generations
+                  </Text>
+                )}
               </List.Item>
               <List.Item>
                 Unlimited ad copy, brand kits &amp; product analysis
@@ -206,23 +274,34 @@ export function PlanCard({ plan, period, isCurrent = false }: PlanCardProps) {
             </List>
           )}
 
-          <Button
-            component="a"
-            href={checkoutHref}
-            color="brand"
-            size="lg"
-            fz="sm"
-            fullWidth
-            mt="auto"
-            disabled={isCurrent}
-            onClick={handleSubscribeClick}
-          >
-            {isCurrent
-              ? 'Current plan'
-              : hasActiveSubscription
-                ? `Switch to ${plan.name}`
-                : `Subscribe — ${plan.name}`}
-          </Button>
+          <Stack gap={6} mt="auto">
+            <Button
+              component="a"
+              href={checkoutHref}
+              color="brand"
+              variant={highlight ? 'filled' : 'light'}
+              size="lg"
+              fz="sm"
+              fullWidth
+              disabled={isCurrent}
+              onClick={handleSubscribeClick}
+            >
+              {isCurrent
+                ? 'Current plan'
+                : hasActiveSubscription
+                  ? `Switch to ${plan.name}`
+                  : trialDays != null
+                    ? `Start ${trialDays}-day free trial`
+                    : `Subscribe — ${plan.name}`}
+            </Button>
+            {!isCurrent && !hasActiveSubscription && (
+              <Text size="xs" c="dark.3" ta="center">
+                {trialDays != null && priceAmount
+                  ? `Free for ${trialDays} days, then ${currencySymbol}${priceAmount}/mo. Cancel anytime.`
+                  : 'Cancel anytime.'}
+              </Text>
+            )}
+          </Stack>
         </Stack>
       </Card>
 
