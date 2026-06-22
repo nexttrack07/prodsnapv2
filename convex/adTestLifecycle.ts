@@ -70,13 +70,22 @@ export const getLifecycleCandidates = internalQuery({
   handler: async (ctx, { now }) => {
     const cutoff = now - LIFECYCLE_WINDOW_MS
 
-    // exportedAt in [1, cutoff]: set (excludes undefined, which sorts first) and
-    // at least a week old.
+    // Scan ONLY not-yet-nudged tests (lastLifecycleEmailSentAt unset) whose
+    // exportedAt is in [1, cutoff]: set (excludes undefined, which sorts first)
+    // and at least a week old. Because nudged tests live in a different index
+    // partition, stamping them removes them from this scan permanently — the
+    // sweep can never get stuck re-walking the same already-handled rows.
+    // Archived rows are filtered at the DB level so they don't consume the take
+    // budget either.
     const tests = await ctx.db
       .query('adTests')
-      .withIndex('by_exportedAt', (q) =>
-        q.gte('exportedAt', 1).lte('exportedAt', cutoff),
+      .withIndex('by_lifecycle', (q) =>
+        q
+          .eq('lastLifecycleEmailSentAt', undefined)
+          .gte('exportedAt', 1)
+          .lte('exportedAt', cutoff),
       )
+      .filter((q) => q.eq(q.field('archivedAt'), undefined))
       .take(MAX_PER_SWEEP)
 
     const out: Array<{

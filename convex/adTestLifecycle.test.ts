@@ -145,6 +145,45 @@ test('excludes a test whose owner has no userPlans row', async () => {
   expect(await candidateIds(t, now)).toEqual([])
 })
 
+test('a large backlog of already-nudged tests does not stall the sweep', async () => {
+  const t = convexTest(schema, modules)
+  const now = Date.now()
+  await seedUserPlan(t)
+  const productId = await seedProduct(t)
+  const old = now - WEEK - 1000
+
+  // 205 already-nudged exported tests (> the 200 per-sweep budget). With a naive
+  // take-then-filter these would fill the window and hide the fresh test forever.
+  await t.run(async (ctx) => {
+    for (let i = 0; i < 205; i++) {
+      await ctx.db.insert('adTests', {
+        userId: USER,
+        productId,
+        name: `Nudged ${i}`,
+        status: 'ready',
+        source: 'custom',
+        angles: [{ key: 'a', title: 'A' }],
+        placements: ['feed_square'],
+        aspectRatios: ['1:1'],
+        plannedImageCount: 1,
+        completedImageCount: 1,
+        failedImageCount: 0,
+        winnerCount: 0,
+        exportedAt: old,
+        lastLifecycleEmailSentAt: now - 1000,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+  })
+  const fresh = await seedTest(t, productId, { exportedAt: old, name: 'Fresh' })
+
+  const cands = await t.query(internal.adTestLifecycle.getLifecycleCandidates, {
+    now,
+  })
+  expect(cands.map((c) => c.adTestId as string)).toEqual([fresh])
+})
+
 test('markLifecycleNudgeSent stamps lastLifecycleEmailSentAt', async () => {
   const t = convexTest(schema, modules)
   const productId = await seedProduct(t)

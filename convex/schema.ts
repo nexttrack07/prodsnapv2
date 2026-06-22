@@ -493,9 +493,11 @@ const schema = defineSchema({
     .index('by_userId_archivedAt', ['userId', 'archivedAt'])
     .index('by_productId_archivedAt', ['productId', 'archivedAt'])
     .index('by_productId_createdAt', ['productId', 'createdAt'])
-    // Lets the weekly lifecycle cron scan exported tests by export time without
-    // walking every test.
-    .index('by_exportedAt', ['exportedAt']),
+    // Weekly lifecycle cron: scan only NOT-yet-nudged tests by export time.
+    // Putting lastLifecycleEmailSentAt first means once a test is nudged it
+    // leaves the `eq(undefined)` partition entirely, so the sweep never re-walks
+    // already-handled rows and always reaches fresh candidates.
+    .index('by_lifecycle', ['lastLifecycleEmailSentAt', 'exportedAt']),
 
   // ─── Ad Test recommendations (persisted "what to test next" concepts) ──────
   // Generated during product analysis / winner iteration and stored so Home
