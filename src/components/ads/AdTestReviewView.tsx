@@ -38,6 +38,8 @@ import {
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { CopyBankPanel } from './CopyBankPanel'
+import { PerformanceNotesPanel } from './PerformanceNotesPanel'
+import { WinnerNudge } from './WinnerNudge'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -263,6 +265,9 @@ export function AdTestReviewView({
       {/* ── Copy Bank ─────────────────────────────────────────────────────── */}
       <CopyBankPanel adTestId={adTestId} />
 
+      {/* Performance notes — test-level history (CPA/CTR/ROAS, observations). */}
+      <PerformanceNotesPanel adTestId={adTestId} />
+
       {/* ── Empty state ──────────────────────────────────────────────────── */}
       {groups.size === 0 && (
         <Paper
@@ -373,6 +378,7 @@ type GenRow = {
   isWinner?: boolean
   currentStep?: string
   adTestId?: Id<'adTests'>
+  productId?: Id<'products'>
   selectedCopySetId?: Id<'adTestCopySets'>
   selectedHeadlineIndex?: number
   selectedPrimaryTextIndex?: number
@@ -501,6 +507,14 @@ function AdTestGenerationCard({
           and the test has at least one Copy Bank set to pair from. */}
       {isComplete && copySets.length > 0 && (
         <CopyPairingControl gen={gen} copySets={copySets} />
+      )}
+
+      {/* Winner loop — seed the next test directly from a winning creative. */}
+      {isComplete && gen.isWinner && (
+        <WinnerNudge
+          ad={{ _id: gen._id, productId: gen.productId, adTestId: gen.adTestId }}
+          variant="compact"
+        />
       )}
     </Stack>
   )

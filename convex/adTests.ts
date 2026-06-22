@@ -895,6 +895,116 @@ export const savePerformanceNote = mutation({
   },
 })
 
+/**
+ * Lists an Ad Test's performance notes, newest first. Read-only, owner-scoped;
+ * returns [] for unauthenticated or non-owning callers so the notes panel can
+ * render without throwing.
+ */
+export const listPerformanceNotes = query({
+  args: { adTestId: v.id('adTests') },
+  handler: async (ctx, { adTestId }) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return []
+
+    const adTest = await ctx.db.get(adTestId)
+    if (!adTest || adTest.userId !== userId) return []
+
+    const notes = await ctx.db
+      .query('adTestPerformanceNotes')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+      .order('desc')
+      .take(100)
+    return notes.filter((n) => n.userId === userId)
+  },
+})
+
+/**
+ * Seeds the next Ad Test from a winning creative (the winner loop). Creates a
+ * `winner_iteration` draft that re-runs the winning angle (or prompt) across the
+ * standard placement set, linked back via `sourceGenerationId`/`sourceAdTestId`.
+ * Generation isn't started here — the user confirms in the review screen before
+ * spending credits. Returns the new draft's id.
+ */
+export const createNextAdTestFromWinner = mutation({
+  args: {
+    generationId: v.id('templateGenerations'),
+    name: v.optional(v.string()),
+  },
+  handler: async (ctx, { generationId, name }): Promise<Id<'adTests'>> => {
+    const userId = await requireAuth(ctx)
+    const gen = await ctx.db.get(generationId)
+    if (!gen) throw new Error('Generation not found')
+
+    // Ownership: modern rows via userId; legacy rows via the parent product.
+    if (gen.userId) {
+      if (gen.userId !== userId) throw new Error('Generation not found')
+    } else if (gen.productId) {
+      const owner = await ctx.db.get(gen.productId)
+      if (!owner || owner.userId !== userId) throw new Error('Generation not found')
+    } else {
+      throw new Error('Generation not found')
+    }
+
+    if (!gen.productId) {
+      throw new Error('Winner has no product to iterate from')
+    }
+    const product = await requireOwnedProduct(ctx, userId, gen.productId)
+
+    // Reconstruct the winning concept: prefer the seeded angle, else the prompt.
+    const angles: Array<{
+      key: string
+      title: string
+      description?: string
+      hook?: string
+      suggestedAdStyle?: string
+    }> = []
+    let prompts: string[] | undefined
+    if (gen.angleSeed) {
+      angles.push({
+        key: gen.angleKey ?? 'winner',
+        title: gen.angleSeed.title,
+        description: gen.angleSeed.description || undefined,
+        hook: gen.angleSeed.hook || undefined,
+        suggestedAdStyle: gen.angleSeed.suggestedAdStyle || undefined,
+      })
+    } else if (gen.dynamicPrompt) {
+      prompts = [gen.dynamicPrompt]
+    } else {
+      throw new Error('Winner has no angle or prompt to iterate from')
+    }
+
+    // Re-test the winning concept across the standard starter placements.
+    const placements = ['feed_square', 'feed_vertical', 'story_reel'] as const
+
+    const fallbackName = gen.angleSeed?.title
+      ? `Next test: ${gen.angleSeed.title}`
+      : `Next test from ${product.name}`
+    const testName = (name?.trim() || fallbackName).slice(0, 120)
+
+    const now = Date.now()
+    const adTestId = await ctx.db.insert('adTests', {
+      userId,
+      productId: gen.productId,
+      name: testName,
+      status: 'draft',
+      source: 'winner_iteration',
+      angles,
+      prompts,
+      placements: [...placements],
+      aspectRatios: aspectRatiosForPlacements([...placements]),
+      sourceGenerationId: generationId,
+      sourceAdTestId: gen.adTestId,
+      plannedImageCount: 0,
+      completedImageCount: 0,
+      failedImageCount: 0,
+      winnerCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+    return adTestId
+  },
+})
+
 // ─── Copy Bank (test-level suggested copy; user-triggered, unmetered) ────────
 
 /**
