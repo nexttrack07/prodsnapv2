@@ -10,6 +10,7 @@
 
 import type * as activation from "../activation.js";
 import type * as adCopy from "../adCopy.js";
+import type * as adTestExport from "../adTestExport.js";
 import type * as adTests from "../adTests.js";
 import type * as admin_audit from "../admin/audit.js";
 import type * as admin_playground from "../admin/playground.js";
@@ -30,6 +31,7 @@ import type * as http from "../http.js";
 import type * as ideaActions from "../ideaActions.js";
 import type * as ideas from "../ideas.js";
 import type * as invariant from "../invariant.js";
+import type * as lib_adTestExportCsv from "../lib/adTestExportCsv.js";
 import type * as lib_adTestValidators from "../lib/adTestValidators.js";
 import type * as lib_admin_requireAdmin from "../lib/admin/requireAdmin.js";
 import type * as lib_billing_capabilities from "../lib/billing/capabilities.js";
@@ -73,6 +75,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   activation: typeof activation;
   adCopy: typeof adCopy;
+  adTestExport: typeof adTestExport;
   adTests: typeof adTests;
   "admin/audit": typeof admin_audit;
   "admin/playground": typeof admin_playground;
@@ -93,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   ideaActions: typeof ideaActions;
   ideas: typeof ideas;
   invariant: typeof invariant;
+  "lib/adTestExportCsv": typeof lib_adTestExportCsv;
   "lib/adTestValidators": typeof lib_adTestValidators;
   "lib/admin/requireAdmin": typeof lib_admin_requireAdmin;
   "lib/billing/capabilities": typeof lib_billing_capabilities;

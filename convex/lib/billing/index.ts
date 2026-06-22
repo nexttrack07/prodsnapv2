@@ -16,7 +16,7 @@
  */
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import { CAPABILITIES, type Capability } from './capabilities'
-import { PLAN_CONFIG } from './planConfig'
+import { PLAN_CONFIG, isPaidPlan } from './planConfig'
 import { ClerkBillingProvider } from './provider.clerk'
 import type { BillingContext, BillingProvider } from './provider'
 import { billingError } from './errors'
@@ -58,6 +58,29 @@ export async function getBillingContext(
   ctx: QueryCtx | MutationCtx,
 ): Promise<BillingContext | null> {
   return billingProvider.getContext(ctx)
+}
+
+/**
+ * Read-only paid-plan gate, usable from a QueryCtx (no audit write, unlike
+ * `requireCapability`). Returns whether the caller may use a paid-only feature
+ * such as export/download, plus the resolved billing context. Honors the
+ * BILLING_ENABLED kill switch and the BILLING_TRUST_CACHE outage allowance.
+ *
+ * `allowed` is false (rather than throwing) so callers decide how to surface
+ * it — a query can return a preview flag, an export action can throw an upgrade
+ * error. Unauthenticated callers get `{ allowed: false, billing: null }`.
+ */
+export async function hasPaidPlanAccess(
+  ctx: QueryCtx | MutationCtx,
+): Promise<{ allowed: boolean; billing: BillingContext | null }> {
+  const billing = await getBillingContext(ctx)
+  if (!billing) return { allowed: false, billing: null }
+  if (!isBillingEnabled()) return { allowed: true, billing }
+  if (!billing.hasKnownPlan) {
+    if (isCacheTrusted(billing.syncedAt)) return { allowed: true, billing }
+    return { allowed: false, billing }
+  }
+  return { allowed: isPaidPlan(billing.plan), billing }
 }
 
 // ─── Capability enforcement ───────────────────────────────────────────────
