@@ -95,13 +95,14 @@ import { ConvexError } from 'convex/values'
 import { fetchDownloadAsset } from '../utils/downloads'
 import { downloadGeneratedImage, DOWNLOAD_FORMATS, type DownloadFormat } from '../utils/downloadImage'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
+import { AdTestReviewView } from '../components/ads/AdTestReviewView'
 import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
 import { BrandPicker } from '../components/brand/BrandPicker'
 import { useCustomTemplateUpload } from '../utils/customTemplateUpload'
 import { MAX_TEMPLATE_IMAGE_SIZE } from '../utils/constants'
 
-type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string; editAd?: string }
+type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string; editAd?: string; adTestId?: string }
 
 export const Route = createFileRoute('/studio/$productId')({
   validateSearch: (search: Record<string, unknown>): ProductSearch => {
@@ -120,6 +121,9 @@ export const Route = createFileRoute('/studio/$productId')({
     }
     if (typeof search.editAd === 'string' && search.editAd.length > 0) {
       out.editAd = search.editAd
+    }
+    if (typeof search.adTestId === 'string' && search.adTestId.length > 0) {
+      out.adTestId = search.adTestId
     }
     return out
   },
@@ -212,6 +216,7 @@ function ProductWorkspacePage() {
   // Nested routes (e.g. /studio/$productId/strategy) take over the page —
   // render only the child Outlet and skip the workspace content.
   const isChildActive = pathname !== `/studio/${productId}`
+  const isAdTestReview = !!search.adTestId
   const [view, setView] = useState<View>(search.compose || search.template || search.angle || search.editAd ? 'generate' : 'gallery')
   const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
 
@@ -350,8 +355,8 @@ function ProductWorkspacePage() {
         </Alert>
       )}
 
-      {/* Rich product card - hidden only in generate mode */}
-      {view !== 'generate' && (
+      {/* Rich product card — hidden in generate mode and ad test review mode */}
+      {view !== 'generate' && !isAdTestReview && (
         <ProductHeader
           product={product}
           productId={productId as Id<'products'>}
@@ -363,7 +368,47 @@ function ProductWorkspacePage() {
         />
       )}
 
-      {view === 'gallery' && (
+      {/* Ad Test review mode — takes over the whole content area */}
+      {isAdTestReview && (
+        <>
+          <AdTestReviewView
+            adTestId={search.adTestId as Id<'adTests'>}
+            onBack={() => {
+              const { adTestId: _omit, ad: _omit2, ...rest } = search
+              navigate({
+                to: '/studio/$productId',
+                params: { productId },
+                search: rest,
+                replace: true,
+              })
+            }}
+            onOpenAd={(id) =>
+              navigate({
+                to: '/studio/$productId',
+                params: { productId },
+                search: { ...search, ad: id as string },
+              })
+            }
+          />
+          {/* Reuse the existing AdDetailPanel for full ad detail view */}
+          <AdDetailPanel
+            opened={!!search.ad}
+            onClose={() => {
+              const { ad: _omit, ...rest } = search
+              navigate({
+                to: '/studio/$productId',
+                params: { productId },
+                search: rest,
+                replace: true,
+              })
+            }}
+            adId={(search.ad ?? null) as Id<'templateGenerations'> | null}
+            siblings={[]}
+          />
+        </>
+      )}
+
+      {!isAdTestReview && view === 'gallery' && (
         <GalleryView
           product={product}
           productId={productId as Id<'products'>}
@@ -395,7 +440,7 @@ function ProductWorkspacePage() {
         />
       )}
 
-      {view === 'generate' && (
+      {!isAdTestReview && view === 'generate' && (
         <GenerateWizard
           productId={productId as Id<'products'>}
           product={product}
