@@ -2,7 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { SignIn } from '@clerk/react'
 import { Center } from '@mantine/core'
 
-export const Route = createFileRoute('/sign-in')({
+// Splat route so Clerk's path-based sub-steps (e.g. /sign-in/factor-one,
+// /sign-in/sso-callback) all render the SignIn component instead of 404ing.
+// The splat also matches the bare /sign-in path.
+export const Route = createFileRoute('/sign-in/$')({
   component: SignInRoute,
 })
 
