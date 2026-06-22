@@ -315,6 +315,105 @@ export const activateStarterForProduct = action({
   },
 })
 
+// ─── Dev-only: reset the caller's activation so the starter flow can re-run ────
+
+/**
+ * LOCAL TESTING ONLY. Wipes the signed-in user's activation state — products
+ * and all their children, ad tests, recommendations, url imports, the credit
+ * balance, and the one-time starter-grant flag — so you can run landing → free
+ * test repeatedly on a single account instead of signing up new ones.
+ *
+ * Triple-guarded: it's a no-op unless `DEV_ALLOW_REACTIVATION === 'true'` is set
+ * in the Convex env, it only ever touches the CALLER's own data, and the UI
+ * button that calls it renders only in a Vite dev build.
+ */
+export const resetMyActivation = mutation({
+  args: {},
+  handler: async (ctx) => {
+    if (process.env.DEV_ALLOW_REACTIVATION !== 'true') {
+      throw new Error(
+        'Reset is disabled. Run: npx convex env set DEV_ALLOW_REACTIVATION true',
+      )
+    }
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    const userId = identity.tokenIdentifier
+
+    const products = await ctx.db
+      .query('products')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .collect()
+
+    for (const p of products) {
+      const imgs = await ctx.db
+        .query('productImages')
+        .withIndex('by_product', (q) => q.eq('productId', p._id))
+        .collect()
+      for (const i of imgs) await ctx.db.delete(i._id)
+
+      const tests = await ctx.db
+        .query('adTests')
+        .withIndex('by_productId', (q) => q.eq('productId', p._id))
+        .collect()
+      for (const t of tests) {
+        const copySets = await ctx.db
+          .query('adTestCopySets')
+          .withIndex('by_adTestId', (q) => q.eq('adTestId', t._id))
+          .collect()
+        for (const c of copySets) await ctx.db.delete(c._id)
+        const notes = await ctx.db
+          .query('adTestPerformanceNotes')
+          .withIndex('by_adTestId', (q) => q.eq('adTestId', t._id))
+          .collect()
+        for (const n of notes) await ctx.db.delete(n._id)
+        await ctx.db.delete(t._id)
+      }
+
+      const recs = await ctx.db
+        .query('adTestRecommendations')
+        .withIndex('by_productId', (q) => q.eq('productId', p._id))
+        .collect()
+      for (const r of recs) await ctx.db.delete(r._id)
+
+      const gens = await ctx.db
+        .query('templateGenerations')
+        .withIndex('by_product', (q) => q.eq('productId', p._id))
+        .collect()
+      for (const g of gens) await ctx.db.delete(g._id)
+
+      await ctx.db.delete(p._id)
+    }
+
+    const imports = await ctx.db
+      .query('urlImports')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .collect()
+    for (const im of imports) await ctx.db.delete(im._id)
+
+    const balance = await ctx.db
+      .query('creditBalances')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    if (balance) await ctx.db.delete(balance._id)
+
+    const profile = await ctx.db
+      .query('onboardingProfiles')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    if (profile) {
+      await ctx.db.patch(profile._id, {
+        hasReceivedStarterGrant: undefined,
+        starterGrantAt: undefined,
+        completedAt: undefined,
+        currentStep: 1,
+        updatedAt: Date.now(),
+      })
+    }
+
+    return { deletedProducts: products.length }
+  },
+})
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /**

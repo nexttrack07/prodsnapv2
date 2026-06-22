@@ -21,6 +21,7 @@ import { NotFound } from '~/components/NotFound'
 import { BillingSync } from '~/components/billing/BillingSync'
 import { OnboardingGuard } from '~/components/onboarding/OnboardingGuard'
 import { AuthGuard } from '~/components/auth/AuthGuard'
+import { DevResetButton } from '~/components/dev/DevResetButton'
 import { AppShellLayout } from '~/components/layout/AppShellLayout'
 import { MarketingLayout } from '~/components/layout/MarketingLayout'
 import { WizardLayout } from '~/components/layout/WizardLayout'
@@ -123,6 +124,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             <Authenticated>
               <BillingSync />
               <OnboardingGuard />
+              <DevResetButton />
             </Authenticated>
             <Unauthenticated>
               <AuthGuard />
