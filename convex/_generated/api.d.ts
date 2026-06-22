@@ -9,6 +9,7 @@
  */
 
 import type * as adCopy from "../adCopy.js";
+import type * as adTests from "../adTests.js";
 import type * as admin_audit from "../admin/audit.js";
 import type * as admin_playground from "../admin/playground.js";
 import type * as admin_playgroundActions from "../admin/playgroundActions.js";
@@ -28,6 +29,7 @@ import type * as http from "../http.js";
 import type * as ideaActions from "../ideaActions.js";
 import type * as ideas from "../ideas.js";
 import type * as invariant from "../invariant.js";
+import type * as lib_adTestValidators from "../lib/adTestValidators.js";
 import type * as lib_admin_requireAdmin from "../lib/admin/requireAdmin.js";
 import type * as lib_billing_capabilities from "../lib/billing/capabilities.js";
 import type * as lib_billing_chargeMutation from "../lib/billing/chargeMutation.js";
@@ -69,6 +71,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   adCopy: typeof adCopy;
+  adTests: typeof adTests;
   "admin/audit": typeof admin_audit;
   "admin/playground": typeof admin_playground;
   "admin/playgroundActions": typeof admin_playgroundActions;
@@ -88,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   ideaActions: typeof ideaActions;
   ideas: typeof ideas;
   invariant: typeof invariant;
+  "lib/adTestValidators": typeof lib_adTestValidators;
   "lib/admin/requireAdmin": typeof lib_admin_requireAdmin;
   "lib/billing/capabilities": typeof lib_billing_capabilities;
   "lib/billing/chargeMutation": typeof lib_billing_chargeMutation;
