@@ -32,6 +32,7 @@ import type * as ideaActions from "../ideaActions.js";
 import type * as ideas from "../ideas.js";
 import type * as invariant from "../invariant.js";
 import type * as lib_adTestExportCsv from "../lib/adTestExportCsv.js";
+import type * as lib_adTestRecommendations from "../lib/adTestRecommendations.js";
 import type * as lib_adTestValidators from "../lib/adTestValidators.js";
 import type * as lib_admin_requireAdmin from "../lib/admin/requireAdmin.js";
 import type * as lib_billing_capabilities from "../lib/billing/capabilities.js";
@@ -97,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   ideas: typeof ideas;
   invariant: typeof invariant;
   "lib/adTestExportCsv": typeof lib_adTestExportCsv;
+  "lib/adTestRecommendations": typeof lib_adTestRecommendations;
   "lib/adTestValidators": typeof lib_adTestValidators;
   "lib/admin/requireAdmin": typeof lib_admin_requireAdmin;
   "lib/billing/capabilities": typeof lib_billing_capabilities;

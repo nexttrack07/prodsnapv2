@@ -393,6 +393,193 @@ export const prepareExportInternal = internalQuery({
   },
 })
 
+// ─── Home recommendation surface (issue #39) ─────────────────────────────────
+
+/**
+ * Read-only Home surface: the focus product, its persisted "what to test next"
+ * recommendations (priority order), recent ready tests, and recent winners.
+ * Recommendations are read from `adTestRecommendations` — NO LLM work happens
+ * in this query; concepts are generated once during product analysis.
+ *
+ * Winners are returned so Home can prioritize "create next test from winner"
+ * when present. Returns empty arrays (never throws) for signed-out users or
+ * users with no product, so the Home empty state renders cleanly.
+ */
+export const getHomeAdTestSurface = query({
+  args: {},
+  handler: async (ctx) => {
+    const empty = {
+      focusProductId: null,
+      productName: null,
+      recommendations: [],
+      recentWinners: [],
+      recentTests: [],
+    }
+
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return empty
+
+    // Focus product = most recent non-archived (matches products.getFocusProduct).
+    const products = await ctx.db
+      .query('products')
+      .withIndex('by_userId_archived', (q) =>
+        q.eq('userId', userId).eq('archivedAt', undefined),
+      )
+      .order('desc')
+      .take(1)
+    const focusProduct = products[0]
+    if (!focusProduct) return empty
+
+    // Persisted, unconsumed, undismissed recommendations, priority asc.
+    const recRows = await ctx.db
+      .query('adTestRecommendations')
+      .withIndex('by_productId_consumedAt', (q) =>
+        q.eq('productId', focusProduct._id).eq('consumedAt', undefined),
+      )
+      .take(50)
+    const recommendations = recRows
+      .filter((r) => r.userId === userId && r.dismissedAt === undefined)
+      .sort((a, b) => a.concept.priority - b.concept.priority)
+      .slice(0, 6)
+      .map((r) => ({
+        _id: r._id,
+        key: r.concept.key,
+        title: r.concept.title,
+        description: r.concept.description,
+        source: r.concept.source,
+        priority: r.concept.priority,
+        placements: r.concept.placements,
+        angleCount: r.concept.angles.length,
+      }))
+
+    // Recent non-archived tests for the focus product.
+    const testRows = await ctx.db
+      .query('adTests')
+      .withIndex('by_productId_archivedAt', (q) =>
+        q.eq('productId', focusProduct._id).eq('archivedAt', undefined),
+      )
+      .order('desc')
+      .take(6)
+    const recentTests = testRows
+      .filter((t) => t.userId === userId)
+      .map((t) => ({
+        _id: t._id,
+        name: t.name,
+        status: t.status,
+        completedImageCount: t.completedImageCount,
+        winnerCount: t.winnerCount,
+        updatedAt: t.updatedAt,
+      }))
+
+    // Recent winners (starred creatives) across the focus product.
+    const gens = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_product', (q) => q.eq('productId', focusProduct._id))
+      .order('desc')
+      .take(200)
+    const winnerGens = gens
+      .filter((g) => g.isWinner && g.status === 'complete' && !!g.outputUrl)
+      .slice(0, 6)
+
+    const testNameById = new Map(testRows.map((t) => [t._id, t.name]))
+    const recentWinners = []
+    for (const g of winnerGens) {
+      let adTestName: string | null = null
+      if (g.adTestId) {
+        adTestName = testNameById.get(g.adTestId) ?? null
+        if (adTestName === null) {
+          // Winner's test isn't in the recent slice — resolve its name directly.
+          const t = await ctx.db.get(g.adTestId)
+          if (t && t.userId === userId) adTestName = t.name
+        }
+      }
+      recentWinners.push({
+        generationId: g._id,
+        outputUrl: g.outputUrl as string,
+        aspectRatio: g.aspectRatio ?? '1:1',
+        adTestId: g.adTestId ?? null,
+        adTestName,
+      })
+    }
+
+    return {
+      focusProductId: focusProduct._id,
+      productName: focusProduct.name,
+      recommendations,
+      recentWinners,
+      recentTests,
+    }
+  },
+})
+
+/**
+ * Creates a draft Ad Test from a persisted recommendation and marks the
+ * recommendation consumed. Returns the draft's id so the UI can open its review
+ * screen — generation isn't started here, so the user confirms before spending
+ * credits (spec: prefer a confirm state before generating).
+ */
+export const createRecommendedAdTest = mutation({
+  args: { recommendationId: v.id('adTestRecommendations') },
+  handler: async (ctx, { recommendationId }): Promise<Id<'adTests'>> => {
+    const userId = await requireAuth(ctx)
+    const rec = await ctx.db.get(recommendationId)
+    if (!rec || rec.userId !== userId) {
+      throw new Error('Recommendation not found')
+    }
+    await requireOwnedProduct(ctx, userId, rec.productId)
+
+    const concept = rec.concept
+    if (concept.placements.length === 0) {
+      throw new Error('Recommendation has no placements')
+    }
+
+    // Map the concept's provenance to the Ad Test source enum.
+    const source =
+      concept.source === 'starter'
+        ? 'starter'
+        : concept.source === 'winner_iteration'
+          ? 'winner_iteration'
+          : 'recommendation'
+
+    const now = Date.now()
+    const adTestId = await ctx.db.insert('adTests', {
+      userId,
+      productId: rec.productId,
+      name: concept.title,
+      status: 'draft',
+      source,
+      angles: concept.angles,
+      prompts: concept.prompts,
+      placements: concept.placements,
+      aspectRatios: aspectRatiosForPlacements(concept.placements),
+      plannedImageCount: 0,
+      completedImageCount: 0,
+      failedImageCount: 0,
+      winnerCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await ctx.db.patch(recommendationId, { consumedAt: now, updatedAt: now })
+    return adTestId
+  },
+})
+
+/** Dismisses a recommendation so it stops appearing on Home. */
+export const dismissRecommendation = mutation({
+  args: { recommendationId: v.id('adTestRecommendations') },
+  handler: async (ctx, { recommendationId }) => {
+    const userId = await requireAuth(ctx)
+    const rec = await ctx.db.get(recommendationId)
+    if (!rec || rec.userId !== userId) {
+      throw new Error('Recommendation not found')
+    }
+    const now = Date.now()
+    await ctx.db.patch(recommendationId, { dismissedAt: now, updatedAt: now })
+    return null
+  },
+})
+
 // ─── Mutations ───────────────────────────────────────────────────────────────
 
 /**

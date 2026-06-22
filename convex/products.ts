@@ -21,6 +21,10 @@ import {
 import { requireCredits } from './lib/billing/credits'
 import { billingError } from './lib/billing/errors'
 import { requireAdminIdentity } from './lib/admin/requireAdmin'
+import {
+  buildRecommendedConcepts,
+  type MarketingAngleInput,
+} from './lib/adTestRecommendations'
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -378,8 +382,56 @@ export const saveProductAnalysis = internalMutation({
   },
   handler: async (ctx, { productId, ...rest }) => {
     await ctx.db.patch(productId, { ...rest, status: 'ready' })
+
+    // Persist "what to test next" recommendations from the fresh analysis.
+    // These are stored concepts (not query-time LLM calls) that Home reads
+    // directly. Re-analysis refreshes them via replaceProductRecommendations.
+    const product = await ctx.db.get(productId)
+    if (product?.userId && rest.marketingAngles && rest.marketingAngles.length > 0) {
+      await replaceProductRecommendations(
+        ctx,
+        productId,
+        product.userId,
+        rest.marketingAngles,
+      )
+    }
   },
 })
+
+/**
+ * Replaces a product's pending Ad Test recommendations from its marketing
+ * angles. Deletes only un-consumed, un-dismissed rows (so the shelf refreshes
+ * on re-analysis) while preserving recommendation history the user has acted
+ * on. Idempotent enough for repeated analysis runs.
+ */
+async function replaceProductRecommendations(
+  ctx: MutationCtx,
+  productId: Id<'products'>,
+  userId: string,
+  marketingAngles: MarketingAngleInput[],
+): Promise<void> {
+  const existing = await ctx.db
+    .query('adTestRecommendations')
+    .withIndex('by_productId', (q) => q.eq('productId', productId))
+    .collect()
+  for (const row of existing) {
+    if (row.consumedAt === undefined && row.dismissedAt === undefined) {
+      await ctx.db.delete(row._id)
+    }
+  }
+
+  const now = Date.now()
+  const concepts = buildRecommendedConcepts(marketingAngles, now)
+  for (const concept of concepts) {
+    await ctx.db.insert('adTestRecommendations', {
+      userId,
+      productId,
+      concept,
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+}
 
 export const markProductFailed = internalMutation({
   args: {
