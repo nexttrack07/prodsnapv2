@@ -285,6 +285,34 @@ test('savePerformanceNote rejects a generation from a different test', async () 
   ).rejects.toThrow(/does not belong/)
 })
 
+// ─── createDraft: source generation ownership ─────────────────────────────────
+
+test('createDraft rejects a legacy sourceGenerationId whose product is owned by another user', async () => {
+  const t = convexTest(schema, modules)
+  const ownProductId = await seedProduct(t)
+  const otherProductId = await seedProduct(t, OTHER)
+
+  // Legacy generation (no userId) belonging to another user's product.
+  const legacyGen = await t.run((ctx) =>
+    ctx.db.insert('templateGenerations', {
+      productImageUrl: 'https://example.com/p.png',
+      mode: 'angle',
+      colorAdapt: false,
+      variationIndex: 0,
+      status: 'complete',
+      productId: otherProductId,
+      // No userId — simulates a pre-auth legacy row.
+    }),
+  )
+
+  await expect(
+    t.withIdentity({ tokenIdentifier: USER }).mutation(api.adTests.createDraft, {
+      ...baseDraftArgs(ownProductId),
+      sourceGenerationId: legacyGen,
+    }),
+  ).rejects.toThrow(/Source generation not found/)
+})
+
 // ─── getExportManifest ─────────────────────────────────────────────────────────
 
 test('getExportManifest includes only complete rows and derives the file extension', async () => {

@@ -306,9 +306,19 @@ export const createDraft = mutation({
 
     if (args.sourceGenerationId) {
       const src = await ctx.db.get(args.sourceGenerationId)
-      if (!src || (src.userId && src.userId !== userId)) {
-        throw new Error('Source generation not found')
+      if (!src) throw new Error('Source generation not found')
+      if (src.userId) {
+        // Modern row: userId is authoritative.
+        if (src.userId !== userId) throw new Error('Source generation not found')
+      } else if (src.productId) {
+        // Legacy row (no userId): verify ownership through the parent product.
+        const srcProduct = await ctx.db.get(src.productId)
+        if (!srcProduct || srcProduct.userId !== userId) {
+          throw new Error('Source generation not found')
+        }
       }
+      // Rows with neither userId nor productId are pre-auth legacy data;
+      // allow attaching them as non-sensitive source context.
     }
     if (args.sourceAdTestId) {
       await requireOwnedAdTest(ctx, userId, args.sourceAdTestId)
