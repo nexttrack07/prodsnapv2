@@ -108,3 +108,13 @@ export function isKnownPlan(slug: string): boolean {
 export function isUnlimited(limit: number): boolean {
   return limit === -1
 }
+
+/**
+ * True if the slug is a known PAID tier (i.e. not `free_user`). Paid is defined
+ * by a non-zero monthly price so a future $0 tier can't accidentally be treated
+ * as paid. Used to gate export/download, which is the core paid value.
+ */
+export function isPaidPlan(slug: string): boolean {
+  const plan = PLAN_CONFIG[slug]
+  return !!plan && plan.monthlyPriceCents > 0
+}

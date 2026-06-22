@@ -33,6 +33,9 @@ import { internal } from './_generated/api'
 import { workflow } from './studio'
 import { enforceGenerationRateLimit, recordGenerationUsage } from './products'
 import { requireCredits } from './lib/billing/credits'
+import { hasPaidPlanAccess } from './lib/billing'
+import { billingError } from './lib/billing/errors'
+import type { ExportCopySet } from './lib/adTestExportCsv'
 import {
   PLACEMENT_ASPECT_RATIO,
   adPlacement,
@@ -273,6 +276,117 @@ export const getExportManifest = query({
       productName: product?.name ?? null,
       status: adTest.status,
       exportedAt: adTest.exportedAt ?? null,
+      items,
+      copySets,
+    }
+  },
+})
+
+/**
+ * Server-side export package for the zip builder (issue #38). Unlike the public
+ * `getExportManifest` (preview metadata), this:
+ *   1. ENFORCES entitlement — only paid plans may export; free users are denied
+ *      with an upgrade error before any zip work begins.
+ *   2. RESOLVES each creative's paired copy (headline/primary/description text +
+ *      CTA button) into flat strings, so the CSV builder needs no cross-lookup.
+ *
+ * Internal: called via `ctx.runQuery` from the authenticated `exportTestSet`
+ * action, so `ctx.auth` carries the caller's identity. Throws `NO_SUBSCRIPTION`
+ * for free/unsubscribed users and `Ad Test not found` for non-owners.
+ */
+export const prepareExportInternal = internalQuery({
+  args: { adTestId: v.id('adTests') },
+  handler: async (ctx, { adTestId }) => {
+    const userId = await requireAuth(ctx)
+    const adTest = await requireOwnedAdTest(ctx, userId, adTestId)
+
+    // Entitlement gate — central, before any asset/zip work (the action does
+    // the expensive fetch+zip only after this passes).
+    const { allowed } = await hasPaidPlanAccess(ctx)
+    if (!allowed) {
+      throw billingError(
+        'NO_SUBSCRIPTION',
+        'Upgrade to a paid plan to export your test set.',
+      )
+    }
+
+    const product = await ctx.db.get(adTest.productId)
+
+    const generations = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+      .take(MAX_AD_UNITS_PER_TEST)
+
+    const copySetDocs = await ctx.db
+      .query('adTestCopySets')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+      .take(200)
+    const copySetsById = new Map(copySetDocs.map((c) => [c._id, c]))
+
+    const productSlug = slugify(product?.name ?? 'product')
+    const testSlug = slugify(adTest.name)
+
+    /** Text of the suggestion with the given variantIndex, or null. */
+    const variantText = (
+      suggestions: Array<{ variantIndex: number; text: string }>,
+      index: number | undefined,
+    ): string | null => {
+      if (index === undefined || index === null) return null
+      return suggestions.find((s) => s.variantIndex === index)?.text ?? null
+    }
+
+    // Items carry `outputUrl` (the action fetches it) on top of the ExportItem
+    // shape the CSV builder consumes — a structural superset.
+    const items = generations
+      .filter((g) => g.status === 'complete' && !!g.outputUrl)
+      .sort((a, b) => (a.adUnitIndex ?? 0) - (b.adUnitIndex ?? 0))
+      .map((g, i) => {
+        const angleSlug = slugify(g.angleKey ?? 'angle')
+        const placement = g.placement ?? 'feed_square'
+        const index = String((g.adUnitIndex ?? i) + 1).padStart(2, '0')
+        const ext = extensionFromUrl(g.outputUrl)
+
+        // Resolve paired copy, if the creative has any.
+        const set = g.selectedCopySetId
+          ? copySetsById.get(g.selectedCopySetId)
+          : undefined
+
+        return {
+          generationId: g._id,
+          angle: g.angleKey ?? null,
+          placement: g.placement ?? null,
+          aspectRatio: g.aspectRatio ?? null,
+          outputUrl: g.outputUrl as string,
+          filename: `${productSlug}_${testSlug}_${angleSlug}_${slugify(
+            placement,
+          )}_${index}.${ext}`,
+          headline: set
+            ? variantText(set.headlines, g.selectedHeadlineIndex)
+            : null,
+          primaryText: set
+            ? variantText(set.primaryTexts, g.selectedPrimaryTextIndex)
+            : null,
+          description: set
+            ? variantText(set.descriptions, g.selectedDescriptionIndex)
+            : null,
+          ctaButton: set?.recommendedCtaButton ?? null,
+        }
+      })
+
+    const copySets: ExportCopySet[] = copySetDocs.map((c) => ({
+      copySetId: c._id,
+      angleKey: c.angleKey ?? null,
+      recommendedCtaButton: c.recommendedCtaButton ?? null,
+      headlines: c.headlines.map((s) => ({ variantIndex: s.variantIndex, text: s.text })),
+      primaryTexts: c.primaryTexts.map((s) => ({ variantIndex: s.variantIndex, text: s.text })),
+      descriptions: c.descriptions.map((s) => ({ variantIndex: s.variantIndex, text: s.text })),
+    }))
+
+    return {
+      testName: adTest.name,
+      productName: product?.name ?? null,
+      productSlug,
+      testSlug,
       items,
       copySets,
     }

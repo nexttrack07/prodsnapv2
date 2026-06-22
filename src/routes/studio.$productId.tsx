@@ -373,7 +373,11 @@ function ProductWorkspacePage() {
         <>
           <AdTestReviewView
             adTestId={search.adTestId as Id<'adTests'>}
-            hasPaidPlan={!!billingStatus?.plan}
+            // `free_user` is a real (truthy) plan slug, so `!!plan` would treat
+            // starter users as paid. Export is a paid-only feature: exclude it.
+            hasPaidPlan={
+              billingStatus?.plan != null && billingStatus.plan !== 'free_user'
+            }
             onBack={() => {
               const { adTestId: _omit, ad: _omit2, ...rest } = search
               navigate({

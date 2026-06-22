@@ -3,10 +3,15 @@
  * Groups generated creatives by angle/prompt concept and placement,
  * with winner toggles and a back-to-gallery escape hatch.
  */
+import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query'
+import { useAction } from 'convex/react'
+import { ConvexError } from 'convex/values'
+import { useNavigate } from '@tanstack/react-router'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { downloadZipFromUrl } from '../../utils/exportAdTest'
 import {
   Box,
   Group,
@@ -91,6 +96,46 @@ export function AdTestReviewView({
 
   const toggleWinnerMutation = useConvexMutation(api.templateGenerations.toggleWinner)
   const { mutate: toggleWinner } = useMutation({ mutationFn: toggleWinnerMutation })
+
+  const navigate = useNavigate()
+  const exportTestSet = useAction(api.adTestExport.exportTestSet)
+  const [exporting, setExporting] = useState(false)
+
+  const handleExport = async () => {
+    // Free users never reach export work — send them to upgrade instead. The
+    // server also enforces this, so a forged client can't bypass it.
+    if (!hasPaidPlan) {
+      navigate({ to: '/pricing' })
+      return
+    }
+    setExporting(true)
+    try {
+      const { url, filename, imageCount } = await exportTestSet({ adTestId })
+      await downloadZipFromUrl(url, filename)
+      notifications.show({
+        title: 'Export ready',
+        message: `Test set exported (${imageCount} image${imageCount !== 1 ? 's' : ''}).`,
+        color: 'green',
+      })
+    } catch (err) {
+      // Defense in depth: if the server denies on entitlement (e.g. a stale
+      // client plan), route to upgrade instead of showing a dead-end error.
+      if (
+        err instanceof ConvexError &&
+        (err.data as { code?: string })?.code === 'NO_SUBSCRIPTION'
+      ) {
+        navigate({ to: '/pricing' })
+        return
+      }
+      notifications.show({
+        title: 'Export failed',
+        message: err instanceof Error ? err.message : 'Please try again.',
+        color: 'red',
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -189,14 +234,28 @@ export function AdTestReviewView({
           </Box>
         </Group>
 
-        {/* Export — requires paid plan; wired fully in issue #38 */}
+        {/* Export — paid users get a server-built zip; free users are routed to
+            upgrade. Disabled (with a reason) until at least one creative is ready. */}
         <Tooltip
-          label={hasPaidPlan ? 'Export coming in a future update' : 'Upgrade to a paid plan to export'}
+          label={
+            !hasPaidPlan
+              ? 'Upgrade to a paid plan to export'
+              : completedImageCount === 0
+                ? 'Generate at least one creative to export'
+                : 'Download images + manifest.csv + copy_bank.csv'
+          }
           withArrow
           position="left"
         >
-          <Button variant="default" size="sm" disabled>
-            {hasPaidPlan ? 'Export test set' : '🔒 Export test set'}
+          <Button
+            size="sm"
+            variant={hasPaidPlan ? 'filled' : 'default'}
+            color="blue"
+            loading={exporting}
+            disabled={hasPaidPlan && completedImageCount === 0}
+            onClick={handleExport}
+          >
+            {hasPaidPlan ? 'Export test set' : '🔒 Upgrade to export'}
           </Button>
         </Tooltip>
       </Group>
