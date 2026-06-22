@@ -12,13 +12,21 @@ import {
   Stack,
   Text,
   Title,
+  ThemeIcon,
+  List,
 } from '@mantine/core'
+import { IconSparkles } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import { StepRole } from '~/components/onboarding/StepRole'
 import { StepBusiness } from '~/components/onboarding/StepBusiness'
 import { StepPlan } from '~/components/onboarding/StepPlan'
 
-type OnboardingSearch = { step?: number; subscribed?: boolean }
+// sessionStorage key set when a user enters via the no-card starter flow.
+// The OnboardingGuard reads this to allow access to /home and /studio
+// without a paid plan.
+export const STARTER_MODE_KEY = 'prodsnap_activation_mode'
+
+type OnboardingSearch = { step?: number; subscribed?: boolean; starter?: boolean }
 
 export const Route = createFileRoute('/onboarding')({
   validateSearch: (search: Record<string, unknown>): OnboardingSearch => {
@@ -26,9 +34,12 @@ export const Route = createFileRoute('/onboarding')({
     const step = Number.isFinite(raw) ? raw : undefined
     const subscribed =
       search.subscribed === '1' || search.subscribed === 1 || search.subscribed === true
+    const starter =
+      search.starter === '1' || search.starter === 1 || search.starter === true
     return {
       ...(step && step >= 1 && step <= 3 ? { step } : {}),
       ...(subscribed ? { subscribed: true } : {}),
+      ...(starter ? { starter: true } : {}),
     }
   },
   component: OnboardingPage,
@@ -135,6 +146,56 @@ function OnboardingPage() {
             </>
           )}
         </Stack>
+      </Center>
+    )
+  }
+
+  // Starter mode: skip the plan-selection wizard and drop the user into the
+  // app with a free one-time Ad Test. Sets a sessionStorage flag so the
+  // OnboardingGuard allows /home and /studio for this pending user.
+  if (search.starter) {
+    return (
+      <Center mih="60vh">
+        <Container size="xs">
+          <Stack align="center" gap="lg" ta="center">
+            <ThemeIcon size={56} radius="xl" color="brand" variant="light">
+              <IconSparkles size={28} />
+            </ThemeIcon>
+            <div>
+              <Title order={2} mb={8}>Your free Ad Test is ready</Title>
+              <Text c="dark.2" maw={380} mx="auto">
+                Generate one complete ad test — one concept across three placements — at no cost, no card required.
+              </Text>
+            </div>
+            <List size="sm" c="dark.1" spacing={6} withPadding>
+              <List.Item>1 concept × 3 placements (Feed 1:1, Feed 4:5, Story 9:16)</List.Item>
+              <List.Item>Preview all generated creatives</List.Item>
+              <List.Item>Mark winners · Export requires a paid plan</List.Item>
+            </List>
+            <Button
+              color="brand"
+              size="md"
+              onClick={() => {
+                sessionStorage.setItem(STARTER_MODE_KEY, 'starter')
+                navigate({ to: '/home' })
+              }}
+            >
+              Activate free test →
+            </Button>
+            <Text size="xs" c="dark.4">
+              Want full access?{' '}
+              <Button
+                variant="transparent"
+                size="xs"
+                p={0}
+                c="brand.4"
+                onClick={() => navigate({ to: '/onboarding', search: { step: 3 } })}
+              >
+                Pick a plan instead
+              </Button>
+            </Text>
+          </Stack>
+        </Container>
       </Center>
     )
   }

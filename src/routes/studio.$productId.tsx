@@ -373,6 +373,7 @@ function ProductWorkspacePage() {
         <>
           <AdTestReviewView
             adTestId={search.adTestId as Id<'adTests'>}
+            hasPaidPlan={!!billingStatus?.plan}
             onBack={() => {
               const { adTestId: _omit, ad: _omit2, ...rest } = search
               navigate({

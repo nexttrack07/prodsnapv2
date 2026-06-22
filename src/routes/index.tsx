@@ -247,6 +247,19 @@ function Hero() {
           </div>
           <MonoLabel>card required · cancel before day 7, no charge</MonoLabel>
           <a
+            href="/sign-up?redirect_url=%2Fonboarding%3Fstarter%3D1"
+            style={{
+              fontFamily: fontBody,
+              fontSize: 13,
+              color: T.textMuted,
+              textDecoration: 'none',
+              borderBottom: `1px solid ${T.textMuted}`,
+              paddingBottom: 1,
+            }}
+          >
+            Or try 1 free test — no card needed
+          </a>
+          <a
             href="#loop-title"
             style={{
               fontFamily: fontBody,
@@ -1593,8 +1606,21 @@ function PricingSection() {
             )
           })}
         </div>
-        <div style={{ marginTop: 24, textAlign: 'center' }}>
+        <div style={{ marginTop: 24, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <MonoLabel>card required · cancel before day 7, no charge · upgrade or downgrade anytime</MonoLabel>
+          <a
+            href="/sign-up?redirect_url=%2Fonboarding%3Fstarter%3D1"
+            style={{
+              fontFamily: fontBody,
+              fontSize: 13,
+              color: T.textMuted,
+              textDecoration: 'none',
+              borderBottom: `1px solid ${T.textMuted}`,
+              paddingBottom: 1,
+            }}
+          >
+            Not ready to pay? Try 1 free test — no card needed
+          </a>
         </div>
       </div>
     </section>

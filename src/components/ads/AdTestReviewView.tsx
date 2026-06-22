@@ -66,10 +66,13 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function AdTestReviewView({
   adTestId,
+  hasPaidPlan,
   onBack,
   onOpenAd,
 }: {
   adTestId: Id<'adTests'>
+  /** When false, the export button shows an upgrade prompt instead of being simply disabled. */
+  hasPaidPlan: boolean
   onBack: () => void
   onOpenAd: (id: Id<'templateGenerations'>) => void
 }) {
@@ -177,10 +180,14 @@ export function AdTestReviewView({
           </Box>
         </Group>
 
-        {/* Export placeholder — wired in issue #38 */}
-        <Tooltip label="Export coming in a future update" withArrow position="left">
+        {/* Export — requires paid plan; wired fully in issue #38 */}
+        <Tooltip
+          label={hasPaidPlan ? 'Export coming in a future update' : 'Upgrade to a paid plan to export'}
+          withArrow
+          position="left"
+        >
           <Button variant="default" size="sm" disabled>
-            Export test set
+            {hasPaidPlan ? 'Export test set' : '🔒 Export test set'}
           </Button>
         </Tooltip>
       </Group>

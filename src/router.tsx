@@ -70,7 +70,7 @@ export function getRouter() {
         signInUrl="/sign-in"
         signUpUrl="/sign-up"
         signInForceRedirectUrl="/home"
-        signUpForceRedirectUrl="/onboarding"
+        signUpFallbackRedirectUrl="/onboarding"
         afterSignOutUrl="/"
       >
         <ConvexProviderWithClerk client={convexQueryClient.convexClient} useAuth={useAuth}>
