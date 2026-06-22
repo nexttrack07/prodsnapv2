@@ -812,12 +812,20 @@ export const markStuckGenerationsFailed = internalMutation({
       .collect()
 
     const allStuck = [...stuckQueued, ...stuckRunning]
+    const affectedAdTestIds = new Set<Id<'adTests'>>()
     for (const gen of allStuck) {
       await ctx.db.patch(gen._id, {
         status: 'failed',
         error: 'Generation timed out — please try again.',
         finishedAt: now,
       })
+      if (gen.adTestId) affectedAdTestIds.add(gen.adTestId)
+    }
+
+    // Refresh counters + status for any ad tests whose child rows were timed out.
+    for (const adTestId of affectedAdTestIds) {
+      await ctx.scheduler.runAfter(0, internal.adTests.updateCountersForGeneration, { adTestId })
+      await ctx.scheduler.runAfter(0, internal.adTests.setStatusFromChildren, { adTestId })
     }
 
     return { marked: allStuck.length }
