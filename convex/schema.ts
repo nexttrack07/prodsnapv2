@@ -373,6 +373,13 @@ const schema = defineSchema({
     ),
     colorAdapt: v.boolean(),
     variationIndex: v.number(),
+    // Whether the user opted to apply their brand kit to this generation.
+    // applyBrand → colors / font / tagline / current offer (visual identity).
+    // applyVoice → brand voice + authentic customer phrases (copy tone).
+    // Both default to true at the call sites; optional here so legacy rows
+    // (written before the toggles existed) are treated as "on".
+    applyBrand: v.optional(v.boolean()),
+    applyVoice: v.optional(v.boolean()),
     // For variation mode - reference to source generation
     variationSource: v.optional(v.object({
       sourceGenerationId: v.id('templateGenerations'),

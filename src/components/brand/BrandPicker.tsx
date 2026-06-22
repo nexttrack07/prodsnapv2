@@ -5,7 +5,9 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query'
 import {
+  Avatar,
   Badge,
+  ColorSwatch,
   Group,
   Menu,
   Text,
@@ -72,12 +74,21 @@ export function BrandPicker({
             <Group gap={4}>
               {currentBrand ? (
                 <Badge
-                  size="sm"
-                  variant="light"
+                  size="md"
+                  variant="filled"
                   color="brand"
                   radius="sm"
-                  rightSection={<IconChevronDown size={10} />}
-                  style={{ cursor: 'pointer' }}
+                  leftSection={
+                    currentBrand.logoUrl ? (
+                      <Avatar src={currentBrand.logoUrl} size={16} radius="sm" />
+                    ) : currentBrand.colors?.[0] ? (
+                      <ColorSwatch color={currentBrand.colors[0]} size={12} withShadow={false} />
+                    ) : (
+                      <IconTag size={12} />
+                    )
+                  }
+                  rightSection={<IconChevronDown size={11} />}
+                  style={{ cursor: 'pointer', textTransform: 'none' }}
                 >
                   {currentBrand.name || currentBrand.websiteUrl || 'Unnamed brand'}
                 </Badge>

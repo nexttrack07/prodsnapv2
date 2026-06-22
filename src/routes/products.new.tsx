@@ -121,6 +121,9 @@ function NewProductPage() {
   const [currency, setCurrency] = useState<string | null>('USD')
   const [tags, setTags] = useState<string[]>([])
   const [aiNotes, setAiNotes] = useState('')
+  // Brand assignment — an explicit choice (incl. "none") is required at
+  // creation when the user has brands. null = not yet chosen.
+  const [brandChoice, setBrandChoice] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   // URL of the image being shown in the lightbox; null = closed.
@@ -128,6 +131,18 @@ function NewProductPage() {
 
   const createProductRichMutation = useConvexMutation(api.products.createProductRich)
   const createProduct = useMutation({ mutationFn: createProductRichMutation })
+
+  // Brands available to assign at creation. The select is only shown when the
+  // user has at least one brand.
+  const brands = useQuery(api.brandKits.listBrandKits, {})
+  const hasBrands = (brands?.length ?? 0) > 0
+  const brandOptions = [
+    { value: 'none', label: 'No brand' },
+    ...(brands ?? []).map((b) => ({
+      value: b._id as string,
+      label: (b.name || b.websiteUrl || 'Unnamed brand') + (b.isPrimary ? ' (primary)' : ''),
+    })),
+  ]
 
   // ── React to URL import status + autofill form from distilled fields ──────
   useEffect(() => {
@@ -240,6 +255,9 @@ function NewProductPage() {
         ...(currency ? { currency } : {}),
         ...(tags.length > 0 ? { tags } : {}),
         ...(aiNotes.trim() ? { aiNotes: aiNotes.trim() } : {}),
+        ...(brandChoice && brandChoice !== 'none'
+          ? { brandKitId: brandChoice as Id<'brandKits'> }
+          : {}),
       })
       notifications.show({
         title: 'Product created',
@@ -260,7 +278,10 @@ function NewProductPage() {
     }
   }
 
-  const canSubmit = name.trim().length > 0 && imageUrls.length > 0
+  // When the user has brands, an explicit brand choice (incl. "No brand") is
+  // required before saving.
+  const brandChosen = !hasBrands || brandChoice !== null
+  const canSubmit = name.trim().length > 0 && imageUrls.length > 0 && brandChosen
   const fieldsDisabled = isImporting
 
   return (
@@ -516,6 +537,34 @@ function NewProductPage() {
               </Dropzone>
             </Group>
           </Stack>
+
+          {/* Brand — explicit choice required at creation when the user has
+              brands. Determines whose colors / voice every ad for this product
+              uses. */}
+          {hasBrands && (
+            <Select
+              label="Brand"
+              description="Which brand's theme & voice should this product's ads use?"
+              placeholder="Choose a brand"
+              required
+              value={brandChoice}
+              onChange={setBrandChoice}
+              disabled={fieldsDisabled}
+              data={brandOptions}
+              styles={{
+                input: {
+                  backgroundColor: 'var(--mantine-color-dark-6)',
+                  borderColor: 'var(--mantine-color-dark-4)',
+                },
+                label: { color: 'var(--mantine-color-white)' },
+                description: { color: 'var(--mantine-color-dark-2)' },
+                dropdown: {
+                  backgroundColor: 'var(--mantine-color-dark-6)',
+                  borderColor: 'var(--mantine-color-dark-4)',
+                },
+              }}
+            />
+          )}
 
           {/* Description */}
           <Textarea

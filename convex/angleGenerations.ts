@@ -30,8 +30,12 @@ export const submitAngleGeneration = mutation({
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
     /** Optional: pick a specific source image. Defaults to the primary. */
     productImageId: v.optional(v.id('productImages')),
+    /** Apply brand theme (colors/font/tagline/offer). Defaults to true. */
+    applyBrand: v.optional(v.boolean()),
+    /** Apply customer voice (brand voice + customer phrases). Defaults to true. */
+    applyVoice: v.optional(v.boolean()),
   },
-  handler: async (ctx, { productId, angleIndex, aspectRatio: ar, count, model, productImageId }) => {
+  handler: async (ctx, { productId, angleIndex, aspectRatio: ar, count, model, productImageId, applyBrand, applyVoice }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -104,6 +108,8 @@ export const submitAngleGeneration = mutation({
         aspectRatio: ar,
         mode: 'angle',
         colorAdapt: false,
+        applyBrand: applyBrand ?? true,
+        applyVoice: applyVoice ?? true,
         variationIndex: i,
         angleSeed: {
           title: angle.title,

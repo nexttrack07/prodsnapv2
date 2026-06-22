@@ -53,9 +53,14 @@ export const getBrandKitInternal = internalQuery({
 })
 
 /**
- * Resolves the brand kit for a specific product. If the product has a
- * `brandKitId` set AND that brand belongs to the same user, returns it.
- * Otherwise falls back to the user's primary brand kit.
+ * Resolves the brand kit for a specific product. Returns the product's
+ * explicitly assigned brand kit (if it belongs to the same user), or null.
+ *
+ * Intentionally does NOT fall back to the user's primary brand: brand is a
+ * per-product choice made at creation (or assigned later via the picker). A
+ * product with no brand assigned is generated WITHOUT brand styling — silently
+ * stamping every unassigned product with the primary brand is wrong once a
+ * user has more than one brand.
  */
 export const getBrandKitForProductInternal = internalQuery({
   args: {
@@ -70,7 +75,7 @@ export const getBrandKitForProductInternal = internalQuery({
         if (kit && kit.userId === userId) return kit
       }
     }
-    return await findPrimaryBrand(ctx, userId)
+    return null
   },
 })
 
