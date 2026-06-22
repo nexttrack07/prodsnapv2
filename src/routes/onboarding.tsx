@@ -156,9 +156,10 @@ function OnboardingPage() {
     )
   }
 
-  // Starter mode: skip the plan-selection wizard, provision a free one-time
-  // Ad Test, and drop the user directly into the studio review.
-  if (search.starter) {
+  // Free-credits model: the no-card starter is the DEFAULT path. The plan
+  // wizard is only shown when the user explicitly enters it (e.g. tapping
+  // "Pick a plan" → ?step=N). Plain /onboarding now provisions the free test.
+  if (search.starter || search.step === undefined) {
     return <StarterActivation />
   }
 

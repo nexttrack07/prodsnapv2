@@ -39,8 +39,8 @@ const PLAN_PRESENTATION: Record<
 
 const FAQ_ITEMS: { q: string; a: string }[] = [
   {
-    q: 'What happens after the 7-day free trial?',
-    a: "When the trial ends, your card is charged for the plan you picked. Cancel anytime before then from Account → Billing and you won't be charged.",
+    q: 'Do I need a credit card to start?',
+    a: "No. Every new account gets 100 free credits (about 10 ads) with no card. Pick a plan when you run out or need exports and bigger tests — you're only charged when you subscribe.",
   },
   {
     q: 'Can I change plans later?',
@@ -172,7 +172,7 @@ export function PricingPage() {
         <Group gap={6}>
           <IconClockHour4 size={16} color="var(--mantine-color-dark-2)" />
           <Text size="sm" c="dark.2">
-            7-day free trial
+            100 free credits to start
           </Text>
         </Group>
         <Group gap={6}>

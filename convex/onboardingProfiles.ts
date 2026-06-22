@@ -91,15 +91,8 @@ export const completeOnboarding = mutation({
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
 
-    const userPlan = await ctx.db
-      .query('userPlans')
-      .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .unique()
-    const planSlug = userPlan?.plan ?? ''
-    if (planSlug === '' || planSlug === 'free_user') {
-      throw new Error('No active paid subscription found')
-    }
-
+    // Free-credits model: onboarding no longer requires a paid plan. New
+    // accounts activate with the no-card starter grant; paying is optional.
     const profile = await getOrCreate(ctx, userId)
     if (profile.completedAt) return null
     await ctx.db.patch(profile._id, {
@@ -186,6 +179,13 @@ export const getOnboardingStatus = query({
       .unique()
 
     if (profile?.completedAt) {
+      return { state: 'complete' as const, profile }
+    }
+
+    // Free-credits model: a user who has claimed the one-time starter grant is
+    // activated — treat them as onboarded so they're never bounced back into
+    // /onboarding (and so it doesn't depend on a sessionStorage flag).
+    if (profile?.hasReceivedStarterGrant) {
       return { state: 'complete' as const, profile }
     }
 
