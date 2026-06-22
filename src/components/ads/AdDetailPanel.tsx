@@ -50,6 +50,7 @@ import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { downloadGeneratedImage, DOWNLOAD_FORMATS, type DownloadFormat } from '../../utils/downloadImage'
 import { mapGenerationError } from '../../lib/billing/mapBillingError'
+import { WinnerNudge } from './WinnerNudge'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -501,6 +502,13 @@ export function AdDetailContent({
           </ActionIcon>
         </Tooltip>
       </Group>
+
+      {/* Winner loop — turn a win into the next unit of work. */}
+      {ad.isWinner && (
+        <WinnerNudge
+          ad={{ _id: ad._id, productId: ad.productId, adTestId: ad.adTestId }}
+        />
+      )}
 
       <Divider color="dark.5" />
 
