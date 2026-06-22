@@ -5,6 +5,7 @@ import { LogoMark } from '~/components/Logo'
 import { seo } from '~/utils/seo'
 import * as Sentry from '@sentry/react'
 import { PLAN_CONFIG } from '../../convex/lib/billing/planConfig'
+import { PENDING_PRODUCT_URL_KEY } from './onboarding'
 
 // Single layout context — replaces 12 per-section useMediaQuery listeners.
 // `getInitialValueInEffect: false` makes Mantine read matchMedia synchronously
@@ -194,6 +195,23 @@ const HERO_VARIANT_SHOTS = [
 // ============================================================
 function Hero() {
   const isMobile = useIsMobile()
+  const [productUrl, setProductUrl] = useState('')
+
+  // Stash the pasted product URL across sign-up, then hand off to the no-card
+  // starter flow which imports THIS product and generates the free test.
+  const handleStart = () => {
+    const trimmed = productUrl.trim()
+    if (trimmed) {
+      try {
+        sessionStorage.setItem(PENDING_PRODUCT_URL_KEY, trimmed)
+      } catch {
+        /* ignore */
+      }
+    }
+    window.location.href =
+      '/sign-up?redirect_url=' + encodeURIComponent('/onboarding?starter=1')
+  }
+
   return (
     <section aria-labelledby="hero-title" style={{ position: 'relative', overflow: 'hidden' }}>
       {/* Ambient gradient */}
@@ -239,26 +257,71 @@ function Hero() {
         }}>
           Save winning ads to a swipe file. Generate 12 Meta-ready variants per batch — using those exact references.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 20 }}>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Link to="/onboarding" style={{ textDecoration: 'none' }}>
-              <Btn as="span" kind="primary" size="lg">Start 7-day free trial →</Btn>
-            </Link>
-          </div>
-          <MonoLabel>card required · cancel before day 7, no charge</MonoLabel>
-          <a
-            href="/sign-up?redirect_url=%2Fonboarding%3Fstarter%3D1"
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 24 }}>
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleStart() }}
+            style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: 8,
+              width: '100%',
+              maxWidth: 540,
+              margin: '0 auto',
+            }}
+          >
+            <input
+              type="url"
+              inputMode="url"
+              value={productUrl}
+              onChange={(e) => setProductUrl(e.target.value)}
+              placeholder="Paste your product page URL"
+              aria-label="Product page URL"
+              style={{
+                flex: 1,
+                height: 52,
+                padding: '0 16px',
+                fontFamily: fontBody,
+                fontSize: 15,
+                color: T.text,
+                background: T.bgElev,
+                border: `1px solid ${T.border}`,
+                borderRadius: 10,
+                outline: 'none',
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                height: 52,
+                padding: '0 22px',
+                fontFamily: fontDisplay,
+                fontSize: 16,
+                fontWeight: 600,
+                color: '#fff',
+                background: `linear-gradient(180deg, ${T.brandSoft}, ${T.brand})`,
+                border: 'none',
+                borderRadius: 10,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Create my free ad test →
+            </button>
+          </form>
+          <MonoLabel>3 ready-to-run ads · free · no card</MonoLabel>
+          <Link
+            to="/onboarding"
             style={{
               fontFamily: fontBody,
               fontSize: 13,
               color: T.textMuted,
               textDecoration: 'none',
-              borderBottom: `1px solid ${T.textMuted}`,
+              borderBottom: `1px solid ${T.border}`,
               paddingBottom: 1,
             }}
           >
-            Or try 1 free test — no card needed
-          </a>
+            Or start a 7-day free trial
+          </Link>
           <a
             href="#loop-title"
             style={{

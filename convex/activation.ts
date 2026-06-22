@@ -29,7 +29,12 @@
  * lib/billing/credits.ts also skips 'free' grants for rows whose
  * lastGrantedPlanSlug === 'starter'.
  */
-import { action, internalMutation, internalQuery } from './_generated/server'
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+} from './_generated/server'
 import { v } from 'convex/values'
 import { api, internal } from './_generated/api'
 
@@ -127,6 +132,149 @@ export const activateStarterFlow = action({
     })
 
     // 5. Fan out generation rows and kick off workflows.
+    await ctx.runMutation(api.adTests.startGeneration, { adTestId })
+
+    return { adTestId: adTestId as string, productId: productId as string }
+  },
+})
+
+// ─── URL-first starter (paste your product URL → free test on YOUR product) ───
+
+/**
+ * Creates the starter user's product from a completed URL import, bypassing the
+ * plan's product limit (free_user has a limit of 0). This is the one-time
+ * starter on-ramp, so it's tightly guarded: the import must be owned + done with
+ * at least one image, the user must have no products yet, and must not have
+ * already claimed the starter grant. Schedules analysis (→ marketing angles)
+ * exactly like createProductRich. Returns the new productId.
+ */
+export const createStarterProductFromImport = mutation({
+  args: { importId: v.id('urlImports') },
+  handler: async (ctx, { importId }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    const userId = identity.tokenIdentifier
+
+    const imp = await ctx.db.get(importId)
+    if (!imp || imp.userId !== userId) throw new Error('Import not found')
+    if (imp.status !== 'done') throw new Error('Import is not finished yet')
+    const images = imp.uploadedImageUrls ?? []
+    if (images.length === 0) {
+      throw new Error("We couldn't find a product image at that URL. Try another link or upload a photo.")
+    }
+
+    // One-time, fresh-user guard.
+    const existingProduct = await ctx.db
+      .query('products')
+      .withIndex('by_userId_archived', (q) =>
+        q.eq('userId', userId).eq('archivedAt', undefined),
+      )
+      .first()
+    if (existingProduct) throw new Error('You already have a product.')
+
+    const profile = await ctx.db
+      .query('onboardingProfiles')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    if (profile?.hasReceivedStarterGrant) {
+      throw new Error('Starter test already activated for this account.')
+    }
+
+    const name = (imp.distilledName ?? '').trim() || 'My product'
+    const productId = await ctx.db.insert('products', {
+      name,
+      status: 'analyzing',
+      userId,
+      imageUrl: images[0],
+      ...(imp.distilledDescription ? { productDescription: imp.distilledDescription } : {}),
+      ...(imp.distilledCategory ? { category: imp.distilledCategory } : {}),
+      ...(imp.distilledPrice != null ? { price: imp.distilledPrice } : {}),
+      ...(imp.distilledCurrency ? { currency: imp.distilledCurrency } : {}),
+      ...(imp.distilledTags && imp.distilledTags.length > 0
+        ? { tags: imp.distilledTags.slice(0, 20) }
+        : {}),
+      ...(imp.distilledAiNotes ? { aiNotes: imp.distilledAiNotes } : {}),
+      ...(imp.distilledReviewSnippets && imp.distilledReviewSnippets.length > 0
+        ? { customerLanguage: imp.distilledReviewSnippets }
+        : {}),
+    })
+
+    const imageIds = []
+    for (const url of images) {
+      imageIds.push(
+        await ctx.db.insert('productImages', {
+          productId,
+          userId,
+          imageUrl: url,
+          type: 'original',
+          status: 'ready',
+        }),
+      )
+    }
+    await ctx.db.patch(productId, { primaryImageId: imageIds[0] })
+    await ctx.scheduler.runAfter(0, internal.products.runProductAnalysis, {
+      productId,
+    })
+    return productId
+  },
+})
+
+/**
+ * Activates the starter Ad Test on an existing, owned, analyzed product (the one
+ * the user just imported). Same grant + draft + generation as
+ * `activateStarterFlow`, but without cloning the sample. Idempotent via the
+ * onboarding-profile grant flag.
+ */
+export const activateStarterForProduct = action({
+  args: { productId: v.id('products') },
+  handler: async (
+    ctx,
+    { productId },
+  ): Promise<{ adTestId: string; productId: string }> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    if (isDisposableEmail(identity.email)) {
+      throw new Error('Please sign up with a real email address to activate the free test.')
+    }
+
+    const alreadyActivated = await ctx.runQuery(
+      internal.activation._isAlreadyActivated,
+      {},
+    )
+    if (alreadyActivated) {
+      throw new Error('Starter test already activated for this account.')
+    }
+
+    const product = await ctx.runQuery(api.products.getProductWithStats, {
+      productId,
+    })
+    if (!product) throw new Error('Product not found')
+    if (product.status !== 'ready') {
+      throw new Error('Product analysis is not ready yet')
+    }
+    if (!product.marketingAngles?.length) {
+      throw new Error('Product has no marketing angles yet')
+    }
+    const angle = product.marketingAngles[0]
+
+    await ctx.runMutation(internal.activation._claimStarterGrant, {})
+
+    const adTestId = await ctx.runMutation(api.adTests.createDraft, {
+      productId,
+      name: 'Starter Ad Test',
+      source: 'starter',
+      angles: [
+        {
+          key: 'starter_concept',
+          title: angle.title,
+          description: angle.description,
+          hook: angle.hook,
+          suggestedAdStyle: angle.suggestedAdStyle,
+        },
+      ],
+      placements: [...STARTER_PLACEMENTS],
+    })
+
     await ctx.runMutation(api.adTests.startGeneration, { adTestId })
 
     return { adTestId: adTestId as string, productId: productId as string }

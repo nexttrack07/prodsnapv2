@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth, SignInButton } from '@clerk/react'
-import { useAction, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import {
   Box,
   Button,
@@ -26,6 +26,11 @@ import { StepPlan } from '~/components/onboarding/StepPlan'
 // The OnboardingGuard reads this to allow access to /home and /studio
 // without a paid plan.
 export const STARTER_MODE_KEY = 'prodsnap_activation_mode'
+
+// sessionStorage key holding the product URL the visitor pasted in the landing
+// hero. Persisted across sign-up; the starter flow reads it to import THEIR
+// product (rather than cloning the sample) before generating the free test.
+export const PENDING_PRODUCT_URL_KEY = 'prodsnap_pending_product_url'
 
 type OnboardingSearch = { step?: number; subscribed?: boolean; starter?: boolean }
 
@@ -250,6 +255,176 @@ function RedirectTo({ to }: { to: string }) {
 }
 
 function StarterActivation() {
+  // Read the product URL the visitor pasted on the landing hero (if any),
+  // exactly once, then clear it so a refresh doesn't re-import.
+  const [pendingUrl] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const u = sessionStorage.getItem(PENDING_PRODUCT_URL_KEY)
+      if (u) sessionStorage.removeItem(PENDING_PRODUCT_URL_KEY)
+      return u
+    } catch {
+      return null
+    }
+  })
+  const [forceSample, setForceSample] = useState(false)
+
+  if (pendingUrl && !forceSample) {
+    return <StarterFromUrl url={pendingUrl} onUseSample={() => setForceSample(true)} />
+  }
+  return <StarterFromSample />
+}
+
+// ─── URL-first starter: import the visitor's product → free test on it ─────────
+
+type StarterPhase = 'importing' | 'creating' | 'analyzing' | 'generating' | 'error'
+
+const PHASE_LABEL: Record<Exclude<StarterPhase, 'error'>, string> = {
+  importing: 'Importing your product…',
+  creating: 'Setting up your product…',
+  analyzing: 'Analyzing your product…',
+  generating: 'Generating your free ad test…',
+}
+
+function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => void }) {
+  const navigate = useNavigate()
+  const createUrlImport = useMutation(api.urlImports.createUrlImport)
+  const createStarterProduct = useMutation(api.activation.createStarterProductFromImport)
+  const activateForProduct = useAction(api.activation.activateStarterForProduct)
+
+  const [importId, setImportId] = useState<Id<'urlImports'> | null>(null)
+  const [productId, setProductId] = useState<Id<'products'> | null>(null)
+  const [phase, setPhase] = useState<StarterPhase>('importing')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const startedRef = useRef(false)
+  const createdRef = useRef(false)
+  const activatedRef = useRef(false)
+
+  const fail = (msg: string) => {
+    setErrorMsg(msg)
+    setPhase('error')
+  }
+
+  // 1. Kick off the URL import once.
+  useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+    try {
+      sessionStorage.setItem(STARTER_MODE_KEY, 'starter')
+    } catch {
+      /* ignore */
+    }
+    createUrlImport({ url, mode: 'product-and-brand' })
+      .then((id) => setImportId(id))
+      .catch((err) =>
+        fail(err instanceof Error ? err.message : 'Could not start the import.'),
+      )
+  }, [url, createUrlImport])
+
+  // 2. Import finished → create the product (bypasses the free product limit).
+  const imp = useQuery(api.urlImports.getUrlImport, importId ? { importId } : 'skip')
+  useEffect(() => {
+    if (!imp || createdRef.current) return
+    if (imp.status === 'failed') {
+      fail(imp.error || "We couldn't import that URL. Try another link.")
+      return
+    }
+    if (imp.status === 'done') {
+      createdRef.current = true
+      setPhase('creating')
+      createStarterProduct({ importId: imp._id })
+        .then((pid) => {
+          setProductId(pid)
+          setPhase('analyzing')
+        })
+        .catch((err) =>
+          fail(err instanceof Error ? err.message : 'Could not set up your product.'),
+        )
+    }
+  }, [imp, createStarterProduct])
+
+  // 3. Analysis ready → activate the starter Ad Test and go to Studio.
+  const product = useQuery(
+    api.products.getProductWithStats,
+    productId ? { productId } : 'skip',
+  )
+  useEffect(() => {
+    if (!product || activatedRef.current) return
+    if (product.status === 'failed') {
+      fail('We could not analyze your product. Try a different URL.')
+      return
+    }
+    if (product.status === 'ready') {
+      activatedRef.current = true
+      setPhase('generating')
+      activateForProduct({ productId: product._id })
+        .then(({ adTestId, productId: pid }) => {
+          navigate({
+            to: '/studio/$productId',
+            params: { productId: pid },
+            search: { adTestId },
+          })
+        })
+        .catch((err) =>
+          fail(err instanceof Error ? err.message : 'Could not start your ad test.'),
+        )
+    }
+  }, [product, activateForProduct, navigate])
+
+  if (phase === 'error') {
+    return (
+      <Center mih="60vh">
+        <Container size="xs">
+          <Stack align="center" gap="md" ta="center">
+            <Title order={2}>We hit a snag</Title>
+            <Text c="dark.2" maw={420}>
+              {errorMsg ?? 'Something went wrong importing your product.'}
+            </Text>
+            <Group>
+              <Button variant="default" onClick={onUseSample}>
+                Start with a sample instead
+              </Button>
+              <Button color="brand" onClick={() => navigate({ to: '/home' })}>
+                Go to dashboard
+              </Button>
+            </Group>
+          </Stack>
+        </Container>
+      </Center>
+    )
+  }
+
+  const label = PHASE_LABEL[phase]
+  return (
+    <Center mih="60vh">
+      <Container size="xs">
+        <Stack align="center" gap="lg" ta="center">
+          <ThemeIcon size={56} radius="xl" color="brand" variant="light">
+            <IconSparkles size={28} />
+          </ThemeIcon>
+          <div>
+            <Title order={2} mb={8}>Building your free ad test</Title>
+            <Text c="dark.2" maw={400} mx="auto">
+              We're turning your product page into 3 ready-to-run ads. This takes
+              about a minute — no card needed.
+            </Text>
+          </div>
+          <Group gap="sm">
+            <Loader size="sm" color="brand" />
+            <Text c="dark.1" size="sm">
+              {imp?.currentStep && phase === 'importing' ? imp.currentStep : label}
+            </Text>
+          </Group>
+        </Stack>
+      </Container>
+    </Center>
+  )
+}
+
+// ─── Sample starter (no URL pasted): clone the demo product ────────────────────
+
+function StarterFromSample() {
   const navigate = useNavigate()
   const activateStarterFlow = useAction(api.activation.activateStarterFlow)
   const [loading, setLoading] = useState(false)
