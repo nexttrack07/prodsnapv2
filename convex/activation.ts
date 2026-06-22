@@ -195,22 +195,10 @@ export const createStarterProductFromImages = mutation({
       imp = row
     }
 
-    // One-time, fresh-user guard.
-    const existingProduct = await ctx.db
-      .query('products')
-      .withIndex('by_userId_archived', (q) =>
-        q.eq('userId', userId).eq('archivedAt', undefined),
-      )
-      .first()
-    if (existingProduct) throw new Error('You already have a product.')
-
-    const profile = await ctx.db
-      .query('onboardingProfiles')
-      .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .unique()
-    if (profile?.hasReceivedStarterGrant) {
-      throw new Error('Starter test already activated for this account.')
-    }
+    // (No one-time / existing-product guard here: the starter flow is
+    // repeatable. The actual free-credit grant is still claimed at most once —
+    // see activateStarterForProduct — so re-runs reuse the existing balance
+    // rather than re-granting credits.)
 
     const productName =
       (name?.trim() || imp?.distilledName?.trim() || 'My product').slice(0, 80) ||
@@ -275,9 +263,6 @@ export const activateStarterForProduct = action({
       internal.activation._isAlreadyActivated,
       {},
     )
-    if (alreadyActivated) {
-      throw new Error('Starter test already activated for this account.')
-    }
 
     const product = await ctx.runQuery(api.products.getProductWithStats, {
       productId,
@@ -291,7 +276,12 @@ export const activateStarterForProduct = action({
     }
     const angle = product.marketingAngles[0]
 
-    await ctx.runMutation(internal.activation._claimStarterGrant, {})
+    // Grant the one-time free credits only on the FIRST activation. Re-runs
+    // reuse the existing balance (no double grant), so the flow is repeatable
+    // without re-granting free credits.
+    if (!alreadyActivated) {
+      await ctx.runMutation(internal.activation._claimStarterGrant, {})
+    }
 
     const adTestId = await ctx.runMutation(api.adTests.createDraft, {
       productId,

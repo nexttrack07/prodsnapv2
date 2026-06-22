@@ -95,30 +95,22 @@ test('rejects empty imageUrls', async () => {
   ).rejects.toThrow(/at least one product photo/)
 })
 
-test('rejects a non-owner import, an existing-product user, and an already-granted user', async () => {
+test('rejects a non-owner import', async () => {
   const t = convexTest(schema, modules)
   const importId = await seedDoneImport(t)
-
-  // Import owned by USER → OTHER can't reference it.
   await expect(
     t
       .withIdentity({ tokenIdentifier: OTHER })
       .mutation(api.activation.createStarterProductFromImages, { importId, imageUrls: IMG }),
   ).rejects.toThrow(/Import not found/)
+})
 
-  // Already has a product.
+test('is repeatable: creates another product even if one already exists', async () => {
+  const t = convexTest(schema, modules)
+  // Pre-existing product + prior starter grant — the flow is repeatable now.
   await t.run((ctx) =>
     ctx.db.insert('products', { name: 'Existing', status: 'ready', userId: USER }),
   )
-  await expect(
-    t
-      .withIdentity({ tokenIdentifier: USER })
-      .mutation(api.activation.createStarterProductFromImages, { importId, imageUrls: IMG }),
-  ).rejects.toThrow(/already have a product/)
-})
-
-test('rejects a user who already received the starter grant', async () => {
-  const t = convexTest(schema, modules)
   await t.run((ctx) =>
     ctx.db.insert('onboardingProfiles', {
       userId: USER,
@@ -127,11 +119,11 @@ test('rejects a user who already received the starter grant', async () => {
       updatedAt: Date.now(),
     }),
   )
-  await expect(
-    t
-      .withIdentity({ tokenIdentifier: USER })
-      .mutation(api.activation.createStarterProductFromImages, { imageUrls: IMG }),
-  ).rejects.toThrow(/already activated/)
+  const productId = await t
+    .withIdentity({ tokenIdentifier: USER })
+    .mutation(api.activation.createStarterProductFromImages, { imageUrls: IMG, name: 'Another' })
+  const product = await t.run((ctx) => ctx.db.get(productId))
+  expect(product!.name).toBe('Another')
 })
 
 // ─── activateStarterForProduct ───────────────────────────────────────────────
@@ -197,26 +189,48 @@ test('activateStarterForProduct grants credits and creates the starter test', as
   expect(profile!.hasReceivedStarterGrant).toBe(true)
 })
 
-test('activateStarterForProduct rejects an already-activated account', async () => {
+test('activateStarterForProduct is repeatable and never re-grants credits', async () => {
   const t = convexTest(schema, modules)
   const productId = await seedReadyProduct(t)
-  // Pre-existing balance → already activated.
-  await t.run((ctx) =>
-    ctx.db.insert('creditBalances', {
+  // Already activated: a prior balance + grant flag. The starter test must
+  // still run (re-runnable) but must NOT grant a second time.
+  await t.run(async (ctx) => {
+    ctx.db.insert('creditPricing', {
+      modelKey: 'nano-banana-2',
+      creditsMc: 10_000,
+      active: true,
+      updatedAt: Date.now(),
+    })
+    await ctx.db.insert('creditBalances', {
       userId: USER,
-      planAllowanceMc: 3000,
+      planAllowanceMc: 100_000,
       planUsedMc: 0,
       topupBalanceMc: 0,
       periodStart: Date.now(),
-      periodEnd: Date.now() + 1000,
+      periodEnd: Date.now() + 86_400_000,
       version: 1,
       updatedAt: Date.now(),
-    }),
-  )
+    })
+    await ctx.db.insert('onboardingProfiles', {
+      userId: USER,
+      currentStep: 1,
+      hasReceivedStarterGrant: true,
+      updatedAt: Date.now(),
+    })
+  })
 
-  await expect(
-    t
-      .withIdentity({ tokenIdentifier: USER, email: 'real@example.com' })
-      .action(api.activation.activateStarterForProduct, { productId }),
-  ).rejects.toThrow(/already activated/)
+  const { adTestId } = await t
+    .withIdentity({ tokenIdentifier: USER, email: 'real@example.com' })
+    .action(api.activation.activateStarterForProduct, { productId })
+  expect(adTestId).toBeTruthy()
+
+  // Still exactly one balance row — no second grant.
+  const balances = await t.run((ctx) =>
+    ctx.db
+      .query('creditBalances')
+      .withIndex('by_userId', (q) => q.eq('userId', USER))
+      .collect(),
+  )
+  expect(balances).toHaveLength(1)
+  expect(balances[0].planAllowanceMc).toBe(100_000) // not re-granted/reset
 })
