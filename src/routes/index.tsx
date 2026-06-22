@@ -1,5 +1,6 @@
 import { createContext, useContext, useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { useAuth } from '@clerk/react'
 import { useMediaQuery } from '@mantine/hooks'
 import { LogoMark } from '~/components/Logo'
 import { seo } from '~/utils/seo'
@@ -195,10 +196,12 @@ const HERO_VARIANT_SHOTS = [
 // ============================================================
 function Hero() {
   const isMobile = useIsMobile()
+  const { isSignedIn } = useAuth()
   const [productUrl, setProductUrl] = useState('')
 
-  // Stash the pasted product URL across sign-up, then hand off to the no-card
-  // starter flow which imports THIS product and generates the free test.
+  // Stash the pasted product URL, then hand off to the no-card starter flow
+  // which imports THIS product so the user can pick photos + generate. Already
+  // signed in → go straight there; otherwise sign up first, then resume.
   const handleStart = () => {
     const trimmed = productUrl.trim()
     if (trimmed) {
@@ -208,8 +211,9 @@ function Hero() {
         /* ignore */
       }
     }
-    window.location.href =
-      '/sign-up?redirect_url=' + encodeURIComponent('/onboarding?starter=1')
+    window.location.href = isSignedIn
+      ? '/onboarding?starter=1'
+      : '/sign-up?redirect_url=' + encodeURIComponent('/onboarding?starter=1')
   }
 
   return (

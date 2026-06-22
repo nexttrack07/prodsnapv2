@@ -126,6 +126,14 @@ function OnboardingPage() {
     )
   }
 
+  // The no-card starter (import → pick photos → generate) is always reachable
+  // via ?starter=1, even for already-onboarded users — otherwise the
+  // completed-redirect below would bounce them to /home before they ever see
+  // it. (Re-running needs fresh data; the dev reset button clears it.)
+  if (search.starter) {
+    return <StarterActivation />
+  }
+
   // Already onboarded (explicit completedAt, paid-plan rescue, or legacy
   // user with products) → bounce to studio.
   if (status && status.state !== 'pending') {
