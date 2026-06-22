@@ -4,6 +4,7 @@ import { useQuery, useMutation } from 'convex/react'
 import { notifications } from '@mantine/notifications'
 import { useMediaQuery } from '@mantine/hooks'
 import {
+  ActionIcon,
   Anchor,
   AspectRatio,
   Badge,
@@ -22,6 +23,7 @@ import {
   Text,
   ThemeIcon,
   Title,
+  Tooltip,
   UnstyledButton,
 } from '@mantine/core'
 import {
@@ -33,6 +35,8 @@ import {
   IconWand,
   IconTarget,
   IconLibrary,
+  IconStarFilled,
+  IconX,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -100,6 +104,8 @@ function HomePage() {
           isLoading={isLoading}
           isMobile={!!isMobile}
         />
+
+        {dashboard?.focusProduct && <NextTestsSection />}
 
         {dashboard?.focusProduct && (
           <ThreePathsSection focusProductId={dashboard.focusProduct._id as Id<'products'>} />
@@ -805,6 +811,257 @@ function ThreePathsSection({ focusProductId }: { focusProductId: Id<'products'> 
         ))}
       </SimpleGrid>
     </Stack>
+  )
+}
+
+// ─── Next tests (persisted Ad Test recommendations + winner loop) ───────────
+
+const PLACEMENT_SHORT: Record<string, string> = {
+  feed_square: 'Feed 1:1',
+  feed_vertical: 'Feed 4:5',
+  story_reel: 'Story 9:16',
+  landscape: 'Landscape',
+}
+
+type HomeSurface = NonNullable<
+  ReturnType<typeof useQuery<typeof api.adTests.getHomeAdTestSurface>>
+>
+type Recommendation = HomeSurface['recommendations'][number]
+type RecentWinner = HomeSurface['recentWinners'][number]
+
+function NextTestsSection() {
+  const navigate = useNavigate()
+  const surface = useQuery(api.adTests.getHomeAdTestSurface, {})
+  const createTest = useMutation(api.adTests.createRecommendedAdTest)
+  const dismiss = useMutation(api.adTests.dismissRecommendation)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  if (!surface || !surface.focusProductId) return null
+  const { focusProductId, productName, recommendations, recentWinners } = surface
+  if (recommendations.length === 0 && recentWinners.length === 0) return null
+
+  const handleCreate = async (rec: Recommendation) => {
+    setBusyId(rec._id)
+    try {
+      const adTestId = await createTest({ recommendationId: rec._id })
+      navigate({
+        to: '/studio/$productId',
+        params: { productId: focusProductId },
+        search: { adTestId },
+      })
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Could not create Ad Test',
+      })
+      setBusyId(null)
+    }
+  }
+
+  const handleDismiss = async (rec: Recommendation) => {
+    try {
+      await dismiss({ recommendationId: rec._id })
+    } catch {
+      notifications.show({ color: 'red', message: 'Could not dismiss' })
+    }
+  }
+
+  // Prioritize the winner loop: prefer a winner that belongs to a test we can
+  // open for review/iteration.
+  const topWinner = recentWinners.find((w) => w.adTestId) ?? recentWinners[0]
+
+  return (
+    <Stack gap="sm">
+      <Group gap="xs" align="baseline">
+        <IconTarget size={18} color="var(--mantine-color-brand-5)" />
+        <Title order={3} fz={18} c="white" fw={600}>
+          What to test next
+        </Title>
+      </Group>
+
+      {recentWinners.length > 0 && topWinner && (
+        <WinnerIterationCard
+          winner={topWinner}
+          productId={focusProductId}
+          productName={productName ?? 'this product'}
+          winnerCount={recentWinners.length}
+        />
+      )}
+
+      {recommendations.length > 0 && (
+        <ScrollArea offsetScrollbars scrollbarSize={6} type="hover">
+          <Group gap="md" wrap="nowrap" pb="xs" align="stretch">
+            {recommendations.map((rec) => (
+              <RecommendationCard
+                key={rec._id}
+                rec={rec}
+                busy={busyId === rec._id}
+                onCreate={() => handleCreate(rec)}
+                onDismiss={() => handleDismiss(rec)}
+              />
+            ))}
+          </Group>
+        </ScrollArea>
+      )}
+    </Stack>
+  )
+}
+
+function WinnerIterationCard({
+  winner,
+  productId,
+  productName,
+  winnerCount,
+}: {
+  winner: RecentWinner
+  productId: Id<'products'>
+  productName: string
+  winnerCount: number
+}) {
+  const navigate = useNavigate()
+  const openTarget = () => {
+    if (winner.adTestId) {
+      navigate({
+        to: '/studio/$productId',
+        params: { productId },
+        search: { adTestId: winner.adTestId },
+      })
+    } else {
+      navigate({ to: '/library' })
+    }
+  }
+
+  return (
+    <Paper
+      radius="lg"
+      withBorder
+      p="md"
+      onClick={openTarget}
+      style={{
+        cursor: 'pointer',
+        backgroundColor: 'var(--mantine-color-dark-7)',
+        backgroundImage:
+          'radial-gradient(circle at top right, rgba(250, 204, 21, 0.12), transparent 55%)',
+        borderColor: 'var(--mantine-color-dark-5)',
+      }}
+      className="product-card-hover"
+    >
+      <Group gap="md" wrap="nowrap" align="center">
+        <Box
+          style={{
+            width: 56,
+            height: 56,
+            flexShrink: 0,
+            borderRadius: 'var(--mantine-radius-md)',
+            overflow: 'hidden',
+            backgroundColor: 'var(--mantine-color-dark-6)',
+          }}
+        >
+          <Image src={winner.outputUrl} alt="" fit="cover" w="100%" h="100%" />
+        </Box>
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Group gap={6} align="center">
+            <IconStarFilled size={13} color="var(--mantine-color-yellow-5)" />
+            <Text size="sm" fw={600} c="white">
+              {winnerCount} winner{winnerCount !== 1 ? 's' : ''} on{' '}
+              {capitalizeWords(productName)}
+            </Text>
+          </Group>
+          <Text size="xs" c="dark.2" mt={2}>
+            Create your next Ad Test from a winner.
+          </Text>
+        </Box>
+        <Button
+          size="sm"
+          color="brand"
+          rightSection={<IconArrowRight size={15} />}
+          onClick={(e) => {
+            e.stopPropagation()
+            openTarget()
+          }}
+        >
+          Review winners
+        </Button>
+      </Group>
+    </Paper>
+  )
+}
+
+function RecommendationCard({
+  rec,
+  busy,
+  onCreate,
+  onDismiss,
+}: {
+  rec: Recommendation
+  busy: boolean
+  onCreate: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <Paper
+      radius="lg"
+      withBorder
+      p="md"
+      style={{
+        width: 280,
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: 'var(--mantine-color-dark-7)',
+        borderColor: 'var(--mantine-color-dark-5)',
+      }}
+    >
+      <Group justify="space-between" align="flex-start" wrap="nowrap" mb={6}>
+        {rec.source === 'starter' ? (
+          <Badge size="xs" variant="light" color="brand">
+            Starter
+          </Badge>
+        ) : (
+          <Badge size="xs" variant="light" color="gray">
+            Suggested
+          </Badge>
+        )}
+        <Tooltip label="Dismiss" withArrow position="left">
+          <ActionIcon
+            size="sm"
+            variant="subtle"
+            color="gray"
+            onClick={onDismiss}
+            aria-label="Dismiss recommendation"
+          >
+            <IconX size={14} />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
+
+      <Text size="sm" fw={600} c="white" lineClamp={2}>
+        {rec.title}
+      </Text>
+      <Text size="xs" c="dark.2" mt={4} lineClamp={2} style={{ flex: 1 }}>
+        {rec.description}
+      </Text>
+
+      <Group gap={4} wrap="wrap" mt="sm">
+        {rec.placements.map((p) => (
+          <Badge key={p} size="xs" variant="outline" color="dark.2">
+            {PLACEMENT_SHORT[p] ?? p}
+          </Badge>
+        ))}
+      </Group>
+
+      <Button
+        size="xs"
+        color="brand"
+        mt="sm"
+        fullWidth
+        loading={busy}
+        leftSection={<IconSparkles size={14} />}
+        onClick={onCreate}
+      >
+        Create Ad Test
+      </Button>
+    </Paper>
   )
 }
 

@@ -5,7 +5,7 @@
  * `convex/adTests.ts` (function argument validators) so the API contract can
  * never drift from the stored shape. See docs/specs/ad-test-ux-overhaul.md.
  */
-import { v } from 'convex/values'
+import { type Infer, v } from 'convex/values'
 
 export const aspectRatio = v.union(
   v.literal('1:1'),
@@ -93,6 +93,10 @@ export const recommendedAdTestConcept = v.object({
   priority: v.number(),
   createdAt: v.number(),
 })
+
+export type AdTestAngleValue = Infer<typeof adTestAngle>
+export type AdPlacementValue = Infer<typeof adPlacement>
+export type RecommendedConcept = Infer<typeof recommendedAdTestConcept>
 
 export const performanceNotePlatform = v.union(
   v.literal('meta'),
