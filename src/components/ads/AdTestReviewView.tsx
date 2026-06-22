@@ -102,11 +102,23 @@ export function AdTestReviewView({
 
   const { adTest, generations } = data
 
-  // Group by angleKey. Prompt-driven rows have no angleKey; key them by their
-  // adUnitIndex bucket so each prompt × placements forms its own group.
+  // Index prompt text → its position in adTest.prompts so labels stay stable
+  // regardless of how many angle rows precede the prompt rows.
+  const promptIndexByText = new Map((adTest.prompts ?? []).map((p, i) => [p, i]))
+
+  // Group by angleKey for angle rows, or by prompt text for prompt rows.
+  // Using adUnitIndex as the key would create one group per placement instead
+  // of one group per prompt concept.
   const groups = new Map<string, typeof generations>()
   for (const gen of generations) {
-    const key = gen.angleKey ?? `_prompt_${gen.adUnitIndex ?? 0}`
+    let key: string
+    if (gen.angleKey) {
+      key = gen.angleKey
+    } else if (gen.dynamicPrompt) {
+      key = `_prompt_text_${gen.dynamicPrompt}`
+    } else {
+      key = `_unknown_${gen._id}`
+    }
     const bucket = groups.get(key) ?? []
     bucket.push(gen)
     groups.set(key, bucket)
@@ -190,11 +202,16 @@ export function AdTestReviewView({
 
       {/* ── Angle / prompt groups ─────────────────────────────────────────── */}
       {[...groups.entries()].map(([groupKey, groupGens]) => {
-        const isPromptGroup = groupKey.startsWith('_prompt_')
+        const isPromptGroup = groupKey.startsWith('_prompt_text_')
         const angle = angles.find((a) => a.key === groupKey)
-        const groupLabel = isPromptGroup
-          ? `Prompt ${parseInt(groupKey.replace('_prompt_', ''), 10) + 1}`
-          : (angle?.title ?? groupKey)
+        let groupLabel: string
+        if (isPromptGroup) {
+          const promptText = groupKey.slice('_prompt_text_'.length)
+          const idx = promptIndexByText.get(promptText)
+          groupLabel = `Prompt ${idx !== undefined ? idx + 1 : '?'}`
+        } else {
+          groupLabel = angle?.title ?? groupKey
+        }
         const groupDesc = angle?.description
 
         const groupCompleted = groupGens.filter((g) => g.status === 'complete').length
