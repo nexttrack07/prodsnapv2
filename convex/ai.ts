@@ -9,6 +9,11 @@ import { uploadFromUrl } from './r2'
 import { nanoid } from 'nanoid'
 import { requireAdmin } from './lib/admin/requireAdmin'
 import {
+  META_CTA_BUTTONS,
+  assertCopyCountsMet,
+  normalizeCtaButton,
+} from './lib/adTestValidators'
+import {
   isTestMode,
   mockVisionResponse,
   mockTemplateTags,
@@ -492,6 +497,173 @@ Return ONLY the JSON object — no markdown, no explanation, no surrounding text
     })
 
     return parseJsonFromResponse(response, adCopyResultSchema)
+  },
+})
+
+// ─── Copy Bank generation (test-level, configurable counts) ────────────────
+// Unlike generateAdCopyText (fixed 3-variant, image-paired), the Copy Bank is
+// user-triggered at the Ad Test level: the buyer chooses which fields to
+// generate and how many of each. CTA is NOT generated prose — the model only
+// recommends one Meta platform button value, normalized against META_CTA_BUTTONS.
+const copyBankResultSchema = z.object({
+  headlines: z.array(z.string()).optional().default([]),
+  primaryTexts: z.array(z.string()).optional().default([]),
+  descriptions: z.array(z.string()).optional().default([]),
+  recommendedCtaButton: z.string().optional(),
+})
+
+/** Deterministic, count-sized mock used in test mode (no LLM call). */
+function mockCopyBank(
+  productName: string,
+  counts: { headlineCount: number; primaryTextCount: number; descriptionCount: number },
+) {
+  const make = (n: number, prefix: string) =>
+    Array.from({ length: n }, (_, i) => `${prefix} ${i + 1} for ${productName}`)
+  return {
+    headlines: make(counts.headlineCount, 'Headline'),
+    primaryTexts: make(counts.primaryTextCount, 'Primary text'),
+    descriptions: make(counts.descriptionCount, 'Description'),
+    recommendedCtaButton: 'SHOP_NOW',
+  }
+}
+
+export const generateCopyBankText = internalAction({
+  args: {
+    productName: v.string(),
+    productDescription: v.optional(v.string()),
+    targetAudience: v.optional(v.string()),
+    valueProposition: v.optional(v.string()),
+    // Optional: ground the copy in a single Ad Test angle when one is selected.
+    angle: v.optional(
+      v.object({
+        title: v.string(),
+        description: v.string(),
+        hook: v.string(),
+        suggestedAdStyle: v.string(),
+      }),
+    ),
+    brandVoice: v.optional(v.string()),
+    brandTagline: v.optional(v.string()),
+    currentOffer: v.optional(v.string()),
+    customerLanguage: v.optional(v.array(v.string())),
+    headlineCount: v.number(),
+    primaryTextCount: v.number(),
+    descriptionCount: v.number(),
+  },
+  handler: async (
+    _ctx,
+    args,
+  ): Promise<{
+    headlines: string[]
+    primaryTexts: string[]
+    descriptions: string[]
+    recommendedCtaButton?: string
+  }> => {
+    const counts = {
+      headlineCount: args.headlineCount,
+      primaryTextCount: args.primaryTextCount,
+      descriptionCount: args.descriptionCount,
+    }
+
+    if (isTestMode()) {
+      await mockDelay()
+      return mockCopyBank(args.productName, counts)
+    }
+
+    const lines: string[] = [`Product: ${args.productName}`]
+    if (args.productDescription) lines.push(`Description: ${args.productDescription}`)
+    if (args.targetAudience) lines.push(`Target audience: ${args.targetAudience}`)
+    if (args.valueProposition) lines.push(`Value proposition: ${args.valueProposition}`)
+    if (args.angle) {
+      lines.push(`Marketing angle: ${args.angle.title} — ${args.angle.description}`)
+      lines.push(`Sample hook: "${args.angle.hook}"`)
+      lines.push(`Suggested ad style: ${args.angle.suggestedAdStyle}`)
+    }
+    if (args.brandVoice) lines.push(`Brand voice: ${args.brandVoice}`)
+    if (args.brandTagline) lines.push(`Brand tagline: ${args.brandTagline}`)
+    if (args.currentOffer) lines.push(`Current offer: ${args.currentOffer}`)
+    if (args.customerLanguage && args.customerLanguage.length > 0) {
+      lines.push(
+        `Authentic phrases customers use:\n${args.customerLanguage.map((s) => `- ${s}`).join('\n')}`,
+      )
+    }
+
+    // Only ask for the fields the buyer requested; a 0 count drops the section.
+    const fieldSpecs: string[] = []
+    if (counts.headlineCount > 0) {
+      fieldSpecs.push(
+        `"headlines": an array of EXACTLY ${counts.headlineCount} distinct ad headlines. 20-40 chars each, stand-alone, specific (numbers beat adjectives), never starting with the brand name.`,
+      )
+    }
+    if (counts.primaryTextCount > 0) {
+      fieldSpecs.push(
+        `"primaryTexts": an array of EXACTLY ${counts.primaryTextCount} distinct primary (body) texts. 125-260 chars each; the complete hook must land in the first 80 chars; vary the framework (PAS, BAB, Hook-Proof) across variants.`,
+      )
+    }
+    if (counts.descriptionCount > 0) {
+      fieldSpecs.push(
+        `"descriptions": an array of EXACTLY ${counts.descriptionCount} distinct short supporting descriptions (under 50 chars each, link-description style).`,
+      )
+    }
+
+    const omitted: string[] = []
+    if (counts.headlineCount === 0) omitted.push('"headlines": []')
+    if (counts.primaryTextCount === 0) omitted.push('"primaryTexts": []')
+    if (counts.descriptionCount === 0) omitted.push('"descriptions": []')
+
+    const prompt = `${lines.join('\n')}
+
+Generate ad copy SUGGESTIONS for a media buyer to test. The buyer will preview, edit, and optionally pair these with already-generated ad images, so each variant must stand on its own and use a different approach — never rephrasings of the same idea.
+
+Return ONLY a JSON object with these fields:
+{
+${fieldSpecs.map((s) => `  ${s}`).join('\n')}${fieldSpecs.length ? '\n' : ''}${omitted.map((s) => `  ${s}`).join('\n')}${omitted.length ? '\n' : ''}  "recommendedCtaButton": one platform CTA BUTTON value (NOT a sentence) chosen from: ${META_CTA_BUTTONS.join(', ')}
+}
+
+Rules:
+- recommendedCtaButton is a Meta call_to_action_type enum value (e.g. SHOP_NOW, LEARN_MORE). Pick the single best fit. Do NOT invent values or write a phrase.
+- Avoid Meta-flagged language: no "guaranteed", "miracle", "revolutionary", no personal-attribute callouts ("Are you struggling with…"), no false urgency.
+- Mirror the customer phrases above when natural; respect the brand voice (calm/minimal/premium → no emoji, no exclamation points).
+- Emoji only ever allowed in primaryTexts, max 2, and never when the voice is calm/minimal/premium.
+
+Return ONLY the JSON object — no markdown, no explanation.`
+
+    // Trim, drop empties, and clamp each field to the requested count — the LLM
+    // can over- or under-deliver; the buyer asked for an exact number.
+    const clean = (arr: string[] | undefined, n: number) =>
+      (arr ?? [])
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .slice(0, n)
+
+    const attempt = async () => {
+      const response = await callText({
+        prompt,
+        systemPrompt:
+          "You are an expert DTC Facebook/Instagram ad copywriter. You write platform-ready copy suggestions, respect Meta's truncation limits and policy, and treat CTA as a button selection rather than prose. Return strict JSON only.",
+      })
+      const parsed = parseJsonFromResponse(response, copyBankResultSchema)
+      return {
+        headlines: clean(parsed.headlines, counts.headlineCount),
+        primaryTexts: clean(parsed.primaryTexts, counts.primaryTextCount),
+        descriptions: clean(parsed.descriptions, counts.descriptionCount),
+        recommendedCtaButton: normalizeCtaButton(parsed.recommendedCtaButton),
+      }
+    }
+
+    const meetsCounts = (r: { headlines: string[]; primaryTexts: string[]; descriptions: string[] }) =>
+      r.headlines.length >= counts.headlineCount &&
+      r.primaryTexts.length >= counts.primaryTextCount &&
+      r.descriptions.length >= counts.descriptionCount
+
+    // First pass; one retry on under-delivery before failing. The request and
+    // prompt both promise exact counts, so a short final result throws rather
+    // than silently persisting a smaller-than-requested Copy Bank.
+    let result = await attempt()
+    if (!meetsCounts(result)) result = await attempt()
+    assertCopyCountsMet(result, counts)
+
+    return result
   },
 })
 

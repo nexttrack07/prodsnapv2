@@ -100,3 +100,156 @@ export const performanceNotePlatform = v.union(
   v.literal('google'),
   v.literal('other'),
 )
+
+// ─── Copy Bank helpers ────────────────────────────────────────────────────────
+
+// Meta `call_to_action_type` values used for DTC ads. The Copy Bank recommends
+// ONE of these as a platform button — CTA is a button selection, never
+// free-form prose, so it is stored/exported separately from headlines/body.
+// Kept as a plain string on the row (recommendedCtaButton) so the platform
+// list can grow without a schema migration; this array is the validation set.
+export const META_CTA_BUTTONS = [
+  'SHOP_NOW',
+  'LEARN_MORE',
+  'SIGN_UP',
+  'SUBSCRIBE',
+  'GET_OFFER',
+  'ORDER_NOW',
+  'DOWNLOAD',
+  'GET_QUOTE',
+  'CONTACT_US',
+  'APPLY_NOW',
+  'BOOK_TRAVEL',
+  'BUY_TICKETS',
+  'SEE_MENU',
+  'WATCH_MORE',
+] as const
+
+export type MetaCtaButton = (typeof META_CTA_BUTTONS)[number]
+
+/** Upper bound on suggestions requested per field in one Copy Bank request. */
+export const MAX_COPY_COUNT_PER_FIELD = 20
+
+/** Structural shape of a `copySetRequest`, usable without importing schema. */
+export type CopySetRequestInput = {
+  includeHeadlines: boolean
+  headlineCount: number
+  includePrimaryTexts: boolean
+  primaryTextCount: number
+  includeDescriptions: boolean
+  descriptionCount: number
+}
+
+export type NormalizedCopyCounts = {
+  headlineCount: number
+  primaryTextCount: number
+  descriptionCount: number
+}
+
+/** Validates one field's count; a non-included field always resolves to 0. */
+function resolveFieldCount(
+  include: boolean,
+  count: number,
+  label: string,
+): number {
+  if (!include) return 0
+  if (!Number.isInteger(count)) {
+    throw new Error(`${label} count must be a whole number`)
+  }
+  if (count < 0) throw new Error(`${label} count cannot be negative`)
+  if (count > MAX_COPY_COUNT_PER_FIELD) {
+    throw new Error(`${label} count cannot exceed ${MAX_COPY_COUNT_PER_FIELD}`)
+  }
+  return count
+}
+
+/**
+ * Validates a copySetRequest and returns the effective per-field counts (a
+ * field that isn't included resolves to 0 regardless of its count). Throws if
+ * no field is included or the request asks for zero total suggestions, so a
+ * Copy Bank row is never created empty.
+ */
+export function normalizeCopySetRequest(
+  request: CopySetRequestInput,
+): NormalizedCopyCounts {
+  const headlineCount = resolveFieldCount(
+    request.includeHeadlines,
+    request.headlineCount,
+    'Headline',
+  )
+  const primaryTextCount = resolveFieldCount(
+    request.includePrimaryTexts,
+    request.primaryTextCount,
+    'Primary text',
+  )
+  const descriptionCount = resolveFieldCount(
+    request.includeDescriptions,
+    request.descriptionCount,
+    'Description',
+  )
+
+  if (
+    !request.includeHeadlines &&
+    !request.includePrimaryTexts &&
+    !request.includeDescriptions
+  ) {
+    throw new Error('Select at least one copy field to generate')
+  }
+  if (headlineCount + primaryTextCount + descriptionCount === 0) {
+    throw new Error('Request at least one suggestion to generate')
+  }
+
+  return { headlineCount, primaryTextCount, descriptionCount }
+}
+
+/**
+ * Throws if a generated copy result has fewer suggestions than requested in any
+ * field. Both the request contract and the LLM prompt promise EXACT counts, so
+ * a short result is a generation failure the caller should surface/retry — not
+ * silently persist a Copy Bank that's smaller than what the buyer asked for.
+ */
+export function assertCopyCountsMet(
+  got: {
+    headlines: readonly unknown[]
+    primaryTexts: readonly unknown[]
+    descriptions: readonly unknown[]
+  },
+  want: NormalizedCopyCounts,
+): void {
+  const shortfalls: string[] = []
+  if (got.headlines.length < want.headlineCount) {
+    shortfalls.push(`headlines (${got.headlines.length}/${want.headlineCount})`)
+  }
+  if (got.primaryTexts.length < want.primaryTextCount) {
+    shortfalls.push(
+      `primary texts (${got.primaryTexts.length}/${want.primaryTextCount})`,
+    )
+  }
+  if (got.descriptions.length < want.descriptionCount) {
+    shortfalls.push(
+      `descriptions (${got.descriptions.length}/${want.descriptionCount})`,
+    )
+  }
+  if (shortfalls.length > 0) {
+    throw new Error(
+      `Copy generation returned fewer suggestions than requested: ${shortfalls.join(
+        ', ',
+      )}. Please try again.`,
+    )
+  }
+}
+
+/**
+ * Coerces a free-form CTA string into a supported Meta button value, or
+ * undefined if it doesn't map to one. Normalizes spacing/casing/hyphens so
+ * "shop now" and "Shop-Now" both resolve to SHOP_NOW.
+ */
+export function normalizeCtaButton(
+  raw: string | undefined | null,
+): MetaCtaButton | undefined {
+  if (!raw) return undefined
+  const normalized = raw.trim().toUpperCase().replace(/[\s-]+/g, '_')
+  return (META_CTA_BUTTONS as readonly string[]).includes(normalized)
+    ? (normalized as MetaCtaButton)
+    : undefined
+}

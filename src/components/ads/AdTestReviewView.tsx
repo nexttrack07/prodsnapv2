@@ -21,14 +21,18 @@ import {
   Loader,
   AspectRatio,
   Tooltip,
+  Popover,
+  Select,
 } from '@mantine/core'
 import {
   IconArrowLeft,
   IconStar,
   IconStarFilled,
   IconMaximize,
+  IconLink,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
+import { CopyBankPanel } from './CopyBankPanel'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -78,6 +82,11 @@ export function AdTestReviewView({
 }) {
   const { data, isLoading } = useQuery(
     convexQuery(api.adTests.getById, { adTestId }),
+  )
+  // Copy sets power the per-creative pairing control (optional pairing — buyers
+  // may also test copy independently from creatives).
+  const { data: copySets } = useQuery(
+    convexQuery(api.adTests.listCopySets, { adTestId }),
   )
 
   const toggleWinnerMutation = useConvexMutation(api.templateGenerations.toggleWinner)
@@ -192,6 +201,9 @@ export function AdTestReviewView({
         </Tooltip>
       </Group>
 
+      {/* ── Copy Bank ─────────────────────────────────────────────────────── */}
+      <CopyBankPanel adTestId={adTestId} />
+
       {/* ── Empty state ──────────────────────────────────────────────────── */}
       {groups.size === 0 && (
         <Paper
@@ -265,6 +277,7 @@ export function AdTestReviewView({
                 <Box key={gen._id} style={{ width: 160 }}>
                   <AdTestGenerationCard
                     gen={gen}
+                    copySets={copySets ?? []}
                     onToggleWinner={() =>
                       toggleWinner(
                         { generationId: gen._id },
@@ -300,14 +313,28 @@ type GenRow = {
   aspectRatio?: string
   isWinner?: boolean
   currentStep?: string
+  adTestId?: Id<'adTests'>
+  selectedCopySetId?: Id<'adTestCopySets'>
+  selectedHeadlineIndex?: number
+  selectedPrimaryTextIndex?: number
+  selectedDescriptionIndex?: number
+}
+
+type CopySet = {
+  _id: Id<'adTestCopySets'>
+  headlines: { text: string; variantIndex: number }[]
+  primaryTexts: { text: string; variantIndex: number }[]
+  descriptions: { text: string; variantIndex: number }[]
 }
 
 function AdTestGenerationCard({
   gen,
+  copySets,
   onToggleWinner,
   onExpand,
 }: {
   gen: GenRow
+  copySets: CopySet[]
   onToggleWinner: () => void
   onExpand: () => void
 }) {
@@ -410,6 +437,166 @@ function AdTestGenerationCard({
       {placementLabel && (
         <Text size="xs" c="dark.3" ta="center">{placementLabel}</Text>
       )}
+
+      {/* Optional copy pairing — only meaningful once a creative is complete
+          and the test has at least one Copy Bank set to pair from. */}
+      {isComplete && copySets.length > 0 && (
+        <CopyPairingControl gen={gen} copySets={copySets} />
+      )}
     </Stack>
+  )
+}
+
+// ─── Copy pairing control ──────────────────────────────────────────────────────
+
+/** Truncates suggestion text so it fits a Select option label. */
+function truncate(text: string, max = 48): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+function suggestionOptions(
+  suggestions: { text: string; variantIndex: number }[],
+): { value: string; label: string }[] {
+  return suggestions.map((s) => ({
+    value: String(s.variantIndex),
+    label: truncate(s.text),
+  }))
+}
+
+/** Compact summary of a copy set's field counts, e.g. "5H · 3P". */
+function copySetSummary(set: CopySet): string {
+  const parts: string[] = []
+  if (set.headlines.length) parts.push(`${set.headlines.length}H`)
+  if (set.primaryTexts.length) parts.push(`${set.primaryTexts.length}P`)
+  if (set.descriptions.length) parts.push(`${set.descriptions.length}D`)
+  return parts.join(' · ') || 'Copy set'
+}
+
+function CopyPairingControl({
+  gen,
+  copySets,
+}: {
+  gen: GenRow
+  copySets: CopySet[]
+}) {
+  const pairMutation = useConvexMutation(api.adTests.pairCopyWithGeneration)
+  const { mutate: pair } = useMutation({
+    mutationFn: pairMutation,
+    onError: () =>
+      notifications.show({
+        title: 'Error',
+        message: 'Could not update copy pairing',
+        color: 'red',
+      }),
+  })
+
+  const selectedSet = copySets.find((s) => s._id === gen.selectedCopySetId)
+  const isPaired = !!selectedSet
+
+  const toIndex = (v: string | null): number | undefined =>
+    v === null ? undefined : Number(v)
+
+  // Re-pair with the full current selection, overriding one field at a time so
+  // the server always receives a complete, consistent pairing.
+  const applyIndex = (
+    field: 'headlineIndex' | 'primaryTextIndex' | 'descriptionIndex',
+    value: string | null,
+  ) => {
+    if (!gen.selectedCopySetId) return
+    pair({
+      generationId: gen._id,
+      copySetId: gen.selectedCopySetId,
+      headlineIndex: gen.selectedHeadlineIndex,
+      primaryTextIndex: gen.selectedPrimaryTextIndex,
+      descriptionIndex: gen.selectedDescriptionIndex,
+      [field]: toIndex(value),
+    })
+  }
+
+  return (
+    <Popover width={240} position="bottom" withArrow shadow="md">
+      <Popover.Target>
+        <Button
+          variant={isPaired ? 'light' : 'subtle'}
+          color={isPaired ? 'blue' : 'gray'}
+          size="compact-xs"
+          fullWidth
+          leftSection={<IconLink size={12} />}
+        >
+          {isPaired ? 'Copy paired' : 'Pair copy'}
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="xs">
+          <Select
+            size="xs"
+            label="Copy set"
+            placeholder="None"
+            clearable
+            value={gen.selectedCopySetId ?? null}
+            data={copySets.map((s) => ({
+              value: s._id,
+              label: copySetSummary(s),
+            }))}
+            onChange={(val) =>
+              // Switching/clearing the set resets per-field selections.
+              pair(
+                val
+                  ? { generationId: gen._id, copySetId: val as Id<'adTestCopySets'> }
+                  : { generationId: gen._id },
+              )
+            }
+          />
+
+          {selectedSet && selectedSet.headlines.length > 0 && (
+            <Select
+              size="xs"
+              label="Headline"
+              placeholder="None"
+              clearable
+              value={
+                gen.selectedHeadlineIndex !== undefined
+                  ? String(gen.selectedHeadlineIndex)
+                  : null
+              }
+              data={suggestionOptions(selectedSet.headlines)}
+              onChange={(val) => applyIndex('headlineIndex', val)}
+            />
+          )}
+
+          {selectedSet && selectedSet.primaryTexts.length > 0 && (
+            <Select
+              size="xs"
+              label="Primary text"
+              placeholder="None"
+              clearable
+              value={
+                gen.selectedPrimaryTextIndex !== undefined
+                  ? String(gen.selectedPrimaryTextIndex)
+                  : null
+              }
+              data={suggestionOptions(selectedSet.primaryTexts)}
+              onChange={(val) => applyIndex('primaryTextIndex', val)}
+            />
+          )}
+
+          {selectedSet && selectedSet.descriptions.length > 0 && (
+            <Select
+              size="xs"
+              label="Description"
+              placeholder="None"
+              clearable
+              value={
+                gen.selectedDescriptionIndex !== undefined
+                  ? String(gen.selectedDescriptionIndex)
+                  : null
+              }
+              data={suggestionOptions(selectedSet.descriptions)}
+              onChange={(val) => applyIndex('descriptionIndex', val)}
+            />
+          )}
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
   )
 }

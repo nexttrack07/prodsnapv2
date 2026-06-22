@@ -23,7 +23,9 @@ import type { Doc, Id } from './_generated/dataModel'
 import {
   type MutationCtx,
   type QueryCtx,
+  action,
   internalMutation,
+  internalQuery,
   mutation,
   query,
 } from './_generated/server'
@@ -37,6 +39,9 @@ import {
   adTestAngle,
   adTestSource,
   copySetRequest,
+  copySuggestion,
+  normalizeCopySetRequest,
+  normalizeCtaButton,
   performanceNotePlatform,
 } from './lib/adTestValidators'
 
@@ -574,6 +579,377 @@ export const savePerformanceNote = mutation({
       updatedAt: now,
     })
     return noteId
+  },
+})
+
+// ─── Copy Bank (test-level suggested copy; user-triggered, unmetered) ────────
+
+/**
+ * Lists the Copy Bank sets generated for an Ad Test, newest first. Each set is
+ * one requested field mix (headlines/primaryTexts/descriptions + a recommended
+ * CTA button). Returns [] for unauthenticated or non-owning callers.
+ */
+export const listCopySets = query({
+  args: { adTestId: v.id('adTests') },
+  handler: async (ctx, { adTestId }) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return []
+
+    const adTest = await ctx.db.get(adTestId)
+    if (!adTest || adTest.userId !== userId) return []
+
+    const sets = await ctx.db
+      .query('adTestCopySets')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+      .order('desc')
+      .take(100)
+
+    // Defense in depth: only ever return rows owned by the caller.
+    return sets.filter((s) => s.userId === userId)
+  },
+})
+
+/**
+ * Read-side context for Copy Bank generation: product marketing fields, the
+ * product's brand kit (voice/tagline/offer/customer phrases), and the selected
+ * angle if `angleKey` matches one on the test. Runs as an internal query so the
+ * `generateCopySet` action can gather everything in one owned read before
+ * calling the LLM. Returns null when the test isn't owned by `userId`.
+ */
+export const getCopyContextInternal = internalQuery({
+  args: {
+    userId: v.string(),
+    adTestId: v.id('adTests'),
+    angleKey: v.optional(v.string()),
+  },
+  handler: async (ctx, { userId, adTestId, angleKey }) => {
+    const adTest = await ctx.db.get(adTestId)
+    if (!adTest || adTest.userId !== userId) return null
+
+    const product = await ctx.db.get(adTest.productId)
+    if (!product) return null
+
+    // Per-product brand kit only (matches image generation; no primary fallback).
+    let brandKit: Doc<'brandKits'> | null = null
+    if (product.brandKitId) {
+      const kit = await ctx.db.get(product.brandKitId)
+      if (kit && kit.userId === userId) brandKit = kit
+    }
+
+    // Ground the copy in a single angle when the caller picked one.
+    const angle = angleKey
+      ? adTest.angles.find((a) => a.key === angleKey)
+      : undefined
+
+    // Per-product customer language wins over the brand-level list.
+    const customerLanguage =
+      product.customerLanguage && product.customerLanguage.length > 0
+        ? product.customerLanguage
+        : brandKit?.customerLanguage
+
+    return {
+      productId: adTest.productId,
+      productName: product.name,
+      productDescription: product.productDescription,
+      targetAudience: product.targetAudience,
+      valueProposition: product.valueProposition,
+      angle: angle
+        ? {
+            title: angle.title,
+            description: angle.description ?? '',
+            hook: angle.hook ?? '',
+            suggestedAdStyle: angle.suggestedAdStyle ?? '',
+          }
+        : undefined,
+      brandVoice: brandKit?.voice,
+      brandTagline: brandKit?.tagline,
+      currentOffer: brandKit?.currentOffer,
+      customerLanguage,
+    }
+  },
+})
+
+/**
+ * Inserts a Copy Bank row after generation. Re-verifies ownership inside the
+ * mutation (the action's auth check happened in a separate context) so a forged
+ * userId can never write to another user's test.
+ */
+export const _insertCopySet = internalMutation({
+  args: {
+    userId: v.string(),
+    adTestId: v.id('adTests'),
+    productId: v.id('products'),
+    angleKey: v.optional(v.string()),
+    request: copySetRequest,
+    headlines: v.array(copySuggestion),
+    primaryTexts: v.array(copySuggestion),
+    descriptions: v.array(copySuggestion),
+    recommendedCtaButton: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<Id<'adTestCopySets'>> => {
+    const adTest = await ctx.db.get(args.adTestId)
+    if (!adTest || adTest.userId !== args.userId) {
+      throw new Error('Ad Test not found')
+    }
+
+    const now = Date.now()
+    return ctx.db.insert('adTestCopySets', {
+      userId: args.userId,
+      adTestId: args.adTestId,
+      productId: args.productId,
+      angleKey: args.angleKey,
+      request: args.request,
+      headlines: args.headlines,
+      primaryTexts: args.primaryTexts,
+      descriptions: args.descriptions,
+      recommendedCtaButton: args.recommendedCtaButton,
+      createdAt: now,
+      updatedAt: now,
+    })
+  },
+})
+
+/**
+ * User-triggered Copy Bank generation for an Ad Test. The buyer selects which
+ * fields they want and how many of each; this generates a single
+ * `adTestCopySets` row. CTA is a recommended Meta button value, not generated
+ * prose. Copy generation is UNMETERED for image-credit billing — it never runs
+ * a `requireCredits` preflight and never marks the Ad Test failed.
+ *
+ * This is an action (not a mutation) because it must call the LLM. It runs as:
+ *   auth → validate request → owned read (context) → LLM → owned insert.
+ */
+export const generateCopySet = action({
+  args: {
+    adTestId: v.id('adTests'),
+    angleKey: v.optional(v.string()),
+    request: copySetRequest,
+  },
+  handler: async (ctx, { adTestId, angleKey, request }): Promise<Id<'adTestCopySets'>> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    const userId = identity.tokenIdentifier
+
+    // Throws on out-of-range counts / empty request before any LLM spend.
+    const counts = normalizeCopySetRequest(request)
+
+    const context = await ctx.runQuery(internal.adTests.getCopyContextInternal, {
+      userId,
+      adTestId,
+      angleKey,
+    })
+    if (!context) throw new Error('Ad Test not found')
+
+    const ai = await ctx.runAction(internal.ai.generateCopyBankText, {
+      productName: context.productName,
+      productDescription: context.productDescription,
+      targetAudience: context.targetAudience,
+      valueProposition: context.valueProposition,
+      angle: context.angle,
+      brandVoice: context.brandVoice,
+      brandTagline: context.brandTagline,
+      currentOffer: context.currentOffer,
+      customerLanguage: context.customerLanguage,
+      headlineCount: counts.headlineCount,
+      primaryTextCount: counts.primaryTextCount,
+      descriptionCount: counts.descriptionCount,
+    })
+
+    // Wrap each generated string as a copySuggestion, stamping the angle it was
+    // generated for (if any) so paired exports can trace copy back to an angle.
+    const toSuggestions = (texts: string[]) =>
+      texts.map((text, variantIndex) => ({
+        text,
+        variantIndex,
+        angleKey: angleKey ?? undefined,
+      }))
+
+    return ctx.runMutation(internal.adTests._insertCopySet, {
+      userId,
+      adTestId,
+      productId: context.productId,
+      angleKey,
+      request,
+      headlines: toSuggestions(ai.headlines),
+      primaryTexts: toSuggestions(ai.primaryTexts),
+      descriptions: toSuggestions(ai.descriptions),
+      recommendedCtaButton: normalizeCtaButton(ai.recommendedCtaButton),
+    })
+  },
+})
+
+/** Copy Bank field a suggestion belongs to. */
+const copySetField = v.union(
+  v.literal('headlines'),
+  v.literal('primaryTexts'),
+  v.literal('descriptions'),
+)
+
+/**
+ * Edits a single Copy Bank suggestion in place. The buyer can refine any
+ * generated headline/primary text/description before pairing or export. Matches
+ * by `variantIndex` (stable across edits) rather than array position.
+ */
+export const updateCopySuggestion = mutation({
+  args: {
+    copySetId: v.id('adTestCopySets'),
+    field: copySetField,
+    variantIndex: v.number(),
+    text: v.string(),
+  },
+  handler: async (ctx, { copySetId, field, variantIndex, text }) => {
+    const userId = await requireAuth(ctx)
+    const copySet = await ctx.db.get(copySetId)
+    if (!copySet || copySet.userId !== userId) {
+      throw new Error('Copy set not found')
+    }
+
+    const trimmed = text.trim()
+    if (!trimmed) throw new Error('Suggestion text cannot be empty')
+
+    const current = copySet[field]
+    const idx = current.findIndex((s) => s.variantIndex === variantIndex)
+    if (idx === -1) throw new Error('Suggestion not found')
+
+    const updated = current.map((s, i) =>
+      i === idx ? { ...s, text: trimmed } : s,
+    )
+    await ctx.db.patch(copySetId, { [field]: updated, updatedAt: Date.now() })
+    return null
+  },
+})
+
+/**
+ * Updates the recommended CTA button on a Copy Bank set. Pass a Meta button
+ * value (e.g. SHOP_NOW) to set it, or omit to clear it. Rejects values that
+ * aren't supported platform buttons rather than storing free-form prose.
+ */
+export const setCopySetCta = mutation({
+  args: {
+    copySetId: v.id('adTestCopySets'),
+    recommendedCtaButton: v.optional(v.string()),
+  },
+  handler: async (ctx, { copySetId, recommendedCtaButton }) => {
+    const userId = await requireAuth(ctx)
+    const copySet = await ctx.db.get(copySetId)
+    if (!copySet || copySet.userId !== userId) {
+      throw new Error('Copy set not found')
+    }
+
+    let normalized: string | undefined
+    if (recommendedCtaButton) {
+      normalized = normalizeCtaButton(recommendedCtaButton)
+      if (!normalized) throw new Error('Unsupported CTA button')
+    }
+
+    await ctx.db.patch(copySetId, {
+      recommendedCtaButton: normalized,
+      updatedAt: Date.now(),
+    })
+    return null
+  },
+})
+
+/**
+ * Deletes a Copy Bank set and clears any creative pairings that reference it,
+ * so no generated row is left pointing at a deleted copy set.
+ */
+export const deleteCopySet = mutation({
+  args: { copySetId: v.id('adTestCopySets') },
+  handler: async (ctx, { copySetId }) => {
+    const userId = await requireAuth(ctx)
+    const copySet = await ctx.db.get(copySetId)
+    if (!copySet || copySet.userId !== userId) {
+      throw new Error('Copy set not found')
+    }
+
+    // Clear pairings on this test's generations that point at the deleted set.
+    const paired = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', copySet.adTestId))
+      .take(MAX_AD_UNITS_PER_TEST)
+    for (const gen of paired) {
+      if (gen.selectedCopySetId === copySetId) {
+        await ctx.db.patch(gen._id, {
+          selectedCopySetId: undefined,
+          selectedHeadlineIndex: undefined,
+          selectedPrimaryTextIndex: undefined,
+          selectedDescriptionIndex: undefined,
+        })
+      }
+    }
+
+    await ctx.db.delete(copySetId)
+    return null
+  },
+})
+
+/**
+ * Pairs Copy Bank suggestions with a generated creative (optional per the
+ * spec — buyers may test copy independently). Pass a `copySetId` plus the
+ * suggestion indices to pair; omit `copySetId` to unpair. Verifies the
+ * generation belongs to an owned Ad Test and the copy set belongs to the SAME
+ * test, and that each index exists in its field.
+ */
+export const pairCopyWithGeneration = mutation({
+  args: {
+    generationId: v.id('templateGenerations'),
+    copySetId: v.optional(v.id('adTestCopySets')),
+    headlineIndex: v.optional(v.number()),
+    primaryTextIndex: v.optional(v.number()),
+    descriptionIndex: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx)
+
+    const gen = await ctx.db.get(args.generationId)
+    if (!gen || gen.userId !== userId) throw new Error('Generation not found')
+    if (!gen.adTestId) {
+      throw new Error('Generation is not part of an Ad Test')
+    }
+    await requireOwnedAdTest(ctx, userId, gen.adTestId)
+
+    // Unpair: clear every selection field.
+    if (!args.copySetId) {
+      await ctx.db.patch(args.generationId, {
+        selectedCopySetId: undefined,
+        selectedHeadlineIndex: undefined,
+        selectedPrimaryTextIndex: undefined,
+        selectedDescriptionIndex: undefined,
+      })
+      return null
+    }
+
+    const copySet = await ctx.db.get(args.copySetId)
+    if (!copySet || copySet.userId !== userId) {
+      throw new Error('Copy set not found')
+    }
+    if (copySet.adTestId !== gen.adTestId) {
+      throw new Error('Copy set does not belong to this Ad Test')
+    }
+
+    // Validate each provided index against the matching field's variants.
+    const checkIndex = (
+      index: number | undefined,
+      variants: Array<{ variantIndex: number }>,
+      label: string,
+    ) => {
+      if (index === undefined) return
+      if (!variants.some((variant) => variant.variantIndex === index)) {
+        throw new Error(`Selected ${label} is not in this copy set`)
+      }
+    }
+    checkIndex(args.headlineIndex, copySet.headlines, 'headline')
+    checkIndex(args.primaryTextIndex, copySet.primaryTexts, 'primary text')
+    checkIndex(args.descriptionIndex, copySet.descriptions, 'description')
+
+    await ctx.db.patch(args.generationId, {
+      selectedCopySetId: args.copySetId,
+      selectedHeadlineIndex: args.headlineIndex,
+      selectedPrimaryTextIndex: args.primaryTextIndex,
+      selectedDescriptionIndex: args.descriptionIndex,
+    })
+    return null
   },
 })
 
