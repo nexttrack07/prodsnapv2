@@ -43,6 +43,8 @@ import {
   ScrollArea,
   Menu,
   Collapse,
+  Switch,
+  ColorSwatch,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import { Masonry } from 'masonic'
@@ -50,6 +52,7 @@ import {
   IconChevronLeft,
   IconArrowRight,
   IconCheck,
+  IconTag,
   IconMaximize,
   IconDownload,
   IconTrash,
@@ -2961,6 +2964,7 @@ function GenerateWizard({
   product: {
     name: string
     primaryImageId?: Id<'productImages'>
+    brandKitId?: Id<'brandKits'>
     marketingAngles?: Array<{
       title: string
       description: string
@@ -3005,6 +3009,21 @@ function GenerateWizard({
   const [variationsPerTemplate, setVariationsPerTemplate] = useState('2')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [oocOpen, setOocOpen] = useState(false)
+
+  // ── Brand application toggles (default on — preserves the prior behaviour
+  //    where a tagged/primary brand kit was always applied to every gen) ─────
+  const [applyBrand, setApplyBrand] = useState(true)
+  const [applyVoice, setApplyVoice] = useState(true)
+  // Resolve the brand kit that will actually be applied: the one explicitly
+  // assigned to THIS product (no primary fallback — brand is a per-product
+  // choice). null when the product has no brand assigned.
+  const brandKits = useConvexQuery(api.brandKits.listBrandKits)
+  const activeBrandKit = product.brandKitId
+    ? (brandKits ?? []).find((k) => k._id === product.brandKitId) ?? null
+    : null
+  const hasAnyBrand = (brandKits?.length ?? 0) > 0
+  const hasVoiceData =
+    !!activeBrandKit?.voice || (activeBrandKit?.customerLanguage?.length ?? 0) > 0
 
   // ── Per-segment state (all preserved regardless of active segment) ─────────
   const [prompt, setPrompt] = useState('')
@@ -3451,6 +3470,8 @@ function GenerateWizard({
           aspectRatio,
           model: 'nano-banana-2',
           productImageId: sourceImageId ?? undefined,
+          applyBrand,
+          applyVoice,
         })
         notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
       } else if (usePromptPath) {
@@ -3463,6 +3484,8 @@ function GenerateWizard({
           productImageId: includeSourceImage && !prefillEditAdId ? (sourceImageId ?? undefined) : undefined,
           sourceAdId: includeSourceImage && prefillEditAdId ? prefillEditAdId : undefined,
           useSourceImage: includeSourceImage,
+          applyBrand,
+          applyVoice,
         })
         notifications.show({
           title: 'Generating',
@@ -3477,6 +3500,8 @@ function GenerateWizard({
           count: variationsCount,
           model: 'nano-banana-2',
           productImageId: sourceImageId ?? undefined,
+          applyBrand,
+          applyVoice,
         })
         const angleTitle = product.marketingAngles?.[selectedAngleIndex!]?.title ?? 'angle'
         notifications.show({
@@ -4578,6 +4603,89 @@ function GenerateWizard({
                 />
               )}
             </Box>
+          )}
+
+          {/* Brand application — applies the user's brand kit + voice to this run.
+              Hidden when the user has no brand kit (nothing to apply), mirroring
+              the BrandPicker's behaviour. */}
+          {activeBrandKit && (
+            <Paper mb="md" p="sm" radius="md" withBorder bg="dark.7">
+              <Group justify="space-between" mb="xs" wrap="nowrap">
+                <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+                  {activeBrandKit.logoUrl ? (
+                    <Image
+                      src={activeBrandKit.logoUrl}
+                      w={24}
+                      h={24}
+                      fit="contain"
+                      radius="sm"
+                      alt=""
+                    />
+                  ) : null}
+                  <Text size="sm" fw={600} c="white" truncate>
+                    {activeBrandKit.name || 'Your brand'}
+                  </Text>
+                </Group>
+                <Anchor
+                  component={Link}
+                  to="/account/brand"
+                  size="xs"
+                  c="dark.2"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  Edit
+                </Anchor>
+              </Group>
+
+              <Switch
+                checked={applyBrand}
+                onChange={(e) => setApplyBrand(e.currentTarget.checked)}
+                color="brand"
+                label="Apply brand theme"
+                description="Colors, fonts, tagline & current offer"
+                styles={{ label: { fontWeight: 500 } }}
+              />
+              {applyBrand && (activeBrandKit.colors?.length ?? 0) > 0 && (
+                <Group gap={6} mt={8} mb="sm" pl={44}>
+                  {activeBrandKit.colors!.slice(0, 6).map((c, i) => (
+                    <ColorSwatch key={`${c}-${i}`} color={c} size={16} radius="sm" withShadow={false} />
+                  ))}
+                </Group>
+              )}
+
+              <Switch
+                mt={applyBrand && (activeBrandKit.colors?.length ?? 0) > 0 ? 0 : 'sm'}
+                checked={applyVoice}
+                onChange={(e) => setApplyVoice(e.currentTarget.checked)}
+                color="brand"
+                label="Write in your customer voice"
+                description={
+                  hasVoiceData
+                    ? 'Brand voice & real customer phrases'
+                    : 'Add a voice or customer phrases on your brand to use this'
+                }
+                disabled={!hasVoiceData}
+                styles={{ label: { fontWeight: 500 } }}
+              />
+            </Paper>
+          )}
+
+          {/* Product has no brand assigned but the user has brands — explain
+              why there's no brand styling and where to assign one. */}
+          {!activeBrandKit && hasAnyBrand && (
+            <Paper mb="md" p="sm" radius="md" withBorder bg="dark.7">
+              <Group gap="xs" wrap="nowrap" align="flex-start">
+                <IconTag size={14} color="var(--mantine-color-dark-2)" style={{ marginTop: 2, flexShrink: 0 }} />
+                <Text size="xs" c="dark.2">
+                  No brand assigned to this product — its ads won't use brand
+                  colors or voice. Assign one from the product header (
+                  <Anchor component="button" type="button" onClick={onBack} size="xs" c="brand.4">
+                    go back
+                  </Anchor>
+                  ) to apply your theme.
+                </Text>
+              </Group>
+            </Paper>
           )}
 
           {/* Variations */}

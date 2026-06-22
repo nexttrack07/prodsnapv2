@@ -83,8 +83,9 @@ export const suggestPromptIdeas = action({
       throw new Error('Product analysis is not ready yet')
     }
 
-    // Load brand kit for context
-    const brandKit = await ctx.runQuery(internal.brandKits.getBrandKitInternal, { userId })
+    // Load the product's assigned brand kit for context (no primary fallback —
+    // an unbranded product gets neutral suggestions).
+    const brandKit = await ctx.runQuery(internal.brandKits.getBrandKitForProductInternal, { userId, productId })
 
     // Build context lines for the LLM
     const lines: string[] = []

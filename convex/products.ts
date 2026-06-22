@@ -127,11 +127,19 @@ export const createProduct = mutation({
     imageUrl: v.string(),
     name: v.optional(v.string()),
     imageStorageId: v.optional(v.string()),
+    // Brand assigned at creation. Omit for an unbranded product.
+    brandKitId: v.optional(v.id('brandKits')),
   },
-  handler: async (ctx, { imageUrl, name, imageStorageId }) => {
+  handler: async (ctx, { imageUrl, name, imageStorageId, brandKitId }) => {
     const userId = await requireAuth(ctx)
     // Billing: enforce plan's product count limit before insert.
     await requireProductLimit(ctx, 'createProduct')
+
+    // Validate brand ownership before associating it with the product.
+    if (brandKitId) {
+      const kit = await ctx.db.get(brandKitId)
+      if (!kit || kit.userId !== userId) throw new Error('Brand not found')
+    }
 
     // Default name from URL if not provided (extract filename, clean up)
     const defaultName = name || deriveNameFromUrl(imageUrl)
@@ -143,6 +151,7 @@ export const createProduct = mutation({
       imageStorageId,
       status: 'analyzing',
       userId,
+      ...(brandKitId ? { brandKitId } : {}),
     })
 
     // Create the productImage record
@@ -468,6 +477,8 @@ export const createProductRich = mutation({
     currency: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     aiNotes: v.optional(v.string()),
+    // Brand assigned at creation. Omit for an unbranded product.
+    brandKitId: v.optional(v.id('brandKits')),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
@@ -475,11 +486,18 @@ export const createProductRich = mutation({
     if (args.name.trim().length === 0) throw new Error('Name is required')
     await requireProductLimitForUser(ctx, userId, 'createProductRich')
 
+    // Validate brand ownership before associating it with the product.
+    if (args.brandKitId) {
+      const kit = await ctx.db.get(args.brandKitId)
+      if (!kit || kit.userId !== userId) throw new Error('Brand not found')
+    }
+
     const productId = await ctx.db.insert('products', {
       name: args.name.trim(),
       status: 'analyzing',
       userId,
       imageUrl: args.imageUrls[0],
+      ...(args.brandKitId ? { brandKitId: args.brandKitId } : {}),
       ...(args.productDescription ? { productDescription: args.productDescription.trim() } : {}),
       ...(args.category ? { category: args.category.trim() } : {}),
       ...(args.price != null ? { price: args.price } : {}),
@@ -1020,6 +1038,10 @@ export const generateFromProduct = mutation({
     model: v.optional(v.union(v.literal('nano-banana-2'), v.literal('gpt-image-2'))),
     /** Optional: pick a specific source image. Defaults to the primary. */
     productImageId: v.optional(v.id('productImages')),
+    /** Apply brand theme (colors/font/tagline/offer). Defaults to true. */
+    applyBrand: v.optional(v.boolean()),
+    /** Apply customer voice (brand voice + customer phrases). Defaults to true. */
+    applyVoice: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
@@ -1141,6 +1163,8 @@ export const generateFromProduct = mutation({
           aspectRatio: args.aspectRatio,
           mode: args.mode,
           colorAdapt: args.colorAdapt,
+          applyBrand: args.applyBrand ?? true,
+          applyVoice: args.applyVoice ?? true,
           variationIndex: variationCounter++,
           status: 'queued',
           model: args.model ?? 'nano-banana-2',

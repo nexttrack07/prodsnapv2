@@ -34,8 +34,12 @@ export const submitPromptGeneration = mutation({
     // When false the generation skips the source image entirely and calls the
     // text-to-image variant of the model instead of the edit variant.
     useSourceImage: v.optional(v.boolean()),
+    /** Apply brand theme (colors/font/tagline/offer). Defaults to true. */
+    applyBrand: v.optional(v.boolean()),
+    /** Apply customer voice (brand voice + customer phrases). Defaults to true. */
+    applyVoice: v.optional(v.boolean()),
   },
-  handler: async (ctx, { productId, prompt, aspectRatio: ar, count, model, productImageId, sourceAdId, useSourceImage }) => {
+  handler: async (ctx, { productId, prompt, aspectRatio: ar, count, model, productImageId, sourceAdId, useSourceImage, applyBrand, applyVoice }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -133,6 +137,8 @@ export const submitPromptGeneration = mutation({
         aspectRatio: ar,
         mode: 'prompt',
         colorAdapt: false,
+        applyBrand: applyBrand ?? true,
+        applyVoice: applyVoice ?? true,
         variationIndex: i,
         dynamicPrompt: prompt,
         status: 'queued',

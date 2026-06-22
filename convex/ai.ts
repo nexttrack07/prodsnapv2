@@ -641,11 +641,15 @@ export const composePrompt = internalAction({
           productId: generation.productId,
         })
       : null
+    // User-controlled toggles (default on for legacy rows that predate them).
+    // applyBrand → visual identity; applyVoice → brand voice tone.
+    const applyBrand = generation.applyBrand !== false
+    const applyVoice = generation.applyVoice !== false
     const brandLines: string[] = []
-    if (brandKit?.colors?.length) brandLines.push(`Brand colors: ${brandKit.colors.join(', ')}`)
-    if (brandKit?.primaryFont) brandLines.push(`Brand font feel: ${brandKit.primaryFont}`)
-    if (brandKit?.tagline) brandLines.push(`Brand tagline: ${brandKit.tagline}`)
-    if (brandKit?.voice) brandLines.push(`Brand voice: ${brandKit.voice}`)
+    if (applyBrand && brandKit?.colors?.length) brandLines.push(`Brand colors: ${brandKit.colors.join(', ')}`)
+    if (applyBrand && brandKit?.primaryFont) brandLines.push(`Brand font feel: ${brandKit.primaryFont}`)
+    if (applyBrand && brandKit?.tagline) brandLines.push(`Brand tagline: ${brandKit.tagline}`)
+    if (applyVoice && brandKit?.voice) brandLines.push(`Brand voice: ${brandKit.voice}`)
 
     const userText = [
       'FIRST IMAGE = ad template.',
@@ -656,7 +660,7 @@ export const composePrompt = internalAction({
       templateContext || '(no template tags available)',
       '',
       brandLines.length ? brandLines.join('\n') : '(no brand kit set — keep brand styling neutral)',
-      ...(brandKit?.currentOffer ? [`Current offer to display at the bottom: "${brandKit.currentOffer}"`] : []),
+      ...(applyBrand && brandKit?.currentOffer ? [`Current offer to display at the bottom: "${brandKit.currentOffer}"`] : []),
       '',
       'Visual hierarchy rules (apply to the rendered ad):',
       '1. The largest text element is the main headline — communicates the value proposition or visceral benefit. Readable at thumbnail size in <1 second.',
@@ -908,16 +912,22 @@ export const composeFromAnglePrompt = internalAction({
     if (prodCtx.productDescription) prodLines.push(`Product description: ${prodCtx.productDescription}`)
     if (prodCtx.targetAudience) prodLines.push(`Target audience: ${prodCtx.targetAudience}`)
 
-    // Per-product customerLanguage trumps brand-level
+    // User-controlled toggles (default on for legacy rows that predate them).
+    const applyBrand = generation.applyBrand !== false
+    const applyVoice = generation.applyVoice !== false
+
+    // Per-product customerLanguage trumps brand-level. Voice toggle gates it.
     const productCL = (prodCtx as { customerLanguage?: string[] }).customerLanguage
     const brandCL = (brandKit as { customerLanguage?: string[] } | null)?.customerLanguage
-    const effectiveCL = productCL && productCL.length > 0 ? productCL : brandCL
+    const effectiveCL = applyVoice
+      ? (productCL && productCL.length > 0 ? productCL : brandCL)
+      : undefined
 
     const brandLines: string[] = []
-    if (brandKit?.colors?.length) brandLines.push(`Brand colors: ${brandKit.colors.join(', ')}`)
-    if (brandKit?.primaryFont) brandLines.push(`Brand font feel: ${brandKit.primaryFont}`)
-    if (brandKit?.tagline) brandLines.push(`Brand tagline: ${brandKit.tagline}`)
-    if (brandKit?.voice) brandLines.push(`Brand voice: ${brandKit.voice}`)
+    if (applyBrand && brandKit?.colors?.length) brandLines.push(`Brand colors: ${brandKit.colors.join(', ')}`)
+    if (applyBrand && brandKit?.primaryFont) brandLines.push(`Brand font feel: ${brandKit.primaryFont}`)
+    if (applyBrand && brandKit?.tagline) brandLines.push(`Brand tagline: ${brandKit.tagline}`)
+    if (applyVoice && brandKit?.voice) brandLines.push(`Brand voice: ${brandKit.voice}`)
 
     const userText = [
       'IMAGE = the user\'s product photo. The product is the focal element; design the surrounding scene.',
@@ -931,7 +941,7 @@ export const composeFromAnglePrompt = internalAction({
       `Suggested ad style: ${angle.suggestedAdStyle}`,
       '',
       brandLines.length ? brandLines.join('\n') : '(no brand kit set — use a clean, modern look)',
-      ...(brandKit?.currentOffer ? [`Current offer to display at the bottom: "${brandKit.currentOffer}"`] : []),
+      ...(applyBrand && brandKit?.currentOffer ? [`Current offer to display at the bottom: "${brandKit.currentOffer}"`] : []),
       ...(effectiveCL && effectiveCL.length > 0 ? [`Customer phrases to ground copy in:\n${effectiveCL.map((s) => `- "${s}"`).join('\n')}`] : []),
       '',
       'Visual hierarchy rules (apply to the rendered ad):',
@@ -1307,6 +1317,8 @@ export const composeAdCopyForGeneration = internalAction({
         angleSeed?: { title: string; description: string; hook: string; suggestedAdStyle: string }
         userId?: string
         productId?: string
+        applyBrand?: boolean
+        applyVoice?: boolean
       }
       productContext: {
         category?: string
@@ -1343,11 +1355,18 @@ export const composeAdCopyForGeneration = internalAction({
         })
       : null) as { voice?: string; tagline?: string; currentOffer?: string; customerLanguage?: string[] } | null
 
-    // Per-product customerLanguage trumps brand-level
+    // User-controlled toggles (default on for legacy rows that predate them).
+    // applyBrand → tagline + offer; applyVoice → brand voice + customer phrases.
+    const applyBrand = generation.applyBrand !== false
+    const applyVoice = generation.applyVoice !== false
+
+    // Per-product customerLanguage trumps brand-level. Voice toggle gates it.
     const productCustomerLanguage = (prodCtx as { customerLanguage?: string[] }).customerLanguage
-    const effectiveCustomerLanguage = productCustomerLanguage && productCustomerLanguage.length > 0
-      ? productCustomerLanguage
-      : brandKit?.customerLanguage
+    const effectiveCustomerLanguage = !applyVoice
+      ? undefined
+      : productCustomerLanguage && productCustomerLanguage.length > 0
+        ? productCustomerLanguage
+        : brandKit?.customerLanguage
 
     return await ctx.runAction(internal.ai.generateAdCopyText, {
       productName: prodCtx.name ?? 'Product',
@@ -1355,9 +1374,9 @@ export const composeAdCopyForGeneration = internalAction({
       targetAudience: prodCtx.targetAudience,
       valueProposition: prodCtx.valueProposition,
       angle,
-      brandVoice: brandKit?.voice,
-      brandTagline: brandKit?.tagline,
-      currentOffer: brandKit?.currentOffer,
+      brandVoice: applyVoice ? brandKit?.voice : undefined,
+      brandTagline: applyBrand ? brandKit?.tagline : undefined,
+      currentOffer: applyBrand ? brandKit?.currentOffer : undefined,
       customerLanguage: effectiveCustomerLanguage,
     })
   },
