@@ -38,9 +38,11 @@ async function seedDoneImport(
   )
 }
 
-// ─── createStarterProductFromImport ──────────────────────────────────────────
+// ─── createStarterProductFromImages ──────────────────────────────────────────
 
-test('creates a product from a finished import, bypassing the free product limit', async () => {
+const IMG = ['https://cdn.example.com/p1.png', 'https://cdn.example.com/p2.png']
+
+test('creates a product from the SELECTED import images, bypassing the product limit', async () => {
   const t = convexTest(schema, modules)
   // Free plan → product limit 0; the starter path must still create one.
   await t.run((ctx) =>
@@ -48,15 +50,18 @@ test('creates a product from a finished import, bypassing the free product limit
   )
   const importId = await seedDoneImport(t)
 
+  // User curated: only the 2nd image, as the hero. Metadata comes from the import.
   const productId = await t
     .withIdentity({ tokenIdentifier: USER })
-    .mutation(api.activation.createStarterProductFromImport, { importId })
+    .mutation(api.activation.createStarterProductFromImages, {
+      importId,
+      imageUrls: [IMG[1]],
+    })
 
   const product = await t.run((ctx) => ctx.db.get(productId))
-  expect(product!.name).toBe('Hydration Mix')
+  expect(product!.name).toBe('Hydration Mix') // from import distilled name
   expect(product!.status).toBe('analyzing')
-  expect(product!.userId).toBe(USER)
-  expect(product!.primaryImageId).toBeDefined()
+  expect(product!.imageUrl).toBe(IMG[1]) // chosen hero
   expect(product!.customerLanguage).toEqual(['tastes great'])
 
   const images = await t.run((ctx) =>
@@ -65,33 +70,40 @@ test('creates a product from a finished import, bypassing the free product limit
       .withIndex('by_product', (q) => q.eq('productId', productId))
       .collect(),
   )
-  expect(images).toHaveLength(2)
+  expect(images).toHaveLength(1) // only the selected one
 })
 
-test('rejects an unfinished import or one with no images', async () => {
+test('manual-upload path: creates a product from a photo with no import', async () => {
   const t = convexTest(schema, modules)
-  const asUser = t.withIdentity({ tokenIdentifier: USER })
-
-  const scraping = await seedDoneImport(t, { status: 'scraping' })
-  await expect(
-    asUser.mutation(api.activation.createStarterProductFromImport, { importId: scraping }),
-  ).rejects.toThrow(/not finished/)
-
-  const noImages = await seedDoneImport(t, { images: [] })
-  await expect(
-    asUser.mutation(api.activation.createStarterProductFromImport, { importId: noImages }),
-  ).rejects.toThrow(/couldn't find a product image/)
+  const productId = await t
+    .withIdentity({ tokenIdentifier: USER })
+    .mutation(api.activation.createStarterProductFromImages, {
+      imageUrls: ['https://cdn.example.com/my-upload.png'],
+      name: '  My Tee  ',
+    })
+  const product = await t.run((ctx) => ctx.db.get(productId))
+  expect(product!.name).toBe('My Tee') // trimmed
+  expect(product!.imageUrl).toBe('https://cdn.example.com/my-upload.png')
 })
 
-test('rejects a non-owner, an existing-product user, and an already-granted user', async () => {
+test('rejects empty imageUrls', async () => {
+  const t = convexTest(schema, modules)
+  await expect(
+    t
+      .withIdentity({ tokenIdentifier: USER })
+      .mutation(api.activation.createStarterProductFromImages, { imageUrls: [] }),
+  ).rejects.toThrow(/at least one product photo/)
+})
+
+test('rejects a non-owner import, an existing-product user, and an already-granted user', async () => {
   const t = convexTest(schema, modules)
   const importId = await seedDoneImport(t)
 
-  // Non-owner.
+  // Import owned by USER → OTHER can't reference it.
   await expect(
     t
       .withIdentity({ tokenIdentifier: OTHER })
-      .mutation(api.activation.createStarterProductFromImport, { importId }),
+      .mutation(api.activation.createStarterProductFromImages, { importId, imageUrls: IMG }),
   ).rejects.toThrow(/Import not found/)
 
   // Already has a product.
@@ -101,13 +113,12 @@ test('rejects a non-owner, an existing-product user, and an already-granted user
   await expect(
     t
       .withIdentity({ tokenIdentifier: USER })
-      .mutation(api.activation.createStarterProductFromImport, { importId }),
+      .mutation(api.activation.createStarterProductFromImages, { importId, imageUrls: IMG }),
   ).rejects.toThrow(/already have a product/)
 })
 
 test('rejects a user who already received the starter grant', async () => {
   const t = convexTest(schema, modules)
-  const importId = await seedDoneImport(t)
   await t.run((ctx) =>
     ctx.db.insert('onboardingProfiles', {
       userId: USER,
@@ -119,7 +130,7 @@ test('rejects a user who already received the starter grant', async () => {
   await expect(
     t
       .withIdentity({ tokenIdentifier: USER })
-      .mutation(api.activation.createStarterProductFromImport, { importId }),
+      .mutation(api.activation.createStarterProductFromImages, { imageUrls: IMG }),
   ).rejects.toThrow(/already activated/)
 })
 

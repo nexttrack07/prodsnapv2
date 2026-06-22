@@ -2,20 +2,33 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth, SignInButton } from '@clerk/react'
 import { useAction, useMutation, useQuery } from 'convex/react'
+import { notifications } from '@mantine/notifications'
 import {
+  ActionIcon,
   Box,
   Button,
   Center,
   Container,
+  FileButton,
   Group,
+  Image,
   Loader,
+  Paper,
+  SimpleGrid,
   Stack,
   Text,
   Title,
   ThemeIcon,
   List,
 } from '@mantine/core'
-import { IconSparkles } from '@tabler/icons-react'
+import {
+  IconSparkles,
+  IconStar,
+  IconStarFilled,
+  IconUpload,
+  IconCheck,
+  IconPhoto,
+} from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { StepRole } from '~/components/onboarding/StepRole'
@@ -278,28 +291,41 @@ function StarterActivation() {
 
 // ─── URL-first starter: import the visitor's product → free test on it ─────────
 
-type StarterPhase = 'importing' | 'creating' | 'analyzing' | 'generating' | 'error'
+type StarterPhase =
+  | 'importing'
+  | 'choosing'
+  | 'creating'
+  | 'analyzing'
+  | 'generating'
+  | 'error'
 
-const PHASE_LABEL: Record<Exclude<StarterPhase, 'error'>, string> = {
-  importing: 'Importing your product…',
+const PHASE_LABEL: Record<
+  'importing' | 'creating' | 'analyzing' | 'generating',
+  string
+> = {
+  importing: 'Finding your product photos…',
   creating: 'Setting up your product…',
   analyzing: 'Analyzing your product…',
   generating: 'Generating your free ad test…',
 }
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
 function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => void }) {
   const navigate = useNavigate()
   const createUrlImport = useMutation(api.urlImports.createUrlImport)
-  const createStarterProduct = useMutation(api.activation.createStarterProductFromImport)
+  const createStarterProduct = useMutation(api.activation.createStarterProductFromImages)
   const activateForProduct = useAction(api.activation.activateStarterForProduct)
 
   const [importId, setImportId] = useState<Id<'urlImports'> | null>(null)
   const [productId, setProductId] = useState<Id<'products'> | null>(null)
   const [phase, setPhase] = useState<StarterPhase>('importing')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [candidates, setCandidates] = useState<string[]>([])
+  const [scrapeFailed, setScrapeFailed] = useState(false)
 
   const startedRef = useRef(false)
-  const createdRef = useRef(false)
+  const handledImportRef = useRef(false)
   const activatedRef = useRef(false)
 
   const fail = (msg: string) => {
@@ -323,27 +349,41 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
       )
   }, [url, createUrlImport])
 
-  // 2. Import finished → create the product (bypasses the free product limit).
+  // 2. Import settled → show the image picker (we no longer auto-pick). Even a
+  // failed scrape lands here so the user can upload their own photo instead.
   const imp = useQuery(api.urlImports.getUrlImport, importId ? { importId } : 'skip')
   useEffect(() => {
-    if (!imp || createdRef.current) return
+    if (!imp || handledImportRef.current) return
     if (imp.status === 'failed') {
-      fail(imp.error || "We couldn't import that URL. Try another link.")
+      handledImportRef.current = true
+      setScrapeFailed(true)
+      setCandidates([])
+      setPhase('choosing')
       return
     }
     if (imp.status === 'done') {
-      createdRef.current = true
-      setPhase('creating')
-      createStarterProduct({ importId: imp._id })
-        .then((pid) => {
-          setProductId(pid)
-          setPhase('analyzing')
-        })
-        .catch((err) =>
-          fail(err instanceof Error ? err.message : 'Could not set up your product.'),
-        )
+      handledImportRef.current = true
+      const found = imp.uploadedImageUrls ?? []
+      setCandidates(found)
+      setScrapeFailed(found.length === 0)
+      setPhase('choosing')
     }
-  }, [imp, createStarterProduct])
+  }, [imp])
+
+  // From the picker → create the product from the chosen photos, then proceed.
+  const handleConfirm = async (imageUrls: string[]) => {
+    setPhase('creating')
+    try {
+      const pid = await createStarterProduct({
+        imageUrls,
+        importId: importId ?? undefined, // carries distilled metadata if any
+      })
+      setProductId(pid)
+      setPhase('analyzing')
+    } catch (err) {
+      fail(err instanceof Error ? err.message : 'Could not set up your product.')
+    }
+  }
 
   // 3. Analysis ready → activate the starter Ad Test and go to Studio.
   const product = useQuery(
@@ -353,7 +393,7 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
   useEffect(() => {
     if (!product || activatedRef.current) return
     if (product.status === 'failed') {
-      fail('We could not analyze your product. Try a different URL.')
+      fail('We could not analyze your product. Try a different photo.')
       return
     }
     if (product.status === 'ready') {
@@ -396,6 +436,17 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
     )
   }
 
+  if (phase === 'choosing') {
+    return (
+      <StarterImagePicker
+        candidates={candidates}
+        scrapeFailed={scrapeFailed}
+        onConfirm={handleConfirm}
+        onUseSample={onUseSample}
+      />
+    )
+  }
+
   const label = PHASE_LABEL[phase]
   return (
     <Center mih="60vh">
@@ -407,8 +458,8 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
           <div>
             <Title order={2} mb={8}>Building your free ad test</Title>
             <Text c="dark.2" maw={400} mx="auto">
-              We're turning your product page into 3 ready-to-run ads. This takes
-              about a minute — no card needed.
+              We're turning your product into 3 ready-to-run ads. This takes about
+              a minute — no card needed.
             </Text>
           </div>
           <Group gap="sm">
@@ -420,6 +471,229 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
         </Stack>
       </Container>
     </Center>
+  )
+}
+
+// ─── Image picker: surface candidates, let the user choose + set the hero ──────
+
+function StarterImagePicker({
+  candidates,
+  scrapeFailed,
+  onConfirm,
+  onUseSample,
+}: {
+  candidates: string[]
+  scrapeFailed: boolean
+  onConfirm: (imageUrls: string[]) => void
+  onUseSample: () => void
+}) {
+  const uploadImage = useAction(api.r2.uploadProductImage)
+
+  const [images, setImages] = useState<string[]>(candidates)
+  // Pre-select the first few candidates so the common case is one tap.
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(candidates.slice(0, 6)),
+  )
+  const [hero, setHero] = useState<string | null>(candidates[0] ?? null)
+  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  const toggle = (u: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(u)) {
+        next.delete(u)
+        if (hero === u) setHero(null)
+      } else {
+        next.add(u)
+        if (!hero) setHero(u)
+      }
+      return next
+    })
+  }
+
+  const makeHero = (u: string) => {
+    setHero(u)
+    setSelected((prev) => new Set(prev).add(u))
+  }
+
+  const handleUpload = async (file: File | null) => {
+    if (!file) return
+    if (file.size > MAX_UPLOAD_BYTES) {
+      notifications.show({ color: 'red', message: 'Image must be under 10 MB.' })
+      return
+    }
+    setUploading(true)
+    try {
+      const buf = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(buf).reduce((d, b) => d + String.fromCharCode(b), ''),
+      )
+      const { url } = await uploadImage({
+        name: file.name,
+        base64,
+        contentType: file.type,
+      })
+      setImages((prev) => [url, ...prev])
+      setSelected((prev) => new Set(prev).add(url))
+      setHero((prev) => prev ?? url)
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Upload failed.',
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleGenerate = () => {
+    const chosen = images.filter((u) => selected.has(u))
+    const ordered =
+      hero && selected.has(hero)
+        ? [hero, ...chosen.filter((u) => u !== hero)]
+        : chosen
+    if (ordered.length === 0) return
+    setSubmitting(true)
+    onConfirm(ordered)
+  }
+
+  const chosenCount = images.filter((u) => selected.has(u)).length
+  const showEmptyState = images.length === 0
+
+  return (
+    <Container size="sm" py={40}>
+      <Stack gap="lg">
+        <div>
+          <Title order={2} fz={26} fw={600}>
+            Pick your product photos
+          </Title>
+          <Text c="dark.2" mt={4}>
+            {showEmptyState
+              ? "We couldn't grab your photos automatically — some sites block us. Upload your product photo and we'll generate from it."
+              : 'Choose the photos to generate ads from. Tap ★ to set your hero — it leads every ad.'}
+          </Text>
+          {scrapeFailed && !showEmptyState && (
+            <Text c="yellow.5" size="sm" mt={6}>
+              Heads up: some images couldn't be pulled from that site. Upload your
+              own if the right shot is missing.
+            </Text>
+          )}
+        </div>
+
+        {showEmptyState ? (
+          <Paper
+            withBorder
+            radius="lg"
+            p="xl"
+            style={{ borderColor: 'var(--mantine-color-dark-5)', borderStyle: 'dashed' }}
+          >
+            <Stack align="center" gap="sm">
+              <ThemeIcon size={48} radius="xl" variant="light" color="brand">
+                <IconPhoto size={24} />
+              </ThemeIcon>
+              <FileButton onChange={handleUpload} accept="image/png,image/jpeg,image/webp">
+                {(props) => (
+                  <Button {...props} loading={uploading} leftSection={<IconUpload size={16} />}>
+                    Upload a product photo
+                  </Button>
+                )}
+              </FileButton>
+            </Stack>
+          </Paper>
+        ) : (
+          <SimpleGrid cols={{ base: 3, sm: 4 }} spacing="sm">
+            {images.map((u) => {
+              const isSelected = selected.has(u)
+              const isHero = hero === u
+              return (
+                <Box
+                  key={u}
+                  pos="relative"
+                  onClick={() => toggle(u)}
+                  style={{
+                    cursor: 'pointer',
+                    borderRadius: 'var(--mantine-radius-md)',
+                    overflow: 'hidden',
+                    outline: isSelected
+                      ? '2px solid var(--mantine-color-brand-5)'
+                      : '1px solid var(--mantine-color-dark-5)',
+                    outlineOffset: isSelected ? -2 : -1,
+                  }}
+                >
+                  <Image src={u} alt="" w="100%" style={{ aspectRatio: '1', objectFit: 'cover', display: 'block', opacity: isSelected ? 1 : 0.55 }} />
+                  {isSelected && (
+                    <ThemeIcon
+                      size="sm"
+                      radius="xl"
+                      color="brand"
+                      pos="absolute"
+                      style={{ top: 4, right: 4 }}
+                    >
+                      <IconCheck size={12} />
+                    </ThemeIcon>
+                  )}
+                  <ActionIcon
+                    size="sm"
+                    radius="xl"
+                    variant={isHero ? 'filled' : 'default'}
+                    color="yellow"
+                    pos="absolute"
+                    style={{ top: 4, left: 4 }}
+                    aria-label="Set as hero"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      makeHero(u)
+                    }}
+                  >
+                    {isHero ? <IconStarFilled size={12} /> : <IconStar size={12} />}
+                  </ActionIcon>
+                </Box>
+              )
+            })}
+
+            {/* Upload-your-own tile */}
+            <FileButton onChange={handleUpload} accept="image/png,image/jpeg,image/webp">
+              {(props) => (
+                <Box
+                  {...props}
+                  style={{
+                    cursor: 'pointer',
+                    borderRadius: 'var(--mantine-radius-md)',
+                    border: '1px dashed var(--mantine-color-dark-4)',
+                    aspectRatio: '1',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                    color: 'var(--mantine-color-dark-2)',
+                  }}
+                >
+                  {uploading ? <Loader size="xs" color="brand" /> : <IconUpload size={18} />}
+                  <Text size="xs">Upload</Text>
+                </Box>
+              )}
+            </FileButton>
+          </SimpleGrid>
+        )}
+
+        <Group justify="space-between" mt="sm">
+          <Button variant="subtle" color="gray" size="sm" onClick={onUseSample}>
+            Use a sample instead
+          </Button>
+          <Button
+            color="brand"
+            size="md"
+            loading={submitting}
+            disabled={chosenCount === 0}
+            onClick={handleGenerate}
+          >
+            Generate my free ad test →
+          </Button>
+        </Group>
+      </Stack>
+    </Container>
   )
 }
 

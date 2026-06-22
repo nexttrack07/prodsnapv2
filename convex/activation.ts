@@ -36,6 +36,7 @@ import {
   mutation,
 } from './_generated/server'
 import { v } from 'convex/values'
+import type { Doc } from './_generated/dataModel'
 import { api, internal } from './_generated/api'
 
 // Starter test is always 1 concept × these 3 placements.
@@ -155,19 +156,43 @@ export const activateStarterFlow = action({
  * already claimed the starter grant. Schedules analysis (→ marketing angles)
  * exactly like createProductRich. Returns the new productId.
  */
-export const createStarterProductFromImport = mutation({
-  args: { importId: v.id('urlImports') },
-  handler: async (ctx, { importId }) => {
+export const createStarterProductFromImages = mutation({
+  args: {
+    // The user-chosen product photos (first = hero/primary). Must be images we
+    // host on R2 (from a URL import or a manual upload) — never arbitrary URLs.
+    imageUrls: v.array(v.string()),
+    // Optional: the URL import these were curated from, used only to carry
+    // distilled metadata (description/category/price/reviews) onto the product.
+    importId: v.optional(v.id('urlImports')),
+    // Optional product name (manual-upload path); falls back to the import's
+    // distilled name, then a default.
+    name: v.optional(v.string()),
+  },
+  handler: async (ctx, { imageUrls, importId, name }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
 
-    const imp = await ctx.db.get(importId)
-    if (!imp || imp.userId !== userId) throw new Error('Import not found')
-    if (imp.status !== 'done') throw new Error('Import is not finished yet')
-    const images = imp.uploadedImageUrls ?? []
-    if (images.length === 0) {
-      throw new Error("We couldn't find a product image at that URL. Try another link or upload a photo.")
+    if (imageUrls.length === 0) {
+      throw new Error('Pick at least one product photo to continue.')
+    }
+    const urls = imageUrls.slice(0, 10)
+
+    // Security: only accept images we host (R2). Blocks arbitrary/SSRF URLs the
+    // client could otherwise pass in. Skipped only if R2_PUBLIC_URL is unset.
+    const r2Public = process.env.R2_PUBLIC_URL
+    if (r2Public) {
+      for (const u of urls) {
+        if (!u.startsWith(r2Public)) throw new Error('Unsupported image URL')
+      }
+    }
+
+    // Optional import row, for distilled metadata only.
+    let imp: Doc<'urlImports'> | null = null
+    if (importId) {
+      const row = await ctx.db.get(importId)
+      if (!row || row.userId !== userId) throw new Error('Import not found')
+      imp = row
     }
 
     // One-time, fresh-user guard.
@@ -187,27 +212,29 @@ export const createStarterProductFromImport = mutation({
       throw new Error('Starter test already activated for this account.')
     }
 
-    const name = (imp.distilledName ?? '').trim() || 'My product'
+    const productName =
+      (name?.trim() || imp?.distilledName?.trim() || 'My product').slice(0, 80) ||
+      'My product'
     const productId = await ctx.db.insert('products', {
-      name,
+      name: productName,
       status: 'analyzing',
       userId,
-      imageUrl: images[0],
-      ...(imp.distilledDescription ? { productDescription: imp.distilledDescription } : {}),
-      ...(imp.distilledCategory ? { category: imp.distilledCategory } : {}),
-      ...(imp.distilledPrice != null ? { price: imp.distilledPrice } : {}),
-      ...(imp.distilledCurrency ? { currency: imp.distilledCurrency } : {}),
-      ...(imp.distilledTags && imp.distilledTags.length > 0
+      imageUrl: urls[0],
+      ...(imp?.distilledDescription ? { productDescription: imp.distilledDescription } : {}),
+      ...(imp?.distilledCategory ? { category: imp.distilledCategory } : {}),
+      ...(imp?.distilledPrice != null ? { price: imp.distilledPrice } : {}),
+      ...(imp?.distilledCurrency ? { currency: imp.distilledCurrency } : {}),
+      ...(imp?.distilledTags && imp.distilledTags.length > 0
         ? { tags: imp.distilledTags.slice(0, 20) }
         : {}),
-      ...(imp.distilledAiNotes ? { aiNotes: imp.distilledAiNotes } : {}),
-      ...(imp.distilledReviewSnippets && imp.distilledReviewSnippets.length > 0
+      ...(imp?.distilledAiNotes ? { aiNotes: imp.distilledAiNotes } : {}),
+      ...(imp?.distilledReviewSnippets && imp.distilledReviewSnippets.length > 0
         ? { customerLanguage: imp.distilledReviewSnippets }
         : {}),
     })
 
     const imageIds = []
-    for (const url of images) {
+    for (const url of urls) {
       imageIds.push(
         await ctx.db.insert('productImages', {
           productId,
