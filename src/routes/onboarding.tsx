@@ -17,6 +17,7 @@ import {
 } from '@mantine/core'
 import { IconSparkles } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
+import type { Id } from '../../convex/_generated/dataModel'
 import { StepRole } from '~/components/onboarding/StepRole'
 import { StepBusiness } from '~/components/onboarding/StepBusiness'
 import { StepPlan } from '~/components/onboarding/StepPlan'
@@ -150,54 +151,10 @@ function OnboardingPage() {
     )
   }
 
-  // Starter mode: skip the plan-selection wizard and drop the user into the
-  // app with a free one-time Ad Test. Sets a sessionStorage flag so the
-  // OnboardingGuard allows /home and /studio for this pending user.
+  // Starter mode: skip the plan-selection wizard, provision a free one-time
+  // Ad Test, and drop the user directly into the studio review.
   if (search.starter) {
-    return (
-      <Center mih="60vh">
-        <Container size="xs">
-          <Stack align="center" gap="lg" ta="center">
-            <ThemeIcon size={56} radius="xl" color="brand" variant="light">
-              <IconSparkles size={28} />
-            </ThemeIcon>
-            <div>
-              <Title order={2} mb={8}>Your free Ad Test is ready</Title>
-              <Text c="dark.2" maw={380} mx="auto">
-                Generate one complete ad test — one concept across three placements — at no cost, no card required.
-              </Text>
-            </div>
-            <List size="sm" c="dark.1" spacing={6} withPadding>
-              <List.Item>1 concept × 3 placements (Feed 1:1, Feed 4:5, Story 9:16)</List.Item>
-              <List.Item>Preview all generated creatives</List.Item>
-              <List.Item>Mark winners · Export requires a paid plan</List.Item>
-            </List>
-            <Button
-              color="brand"
-              size="md"
-              onClick={() => {
-                sessionStorage.setItem(STARTER_MODE_KEY, 'starter')
-                navigate({ to: '/home' })
-              }}
-            >
-              Activate free test →
-            </Button>
-            <Text size="xs" c="dark.4">
-              Want full access?{' '}
-              <Button
-                variant="transparent"
-                size="xs"
-                p={0}
-                c="brand.4"
-                onClick={() => navigate({ to: '/onboarding', search: { step: 3 } })}
-              >
-                Pick a plan instead
-              </Button>
-            </Text>
-          </Stack>
-        </Container>
-      </Center>
-    )
+    return <StarterActivation />
   }
 
   const profileStep = profile?.currentStep ?? 1
@@ -288,6 +245,76 @@ function RedirectTo({ to }: { to: string }) {
   return (
     <Center mih="60vh">
       <Loader size="md" color="brand" />
+    </Center>
+  )
+}
+
+function StarterActivation() {
+  const navigate = useNavigate()
+  const activateStarterFlow = useAction(api.activation.activateStarterFlow)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleActivate() {
+    setLoading(true)
+    setError(null)
+    try {
+      sessionStorage.setItem(STARTER_MODE_KEY, 'starter')
+      const { adTestId, productId } = await activateStarterFlow({})
+      navigate({
+        to: '/studio/$productId',
+        params: { productId },
+        search: { adTestId },
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not activate free test. Try again.')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Center mih="60vh">
+      <Container size="xs">
+        <Stack align="center" gap="lg" ta="center">
+          <ThemeIcon size={56} radius="xl" color="brand" variant="light">
+            <IconSparkles size={28} />
+          </ThemeIcon>
+          <div>
+            <Title order={2} mb={8}>Your free Ad Test is ready</Title>
+            <Text c="dark.2" maw={380} mx="auto">
+              Generate one complete ad test — one concept across three placements — at no cost, no card required.
+            </Text>
+          </div>
+          <List size="sm" c="dark.1" spacing={6} withPadding>
+            <List.Item>1 concept × 3 placements (Feed 1:1, Feed 4:5, Story 9:16)</List.Item>
+            <List.Item>Preview all generated creatives</List.Item>
+            <List.Item>Mark winners · Export requires a paid plan</List.Item>
+          </List>
+          {error && (
+            <Text size="sm" c="red.4">{error}</Text>
+          )}
+          <Button
+            color="brand"
+            size="md"
+            loading={loading}
+            onClick={handleActivate}
+          >
+            Activate free test →
+          </Button>
+          <Text size="xs" c="dark.4">
+            Want full access?{' '}
+            <Button
+              variant="transparent"
+              size="xs"
+              p={0}
+              c="brand.4"
+              onClick={() => navigate({ to: '/onboarding', search: { step: 3 } })}
+            >
+              Pick a plan instead
+            </Button>
+          </Text>
+        </Stack>
+      </Container>
     </Center>
   )
 }
