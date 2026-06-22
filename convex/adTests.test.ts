@@ -432,6 +432,218 @@ test('setStatusFromChildren derives status from child rows', async () => {
   expect((await t.run((ctx) => ctx.db.get(failed)))!.status).toBe('failed')
 })
 
+// ─── startGeneration ────────────────────────────────────────────────────────
+
+/** Seed creditPricing + creditBalances so requireCredits passes in tests. */
+async function seedBillingData(
+  t: ReturnType<typeof convexTest>,
+  userId = USER,
+): Promise<void> {
+  const now = Date.now()
+  await t.run(async (ctx) => {
+    await ctx.db.insert('creditPricing', {
+      modelKey: 'nano-banana-2',
+      creditsMc: 1000,
+      active: true,
+      updatedAt: now,
+    })
+    await ctx.db.insert('creditBalances', {
+      userId,
+      planAllowanceMc: 1_000_000,
+      planUsedMc: 0,
+      topupBalanceMc: 0,
+      periodStart: now - 86_400_000,
+      periodEnd: now + 86_400_000 * 30,
+      version: 1,
+      updatedAt: now,
+    })
+  })
+}
+
+/** Seed a product with a primary productImage and return their IDs. */
+async function seedProductWithImage(
+  t: ReturnType<typeof convexTest>,
+  userId = USER,
+): Promise<{ productId: Id<'products'>; imageId: Id<'productImages'> }> {
+  return t.run(async (ctx) => {
+    const productId = await ctx.db.insert('products', {
+      name: 'Hydration Mix',
+      status: 'ready',
+      userId,
+    })
+    const imageId = await ctx.db.insert('productImages', {
+      productId,
+      userId,
+      imageUrl: 'https://example.com/p.png',
+      type: 'original',
+      status: 'ready',
+    })
+    await ctx.db.patch(productId, { primaryImageId: imageId })
+    return { productId, imageId }
+  })
+}
+
+test('startGeneration fans out angle×placement rows with correct context', async () => {
+  const t = convexTest(schema, modules)
+  await seedBillingData(t)
+  const { productId } = await seedProductWithImage(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  const adTestId = await asUser.mutation(api.adTests.createDraft, {
+    productId,
+    name: 'Benefit Test',
+    source: 'custom',
+    angles: [
+      { key: 'benefit', title: 'Core Benefit', description: 'Main value prop', hook: 'Feel the diff' },
+      { key: 'social', title: 'Social Proof', hook: 'Loved by thousands' },
+    ],
+    placements: ['feed_square', 'story_reel'] as Placement[],
+  })
+
+  const result = await asUser.mutation(api.adTests.startGeneration, { adTestId })
+  expect(result).toEqual({ ok: true, plannedImageCount: 4 })
+
+  // adTest should be generating with plannedImageCount stamped.
+  const adTest = await t.run((ctx) => ctx.db.get(adTestId))
+  expect(adTest!.status).toBe('generating')
+  expect(adTest!.plannedImageCount).toBe(4)
+
+  // Four templateGeneration rows linked to the test.
+  const gens = await t.run((ctx) =>
+    ctx.db
+      .query('templateGenerations')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+      .collect(),
+  )
+  expect(gens).toHaveLength(4)
+
+  const sorted = [...gens].sort((a, b) => (a.adUnitIndex ?? 0) - (b.adUnitIndex ?? 0))
+
+  // Row 0: benefit × feed_square
+  expect(sorted[0].adUnitIndex).toBe(0)
+  expect(sorted[0].angleKey).toBe('benefit')
+  expect(sorted[0].placement).toBe('feed_square')
+  expect(sorted[0].aspectRatio).toBe('1:1')
+  expect(sorted[0].mode).toBe('angle')
+  expect(sorted[0].angleSeed?.title).toBe('Core Benefit')
+  expect(sorted[0].adTestId).toBe(adTestId)
+  expect(sorted[0].userId).toBe(USER)
+  expect(sorted[0].model).toBe('nano-banana-2')
+
+  // Row 1: benefit × story_reel
+  expect(sorted[1].adUnitIndex).toBe(1)
+  expect(sorted[1].angleKey).toBe('benefit')
+  expect(sorted[1].placement).toBe('story_reel')
+  expect(sorted[1].aspectRatio).toBe('9:16')
+
+  // Row 2: social × feed_square
+  expect(sorted[2].adUnitIndex).toBe(2)
+  expect(sorted[2].angleKey).toBe('social')
+  expect(sorted[2].placement).toBe('feed_square')
+  expect(sorted[2].angleSeed?.title).toBe('Social Proof')
+
+  // Row 3: social × story_reel
+  expect(sorted[3].adUnitIndex).toBe(3)
+  expect(sorted[3].angleKey).toBe('social')
+  expect(sorted[3].placement).toBe('story_reel')
+})
+
+test('startGeneration fans out prompt×placement rows with correct context', async () => {
+  const t = convexTest(schema, modules)
+  await seedBillingData(t)
+  const { productId } = await seedProductWithImage(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  const adTestId = await asUser.mutation(api.adTests.createDraft, {
+    productId,
+    name: 'Prompt Test',
+    source: 'custom',
+    angles: [{ key: 'a', title: 'A' }],
+    prompts: ['Try this skincare routine tonight'],
+    placements: ['feed_square'] as Placement[],
+  })
+
+  await asUser.mutation(api.adTests.startGeneration, { adTestId })
+
+  const gens = await t.run((ctx) =>
+    ctx.db
+      .query('templateGenerations')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+      .collect(),
+  )
+  // 1 angle × 1 placement + 1 prompt × 1 placement = 2 rows.
+  expect(gens).toHaveLength(2)
+
+  const promptRow = gens.find((g) => g.mode === 'prompt')
+  expect(promptRow).toBeDefined()
+  expect(promptRow!.dynamicPrompt).toBe('Try this skincare routine tonight')
+  expect(promptRow!.placement).toBe('feed_square')
+  expect(promptRow!.adTestId).toBe(adTestId)
+  expect(promptRow!.angleKey).toBeUndefined()
+})
+
+test('startGeneration rejects non-draft ad tests', async () => {
+  const t = convexTest(schema, modules)
+  await seedBillingData(t)
+  const { productId } = await seedProductWithImage(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  const adTestId = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productId),
+    name: 'Already Started',
+  })
+
+  // Manually flip to generating via the internal status mutation.
+  await t.run((ctx) => ctx.db.patch(adTestId, { status: 'generating' }))
+
+  await expect(
+    asUser.mutation(api.adTests.startGeneration, { adTestId }),
+  ).rejects.toThrow(/cannot be started/)
+})
+
+test('startGeneration rejects a non-owner', async () => {
+  const t = convexTest(schema, modules)
+  await seedBillingData(t)
+  const { productId } = await seedProductWithImage(t)
+
+  const adTestId = await t
+    .withIdentity({ tokenIdentifier: USER })
+    .mutation(api.adTests.createDraft, baseDraftArgs(productId))
+
+  await expect(
+    t
+      .withIdentity({ tokenIdentifier: OTHER })
+      .mutation(api.adTests.startGeneration, { adTestId }),
+  ).rejects.toThrow(/Ad Test not found/)
+})
+
+test('startGeneration uses landscape (16:9) aspect ratio for landscape placement', async () => {
+  const t = convexTest(schema, modules)
+  await seedBillingData(t)
+  const { productId } = await seedProductWithImage(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  const adTestId = await asUser.mutation(api.adTests.createDraft, {
+    productId,
+    name: 'Landscape Test',
+    source: 'custom',
+    angles: [{ key: 'a', title: 'A' }],
+    placements: ['landscape'] as Placement[],
+  })
+
+  await asUser.mutation(api.adTests.startGeneration, { adTestId })
+
+  const gens = await t.run((ctx) =>
+    ctx.db
+      .query('templateGenerations')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+      .collect(),
+  )
+  expect(gens).toHaveLength(1)
+  expect(gens[0].aspectRatio).toBe('16:9')
+  expect(gens[0].placement).toBe('landscape')
+})
+
 test('setStatusFromChildren leaves a childless draft unchanged', async () => {
   const t = convexTest(schema, modules)
   const productId = await seedProduct(t)
