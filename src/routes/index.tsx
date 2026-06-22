@@ -308,9 +308,9 @@ function Hero() {
               Create my free ad test →
             </button>
           </form>
-          <MonoLabel>3 ready-to-run ads · free · no card</MonoLabel>
+          <MonoLabel>100 free credits to start · ~10 ads · no card</MonoLabel>
           <Link
-            to="/onboarding"
+            to="/pricing"
             style={{
               fontFamily: fontBody,
               fontSize: 13,
@@ -320,7 +320,7 @@ function Hero() {
               paddingBottom: 1,
             }}
           >
-            Or start a 7-day free trial
+            See plans &amp; pricing
           </Link>
           <a
             href="#loop-title"

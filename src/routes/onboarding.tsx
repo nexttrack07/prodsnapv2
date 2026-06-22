@@ -455,15 +455,17 @@ function StarterFromSample() {
             <IconSparkles size={28} />
           </ThemeIcon>
           <div>
-            <Title order={2} mb={8}>Your free Ad Test is ready</Title>
+            <Title order={2} mb={8}>100 free credits — no card</Title>
             <Text c="dark.2" maw={380} mx="auto">
-              Generate one complete ad test — one concept across three placements — at no cost, no card required.
+              We'll generate your first ad test — one concept across three
+              placements — and you'll keep the rest of your free credits to
+              explore.
             </Text>
           </div>
           <List size="sm" c="dark.1" spacing={6} withPadding>
-            <List.Item>1 concept × 3 placements (Feed 1:1, Feed 4:5, Story 9:16)</List.Item>
-            <List.Item>Preview all generated creatives</List.Item>
-            <List.Item>Mark winners · Export requires a paid plan</List.Item>
+            <List.Item>100 free credits (~10 ads) · no credit card</List.Item>
+            <List.Item>Starter test: 1 concept × 3 placements (1:1, 4:5, 9:16)</List.Item>
+            <List.Item>Preview & mark winners · Export needs a paid plan</List.Item>
           </List>
           {error && (
             <Text size="sm" c="red.4">{error}</Text>

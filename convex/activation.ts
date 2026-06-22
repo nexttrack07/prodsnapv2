@@ -41,8 +41,15 @@ import { api, internal } from './_generated/api'
 // Starter test is always 1 concept × these 3 placements.
 const STARTER_PLACEMENTS = ['feed_square', 'feed_vertical', 'story_reel'] as const
 
-// 1 credit = 1 000 mc; exactly enough for 3 images (one per placement).
-const STARTER_CREDITS_MC = 3 * 1_000
+// One-time free grant for new accounts (no card, no trial). 1 credit = 1 000 mc;
+// nano-banana-2 costs 10 credits (10 000 mc) per image, so 100 credits =
+// 100 000 mc = 10 images (~$0.80 COGS). The starter Ad Test spends 30 credits
+// (3 images); the remainder lets the user keep generating before the paywall.
+const STARTER_CREDITS_MC = 100 * 1_000
+
+// Per-image cost in mc — must match the seeded creditPricing row
+// (lib/billing/seedPricing.ts). Used only as a fallback insert below.
+const NANO_BANANA_PRICE_MC = 10_000
 
 // ─── Disposable-email block ───────────────────────────────────────────────────
 // TODO (#36 follow-up): Replace with a real-time API call (e.g. Abstract API,
@@ -372,7 +379,7 @@ export const _claimStarterGrant = internalMutation({
     if (!pricing) {
       await ctx.db.insert('creditPricing', {
         modelKey: 'nano-banana-2',
-        creditsMc: 1_000,
+        creditsMc: NANO_BANANA_PRICE_MC,
         active: true,
         updatedAt: now,
       })

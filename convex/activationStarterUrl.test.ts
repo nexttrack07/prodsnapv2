@@ -173,6 +173,10 @@ test('activateStarterForProduct grants credits and creates the starter test', as
       .unique(),
   )
   expect(balance).not.toBeNull()
+  // 100 free credits = 100,000 mc — must cover the 3-image starter test
+  // (30,000 mc at 10,000 mc/image) with room to spare. Guards the regression
+  // where the grant was 10x too small to afford a single image.
+  expect(balance!.planAllowanceMc).toBe(100_000)
   const profile = await t.run((ctx) =>
     ctx.db
       .query('onboardingProfiles')
