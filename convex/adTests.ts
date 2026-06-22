@@ -431,14 +431,18 @@ export const getHomeAdTestSurface = query({
     if (!focusProduct) return empty
 
     // Persisted, unconsumed, undismissed recommendations, priority asc.
+    // Filter dismissed rows at the DB level (before take) so a backlog of
+    // dismissed rows — which keep consumedAt undefined — can never fill the
+    // window and hide fresh pending recommendations.
     const recRows = await ctx.db
       .query('adTestRecommendations')
       .withIndex('by_productId_consumedAt', (q) =>
         q.eq('productId', focusProduct._id).eq('consumedAt', undefined),
       )
+      .filter((q) => q.eq(q.field('dismissedAt'), undefined))
       .take(50)
     const recommendations = recRows
-      .filter((r) => r.userId === userId && r.dismissedAt === undefined)
+      .filter((r) => r.userId === userId)
       .sort((a, b) => a.concept.priority - b.concept.priority)
       .slice(0, 6)
       .map((r) => ({
@@ -525,6 +529,14 @@ export const createRecommendedAdTest = mutation({
     const rec = await ctx.db.get(recommendationId)
     if (!rec || rec.userId !== userId) {
       throw new Error('Recommendation not found')
+    }
+    // Reject already-acted-on rows so a retry or stale client can't spawn a
+    // second draft from the same recommendation.
+    if (rec.consumedAt !== undefined) {
+      throw new Error('Recommendation has already been used')
+    }
+    if (rec.dismissedAt !== undefined) {
+      throw new Error('Recommendation is no longer available')
     }
     await requireOwnedProduct(ctx, userId, rec.productId)
 

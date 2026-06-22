@@ -200,6 +200,85 @@ test('createRecommendedAdTest creates a draft and marks the rec consumed', async
   expect(surface.recommendations.some((r) => r._id === starter._id)).toBe(false)
 })
 
+test('createRecommendedAdTest rejects an already-consumed or dismissed rec', async () => {
+  const t = convexTest(schema, modules)
+  const productId = await seedProduct(t)
+  await analyze(t, productId)
+  const recs = await recsFor(t, productId)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  // Already consumed → reject (retry / stale client safety).
+  const consumed = recs[0]
+  await t.run((ctx) => ctx.db.patch(consumed._id, { consumedAt: Date.now() }))
+  await expect(
+    asUser.mutation(api.adTests.createRecommendedAdTest, {
+      recommendationId: consumed._id,
+    }),
+  ).rejects.toThrow(/already been used/)
+
+  // Dismissed → reject.
+  const dismissed = recs[1]
+  await t.run((ctx) => ctx.db.patch(dismissed._id, { dismissedAt: Date.now() }))
+  await expect(
+    asUser.mutation(api.adTests.createRecommendedAdTest, {
+      recommendationId: dismissed._id,
+    }),
+  ).rejects.toThrow(/no longer available/)
+})
+
+test('getHomeAdTestSurface still surfaces fresh recs behind a backlog of dismissed ones', async () => {
+  const t = convexTest(schema, modules)
+  const productId = await seedProduct(t)
+
+  // A large backlog of dismissed (but unconsumed) rows would fill a naive
+  // take() window; a fresh pending row must still appear.
+  await t.run(async (ctx) => {
+    const now = Date.now()
+    for (let i = 0; i < 60; i++) {
+      await ctx.db.insert('adTestRecommendations', {
+        userId: USER,
+        productId,
+        concept: {
+          key: `dismissed_${i}`,
+          title: `Dismissed ${i}`,
+          description: 'old',
+          source: 'product_analysis',
+          angles: [{ key: `a${i}`, title: 'A' }],
+          placements: ['feed_square'],
+          priority: 10,
+          createdAt: now,
+        },
+        dismissedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+    await ctx.db.insert('adTestRecommendations', {
+      userId: USER,
+      productId,
+      concept: {
+        key: 'fresh',
+        title: 'Fresh pending',
+        description: 'new',
+        source: 'starter',
+        angles: [{ key: 'f', title: 'F' }],
+        placements: ['feed_square'],
+        priority: 0,
+        createdAt: now,
+      },
+      createdAt: now,
+      updatedAt: now,
+    })
+  })
+
+  const surface = await t
+    .withIdentity({ tokenIdentifier: USER })
+    .query(api.adTests.getHomeAdTestSurface, {})
+
+  expect(surface.recommendations).toHaveLength(1)
+  expect(surface.recommendations[0].title).toBe('Fresh pending')
+})
+
 test('createRecommendedAdTest rejects a non-owner', async () => {
   const t = convexTest(schema, modules)
   const productId = await seedProduct(t)
