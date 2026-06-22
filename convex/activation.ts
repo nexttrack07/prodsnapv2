@@ -323,18 +323,13 @@ export const activateStarterForProduct = action({
  * balance, and the one-time starter-grant flag — so you can run landing → free
  * test repeatedly on a single account instead of signing up new ones.
  *
- * Triple-guarded: it's a no-op unless `DEV_ALLOW_REACTIVATION === 'true'` is set
- * in the Convex env, it only ever touches the CALLER's own data, and the UI
- * button that calls it renders only in a Vite dev build.
+ * Self-scoped: it only ever touches the CALLER's own data, and the UI button
+ * that calls it renders only in a Vite dev build. (Temporary testing tool —
+ * revert before any real launch.)
  */
 export const resetMyActivation = mutation({
   args: {},
   handler: async (ctx) => {
-    if (process.env.DEV_ALLOW_REACTIVATION !== 'true') {
-      throw new Error(
-        'Reset is disabled. Run: npx convex env set DEV_ALLOW_REACTIVATION true',
-      )
-    }
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
