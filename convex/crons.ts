@@ -41,4 +41,14 @@ crons.interval(
   {},
 )
 
+// Weekly return trigger: email owners of exported Ad Tests that have had ~a
+// week to run, prompting them to log winners and start the next test. Daily
+// cadence (not weekly) so a missed run still catches the backlog next day;
+// each test is nudged at most once via lastLifecycleEmailSentAt.
+crons.daily(
+  'ad-test-weekly-lifecycle',
+  { hourUTC: 15, minuteUTC: 0 }, // ~10am Central
+  internal.adTestLifecycle.scanAndNotifyAdTestLifecycle,
+)
+
 export default crons

@@ -11,6 +11,7 @@
 import type * as activation from "../activation.js";
 import type * as adCopy from "../adCopy.js";
 import type * as adTestExport from "../adTestExport.js";
+import type * as adTestLifecycle from "../adTestLifecycle.js";
 import type * as adTests from "../adTests.js";
 import type * as admin_audit from "../admin/audit.js";
 import type * as admin_playground from "../admin/playground.js";
@@ -77,6 +78,7 @@ declare const fullApi: ApiFromModules<{
   activation: typeof activation;
   adCopy: typeof adCopy;
   adTestExport: typeof adTestExport;
+  adTestLifecycle: typeof adTestLifecycle;
   adTests: typeof adTests;
   "admin/audit": typeof admin_audit;
   "admin/playground": typeof admin_playground;
