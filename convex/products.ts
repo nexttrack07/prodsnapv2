@@ -903,127 +903,13 @@ export const restoreProduct = mutation({
 // in the productImages table with proper parent/child relationships.
 // These will be removed once all products are migrated to the new system.
 
-/**
- * @deprecated Use `productImages.removeImageBackground` instead.
- * This operates on the legacy product-level background removal fields.
- * Triggers background removal for a product image.
- * Requires authentication and ownership.
- */
-export const removeProductBackground = mutation({
-  args: { productId: v.id('products') },
-  handler: async (ctx, { productId }) => {
-    const userId = await requireAuth(ctx)
-    const product = await ctx.db.get(productId)
-    if (!product) throw new Error('Product not found')
-    if (product.userId && product.userId !== userId) {
-      throw new Error('Not authorized to modify this product')
-    }
-    if (product.archivedAt) throw new Error('Cannot modify archived product')
-    if (product.backgroundRemovalStatus === 'processing') {
-      throw new Error('Background removal already in progress')
-    }
-    // Billing: capability check (no credit consumption in v1 for bg-removal).
-    await requireCapability(ctx, CAPABILITIES.REMOVE_BACKGROUND, 'removeProductBackground')
-    // Rate limit: prevent a bot from spamming BG removal to burn fal.ai $.
-    await enforceGenerationRateLimit(ctx, userId, 'removeProductBackground')
-
-    await ctx.db.patch(productId, {
-      backgroundRemovalStatus: 'processing',
-    })
-
-    await ctx.scheduler.runAfter(0, internal.products.runBackgroundRemoval, {
-      productId,
-    })
-
-    return { ok: true }
-  },
-})
-
-/**
- * @deprecated Use `productImages.runImageBackgroundRemoval` instead.
- * Internal action to run background removal.
- */
-export const runBackgroundRemoval = internalAction({
-  args: { productId: v.id('products') },
-  handler: async (ctx, { productId }) => {
-    const product = await ctx.runQuery(internal.products.getProductInternal, {
-      productId,
-    })
-    if (!product) return
-
-    try {
-      if (!product.imageUrl) {
-        throw new Error('Product has no image URL')
-      }
-      const result = await ctx.runAction(internal.ai.removeBackground, {
-        productId,
-        imageUrl: product.imageUrl,
-        userId: product.userId,
-      })
-
-      await ctx.runMutation(internal.products.saveBackgroundRemoval, {
-        productId,
-        backgroundRemovedUrl: result.outputUrl,
-      })
-    } catch (err) {
-      await ctx.runMutation(internal.products.failBackgroundRemoval, {
-        productId,
-        error: err instanceof Error ? err.message : String(err),
-      })
-    }
-  },
-})
-
-/** @deprecated Use `productImages.saveImageEnhancement` instead. */
-export const saveBackgroundRemoval = internalMutation({
-  args: {
-    productId: v.id('products'),
-    backgroundRemovedUrl: v.string(),
-  },
-  handler: async (ctx, { productId, backgroundRemovedUrl }) => {
-    await ctx.db.patch(productId, {
-      backgroundRemovedUrl,
-      backgroundRemovalStatus: 'complete',
-    })
-  },
-})
-
-/** @deprecated Use `productImages.failImageEnhancement` instead. */
-export const failBackgroundRemoval = internalMutation({
-  args: {
-    productId: v.id('products'),
-    error: v.string(),
-  },
-  handler: async (ctx, { productId, error }) => {
-    await ctx.db.patch(productId, {
-      backgroundRemovalStatus: 'failed',
-      error,
-    })
-  },
-})
-
-/**
- * @deprecated Use productImages table deletion instead.
- * Clears the background-removed image (revert to original).
- */
-export const clearBackgroundRemoval = mutation({
-  args: { productId: v.id('products') },
-  handler: async (ctx, { productId }) => {
-    const userId = await requireAuth(ctx)
-    const product = await ctx.db.get(productId)
-    if (!product) throw new Error('Product not found')
-    if (product.userId && product.userId !== userId) {
-      throw new Error('Not authorized to modify this product')
-    }
-
-    await ctx.db.patch(productId, {
-      backgroundRemovedUrl: undefined,
-      backgroundRemovalStatus: 'idle',
-    })
-
-    return { ok: true }
-  },
-})
+// NOTE: The legacy product-level background-removal path
+// (removeProductBackground / runBackgroundRemoval / saveBackgroundRemoval /
+// failBackgroundRemoval / clearBackgroundRemoval) was removed in the #42
+// cleanup. The active path is image-level: productImages.removeImageBackground.
+// The deprecated products.backgroundRemovedUrl / backgroundRemovalStatus fields
+// are kept for now — the data migration and userDeletion R2 cleanup still read
+// them.
 
 // ─── Generation queries for a product ─────────────────────────────────────
 
