@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query'
 import { useAction } from 'convex/react'
+import { ConvexError } from 'convex/values'
 import { useNavigate } from '@tanstack/react-router'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -117,6 +118,15 @@ export function AdTestReviewView({
         color: 'green',
       })
     } catch (err) {
+      // Defense in depth: if the server denies on entitlement (e.g. a stale
+      // client plan), route to upgrade instead of showing a dead-end error.
+      if (
+        err instanceof ConvexError &&
+        (err.data as { code?: string })?.code === 'NO_SUBSCRIPTION'
+      ) {
+        navigate({ to: '/pricing' })
+        return
+      }
       notifications.show({
         title: 'Export failed',
         message: err instanceof Error ? err.message : 'Please try again.',
