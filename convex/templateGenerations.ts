@@ -5,6 +5,7 @@
 import { v } from 'convex/values'
 import { paginationOptsValidator } from 'convex/server'
 import { mutation, query, type QueryCtx, type MutationCtx } from './_generated/server'
+import { internal } from './_generated/api'
 
 // ─── Auth helpers (mirrors products.ts) ──────────────────────────────────────
 
@@ -175,5 +176,12 @@ export const toggleWinner = mutation({
     }
 
     await ctx.db.patch(generationId, { isWinner: !gen.isWinner })
+
+    // Keep the parent Ad Test's winnerCount in sync.
+    if (gen.adTestId) {
+      await ctx.runMutation(internal.adTests.updateCountersForGeneration, {
+        adTestId: gen.adTestId,
+      })
+    }
   },
 })

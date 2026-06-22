@@ -27,6 +27,10 @@ import {
   mutation,
   query,
 } from './_generated/server'
+import { internal } from './_generated/api'
+import { workflow } from './studio'
+import { enforceGenerationRateLimit, recordGenerationUsage } from './products'
+import { requireCredits } from './lib/billing/credits'
 import {
   PLACEMENT_ASPECT_RATIO,
   adPlacement,
@@ -351,6 +355,154 @@ export const createDraft = mutation({
 })
 
 /**
+ * Fans out `templateGenerations` rows for an Ad Test and starts their workflows.
+ * One row per (angle × placement) plus one per (prompt × placement). All rows
+ * are linked via adTestId, placement, angleKey, adUnitIndex, aspectRatio, and
+ * angleSeed so the UI can group and review them as a structured test set.
+ *
+ * Credit preflight is done once here using plannedImageCount — no per-row
+ * billing check. No model picker: always nano-banana-2.
+ * Only callable on a 'draft' Ad Test.
+ */
+export const startGeneration = mutation({
+  args: {
+    adTestId: v.id('adTests'),
+    /** Override which product image to use. Defaults to the product's primary image. */
+    productImageId: v.optional(v.id('productImages')),
+    /** Apply brand theme (colors/font/tagline/offer). Defaults to true. */
+    applyBrand: v.optional(v.boolean()),
+    /** Apply customer voice (brand voice + customer phrases). Defaults to true. */
+    applyVoice: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx)
+    const adTest = await requireOwnedAdTest(ctx, userId, args.adTestId)
+
+    if (adTest.status !== 'draft') {
+      throw new Error(`Ad Test cannot be started (status=${adTest.status})`)
+    }
+
+    const product = await requireOwnedProduct(ctx, userId, adTest.productId)
+    if (product.status !== 'ready') {
+      throw new Error('Product analysis is not ready yet')
+    }
+
+    // Resolve the product image (caller-supplied wins; fall back to primary).
+    let productImageUrl: string
+    let resolvedImageId: Id<'productImages'> | undefined
+
+    if (args.productImageId) {
+      const picked = await ctx.db.get(args.productImageId)
+      if (!picked) throw new Error('Source image not found')
+      if (picked.productId !== adTest.productId) {
+        throw new Error('Source image does not belong to this product')
+      }
+      if (picked.status !== 'ready') throw new Error('Source image not ready')
+      resolvedImageId = picked._id
+      productImageUrl = picked.imageUrl
+    } else {
+      if (!product.primaryImageId) throw new Error('Product has no primary image set')
+      const primaryImage = await ctx.db.get(product.primaryImageId)
+      if (!primaryImage) throw new Error('Primary image not found')
+      resolvedImageId = product.primaryImageId
+      productImageUrl = primaryImage.imageUrl
+    }
+
+    // Fan-out plan: angle × placement rows + prompt × placement rows.
+    const plannedImageCount =
+      adTest.angles.length * adTest.placements.length +
+      (adTest.prompts?.length ?? 0) * adTest.placements.length
+
+    if (plannedImageCount === 0) {
+      throw new Error('Ad Test has no angles or prompts to generate from')
+    }
+
+    await enforceGenerationRateLimit(ctx, userId, 'startAdTestGeneration')
+
+    // Single preflight credit check for the whole batch.
+    await requireCredits(ctx, 'nano-banana-2', plannedImageCount)
+    await recordGenerationUsage(ctx, userId, 'startAdTestGeneration', plannedImageCount)
+
+    const now = Date.now()
+    await ctx.db.patch(args.adTestId, {
+      plannedImageCount,
+      status: 'generating',
+      updatedAt: now,
+    })
+
+    let adUnitIndex = 0
+
+    // Angle-driven rows (mode = 'angle').
+    for (const angle of adTest.angles) {
+      for (const placement of adTest.placements) {
+        const aspectRatio = PLACEMENT_ASPECT_RATIO[placement]
+        const generationId = await ctx.db.insert('templateGenerations', {
+          productId: adTest.productId,
+          productImageId: resolvedImageId,
+          userId,
+          productImageUrl,
+          aspectRatio,
+          mode: 'angle',
+          colorAdapt: false,
+          applyBrand: args.applyBrand ?? true,
+          applyVoice: args.applyVoice ?? true,
+          variationIndex: 0,
+          angleSeed: {
+            title: angle.title,
+            description: angle.description ?? '',
+            hook: angle.hook ?? '',
+            suggestedAdStyle: angle.suggestedAdStyle ?? '',
+          },
+          adTestId: args.adTestId,
+          placement,
+          angleKey: angle.key,
+          adUnitIndex: adUnitIndex++,
+          status: 'queued',
+          model: 'nano-banana-2',
+        })
+        await ctx.scheduler.runAfter(
+          0,
+          internal.adTests._kickoffGenerationWorkflow,
+          { generationId, mode: 'angle' as const },
+        )
+      }
+    }
+
+    // Prompt-driven rows (mode = 'prompt').
+    for (const prompt of adTest.prompts ?? []) {
+      for (const placement of adTest.placements) {
+        const aspectRatio = PLACEMENT_ASPECT_RATIO[placement]
+        const generationId = await ctx.db.insert('templateGenerations', {
+          productId: adTest.productId,
+          productImageId: resolvedImageId,
+          userId,
+          productImageUrl,
+          aspectRatio,
+          mode: 'prompt',
+          colorAdapt: false,
+          applyBrand: args.applyBrand ?? true,
+          applyVoice: args.applyVoice ?? true,
+          variationIndex: 0,
+          dynamicPrompt: prompt,
+          adTestId: args.adTestId,
+          placement,
+          adUnitIndex: adUnitIndex++,
+          status: 'queued',
+          model: 'nano-banana-2',
+        })
+        await ctx.scheduler.runAfter(
+          0,
+          internal.adTests._kickoffGenerationWorkflow,
+          { generationId, mode: 'prompt' as const },
+        )
+      }
+    }
+
+    return { ok: true, plannedImageCount }
+  },
+})
+
+/**
  * Marks an Ad Test exported by stamping `exportedAt`. Does NOT change `status`
  * — exported is lifecycle metadata derived from the timestamp. Idempotent:
  * preserves the first export time on repeat calls.
@@ -425,7 +577,30 @@ export const savePerformanceNote = mutation({
   },
 })
 
-// ─── Internal mutations (counter + status derivation) ────────────────────────
+// ─── Internal mutations (workflow kickoff + counter + status derivation) ─────
+
+/**
+ * Starts the appropriate generation workflow for a single row created by
+ * `startGeneration`. Called via ctx.scheduler so the mutation that creates
+ * the rows doesn't need the workflow component registered (keeps tests clean).
+ */
+export const _kickoffGenerationWorkflow = internalMutation({
+  args: {
+    generationId: v.id('templateGenerations'),
+    mode: v.union(v.literal('angle'), v.literal('prompt')),
+  },
+  handler: async (ctx, { generationId, mode }) => {
+    if (mode === 'prompt') {
+      await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, {
+        generationId,
+      })
+    } else {
+      await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, {
+        generationId,
+      })
+    }
+  },
+})
 
 /**
  * Recomputes `completedImageCount`, `failedImageCount`, and `winnerCount` from
