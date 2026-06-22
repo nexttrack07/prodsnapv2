@@ -36,8 +36,11 @@ import {
   mutation,
 } from './_generated/server'
 import { v } from 'convex/values'
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { api, internal } from './_generated/api'
+import { requireCredits } from './lib/billing/credits'
+import { recordGenerationUsage } from './products'
+import { workflow } from './studio'
 
 // Starter test is always 1 concept × these 3 placements.
 const STARTER_PLACEMENTS = ['feed_square', 'feed_vertical', 'story_reel'] as const
@@ -302,6 +305,142 @@ export const activateStarterForProduct = action({
     await ctx.runMutation(api.adTests.startGeneration, { adTestId })
 
     return { adTestId: adTestId as string, productId: productId as string }
+  },
+})
+
+// ─── Template-driven starter: pick up to 3 templates → 3 ads on the product ────
+
+/**
+ * Fans out one template-driven generation per chosen template (the product
+ * image composited into each template's style). Unlike `products.generateFromProduct`
+ * this does NOT require the GENERATE_VARIATIONS capability — the starter is free
+ * for new (capability-less) accounts — but it still charges credits. Each ad
+ * uses its template's native aspect ratio.
+ */
+export const _startStarterTemplateGenerations = internalMutation({
+  args: {
+    userId: v.string(),
+    productId: v.id('products'),
+    templateIds: v.array(v.id('adTemplates')),
+  },
+  handler: async (ctx, { userId, productId, templateIds }) => {
+    const ids = templateIds.slice(0, 3)
+    if (ids.length === 0) throw new Error('Pick at least one template')
+
+    const product = await ctx.db.get(productId)
+    if (!product || product.userId !== userId) throw new Error('Product not found')
+
+    // Resolve the source product image (primary, then legacy fallback).
+    let productImageUrl: string
+    let productImageId: Id<'productImages'> | undefined
+    if (product.primaryImageId) {
+      const primary = await ctx.db.get(product.primaryImageId)
+      if (!primary) throw new Error('Primary image not found')
+      productImageUrl = primary.imageUrl
+      productImageId = primary._id
+    } else if (product.imageUrl) {
+      productImageUrl = product.imageUrl
+    } else {
+      throw new Error('Product has no image')
+    }
+
+    // Credit preflight + charge for the whole batch (no capability gate).
+    await requireCredits(ctx, 'nano-banana-2', ids.length)
+    await recordGenerationUsage(ctx, userId, 'activateStarterWithTemplates', ids.length)
+
+    let variationIndex = 0
+    for (const templateId of ids) {
+      const tpl = await ctx.db.get(templateId)
+      if (!tpl || tpl.status !== 'published') continue
+      // Curated, own, or anyone's public custom — never someone else's private.
+      if (tpl.ownerUserId && tpl.ownerUserId !== userId && tpl.visibility !== 'public') {
+        continue
+      }
+      const genId = await ctx.db.insert('templateGenerations', {
+        productId,
+        productImageId,
+        userId,
+        templateId,
+        productImageUrl,
+        templateImageUrl: tpl.imageUrl,
+        templateSnapshot: {
+          name: tpl.name || tpl.category || undefined,
+          aspectRatio: tpl.aspectRatio,
+        },
+        aspectRatio: tpl.aspectRatio,
+        mode: 'exact',
+        colorAdapt: false,
+        applyBrand: true,
+        applyVoice: true,
+        variationIndex: variationIndex++,
+        status: 'queued',
+        model: 'nano-banana-2',
+      })
+      await ctx.scheduler.runAfter(
+        0,
+        internal.activation._kickoffTemplateWorkflow,
+        { generationId: genId },
+      )
+    }
+    return null
+  },
+})
+
+/** Starts the template generation workflow for one row (scheduled from above). */
+export const _kickoffTemplateWorkflow = internalMutation({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }) => {
+    await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
+      generationId,
+    })
+  },
+})
+
+/**
+ * The URL-first starter, end to end: create the product from the chosen photos,
+ * grant the one-time free credits (at most once), and generate one ad per
+ * chosen template. Returns the productId so the UI can drop the user into the
+ * Studio gallery to watch them render.
+ */
+export const activateStarterWithTemplates = action({
+  args: {
+    imageUrls: v.array(v.string()),
+    importId: v.optional(v.id('urlImports')),
+    name: v.optional(v.string()),
+    templateIds: v.array(v.id('adTemplates')),
+  },
+  handler: async (
+    ctx,
+    { imageUrls, importId, name, templateIds },
+  ): Promise<{ productId: string }> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    if (isDisposableEmail(identity.email)) {
+      throw new Error('Please sign up with a real email address to activate the free test.')
+    }
+    if (templateIds.length === 0) throw new Error('Pick at least one template.')
+
+    const productId = await ctx.runMutation(
+      api.activation.createStarterProductFromImages,
+      { imageUrls, importId, name },
+    )
+
+    // Grant free credits only on the first activation; re-runs reuse the balance.
+    const alreadyActivated = await ctx.runQuery(
+      internal.activation._isAlreadyActivated,
+      {},
+    )
+    if (!alreadyActivated) {
+      await ctx.runMutation(internal.activation._claimStarterGrant, {})
+    }
+
+    await ctx.runMutation(internal.activation._startStarterTemplateGenerations, {
+      userId: identity.tokenIdentifier,
+      productId,
+      templateIds,
+    })
+
+    return { productId: productId as string }
   },
 })
 

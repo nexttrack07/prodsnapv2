@@ -189,6 +189,70 @@ test('activateStarterForProduct grants credits and creates the starter test', as
   expect(profile!.hasReceivedStarterGrant).toBe(true)
 })
 
+test('activateStarterWithTemplates creates a product + one generation per template', async () => {
+  const t = convexTest(schema, modules)
+  const templateIds = await t.run(async (ctx) => {
+    const ids: Id<'adTemplates'>[] = []
+    for (let i = 0; i < 3; i++) {
+      ids.push(
+        await ctx.db.insert('adTemplates', {
+          imageUrl: `https://cdn.example.com/t${i}.png`,
+          thumbnailUrl: `https://cdn.example.com/t${i}-thumb.png`,
+          aspectRatio: '4:5',
+          width: 1024,
+          height: 1280,
+          status: 'published',
+        }),
+      )
+    }
+    return ids
+  })
+
+  const { productId } = await t
+    .withIdentity({ tokenIdentifier: USER, email: 'real@example.com' })
+    .action(api.activation.activateStarterWithTemplates, {
+      imageUrls: ['https://cdn.example.com/p.png'],
+      templateIds,
+    })
+
+  // Free credits granted once.
+  const balance = await t.run((ctx) =>
+    ctx.db
+      .query('creditBalances')
+      .withIndex('by_userId', (q) => q.eq('userId', USER))
+      .unique(),
+  )
+  expect(balance!.planAllowanceMc).toBe(100_000)
+
+  // One template-driven generation per chosen template.
+  const gens = await t.run((ctx) =>
+    ctx.db
+      .query('templateGenerations')
+      .withIndex('by_product', (q) =>
+        q.eq('productId', productId as Id<'products'>),
+      )
+      .collect(),
+  )
+  expect(gens).toHaveLength(3)
+  expect(
+    gens.every(
+      (g) => g.templateId && g.mode === 'exact' && g.status === 'queued' && g.aspectRatio === '4:5',
+    ),
+  ).toBe(true)
+})
+
+test('activateStarterWithTemplates rejects when no template is chosen', async () => {
+  const t = convexTest(schema, modules)
+  await expect(
+    t
+      .withIdentity({ tokenIdentifier: USER, email: 'real@example.com' })
+      .action(api.activation.activateStarterWithTemplates, {
+        imageUrls: ['https://cdn.example.com/p.png'],
+        templateIds: [],
+      }),
+  ).rejects.toThrow(/at least one template/)
+})
+
 test('activateStarterForProduct is repeatable and never re-grants credits', async () => {
   const t = convexTest(schema, modules)
   const productId = await seedReadyProduct(t)

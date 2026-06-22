@@ -5,6 +5,7 @@ import { useAction, useMutation, useQuery } from 'convex/react'
 import { notifications } from '@mantine/notifications'
 import {
   ActionIcon,
+  Badge,
   Box,
   Button,
   Center,
@@ -299,49 +300,27 @@ function StarterActivation() {
 
 // ─── URL-first starter: import the visitor's product → free test on it ─────────
 
-type StarterPhase =
-  | 'importing'
-  | 'choosing'
-  | 'creating'
-  | 'analyzing'
-  | 'generating'
-  | 'error'
-
-const PHASE_LABEL: Record<
-  'importing' | 'creating' | 'analyzing' | 'generating',
-  string
-> = {
-  importing: 'Finding your product photos…',
-  creating: 'Setting up your product…',
-  analyzing: 'Analyzing your product…',
-  generating: 'Generating your free ad test…',
-}
-
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+type StarterStep = 'templates' | 'photos' | 'working' | 'error'
 
 function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => void }) {
   const navigate = useNavigate()
   const createUrlImport = useMutation(api.urlImports.createUrlImport)
-  const createStarterProduct = useMutation(api.activation.createStarterProductFromImages)
-  const activateForProduct = useAction(api.activation.activateStarterForProduct)
+  const activateWithTemplates = useAction(api.activation.activateStarterWithTemplates)
 
   const [importId, setImportId] = useState<Id<'urlImports'> | null>(null)
-  const [productId, setProductId] = useState<Id<'products'> | null>(null)
-  const [phase, setPhase] = useState<StarterPhase>('importing')
+  const [step, setStep] = useState<StarterStep>('templates')
+  const [templateIds, setTemplateIds] = useState<Id<'adTemplates'>[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [candidates, setCandidates] = useState<string[]>([])
-  const [scrapeFailed, setScrapeFailed] = useState(false)
-
   const startedRef = useRef(false)
-  const handledImportRef = useRef(false)
-  const activatedRef = useRef(false)
 
   const fail = (msg: string) => {
     setErrorMsg(msg)
-    setPhase('error')
+    setStep('error')
   }
 
-  // 1. Kick off the URL import once.
+  // Kick off the scrape in the BACKGROUND while the user picks templates.
   useEffect(() => {
     if (startedRef.current) return
     startedRef.current = true
@@ -357,78 +336,37 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
       )
   }, [url, createUrlImport])
 
-  // 2. Import settled → show the image picker (we no longer auto-pick). Even a
-  // failed scrape lands here so the user can upload their own photo instead.
   const imp = useQuery(api.urlImports.getUrlImport, importId ? { importId } : 'skip')
-  useEffect(() => {
-    if (!imp || handledImportRef.current) return
-    if (imp.status === 'failed') {
-      handledImportRef.current = true
-      setScrapeFailed(true)
-      setCandidates([])
-      setPhase('choosing')
-      return
-    }
-    if (imp.status === 'done') {
-      handledImportRef.current = true
-      const found = imp.uploadedImageUrls ?? []
-      setCandidates(found)
-      setScrapeFailed(found.length === 0)
-      setPhase('choosing')
-    }
-  }, [imp])
+  const importSettled = imp?.status === 'done' || imp?.status === 'failed'
+  const candidates = imp?.status === 'done' ? imp.uploadedImageUrls ?? [] : []
+  const scrapeFailed =
+    imp?.status === 'failed' ||
+    (imp?.status === 'done' && (imp.uploadedImageUrls?.length ?? 0) === 0)
 
-  // From the picker → create the product from the chosen photos, then proceed.
-  const handleConfirm = async (imageUrls: string[]) => {
-    setPhase('creating')
+  // Photos confirmed → create product + generate one ad per template, then go
+  // to the Studio gallery to watch them render.
+  const handlePhotosConfirm = async (imageUrls: string[]) => {
+    setStep('working')
     try {
-      const pid = await createStarterProduct({
+      const { productId } = await activateWithTemplates({
         imageUrls,
-        importId: importId ?? undefined, // carries distilled metadata if any
+        importId: importId ?? undefined,
+        templateIds,
       })
-      setProductId(pid)
-      setPhase('analyzing')
+      navigate({ to: '/studio/$productId', params: { productId } })
     } catch (err) {
-      fail(err instanceof Error ? err.message : 'Could not set up your product.')
+      fail(err instanceof Error ? err.message : 'Could not generate your ads.')
     }
   }
 
-  // 3. Analysis ready → activate the starter Ad Test and go to Studio.
-  const product = useQuery(
-    api.products.getProductWithStats,
-    productId ? { productId } : 'skip',
-  )
-  useEffect(() => {
-    if (!product || activatedRef.current) return
-    if (product.status === 'failed') {
-      fail('We could not analyze your product. Try a different photo.')
-      return
-    }
-    if (product.status === 'ready') {
-      activatedRef.current = true
-      setPhase('generating')
-      activateForProduct({ productId: product._id })
-        .then(({ adTestId, productId: pid }) => {
-          navigate({
-            to: '/studio/$productId',
-            params: { productId: pid },
-            search: { adTestId },
-          })
-        })
-        .catch((err) =>
-          fail(err instanceof Error ? err.message : 'Could not start your ad test.'),
-        )
-    }
-  }, [product, activateForProduct, navigate])
-
-  if (phase === 'error') {
+  if (step === 'error') {
     return (
       <Center mih="60vh">
         <Container size="xs">
           <Stack align="center" gap="md" ta="center">
             <Title order={2}>We hit a snag</Title>
             <Text c="dark.2" maw={420}>
-              {errorMsg ?? 'Something went wrong importing your product.'}
+              {errorMsg ?? 'Something went wrong.'}
             </Text>
             <Group>
               <Button variant="default" onClick={onUseSample}>
@@ -444,18 +382,43 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
     )
   }
 
-  if (phase === 'choosing') {
+  if (step === 'templates') {
     return (
-      <StarterImagePicker
-        candidates={candidates}
-        scrapeFailed={scrapeFailed}
-        onConfirm={handleConfirm}
+      <StarterTemplatePicker
+        importStep={!importSettled ? imp?.currentStep ?? 'Finding your product…' : null}
+        onContinue={(ids) => {
+          setTemplateIds(ids)
+          setStep('photos')
+        }}
         onUseSample={onUseSample}
       />
     )
   }
 
-  const label = PHASE_LABEL[phase]
+  if (step === 'photos') {
+    if (!importSettled) {
+      return (
+        <Center mih="60vh">
+          <Stack align="center" gap="sm">
+            <Loader size="md" color="brand" />
+            <Text c="dark.2" size="sm">
+              {imp?.currentStep ?? 'Finishing up your product photos…'}
+            </Text>
+          </Stack>
+        </Center>
+      )
+    }
+    return (
+      <StarterImagePicker
+        candidates={candidates}
+        scrapeFailed={scrapeFailed}
+        onConfirm={handlePhotosConfirm}
+        onUseSample={onUseSample}
+      />
+    )
+  }
+
+  // working
   return (
     <Center mih="60vh">
       <Container size="xs">
@@ -464,21 +427,133 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
             <IconSparkles size={28} />
           </ThemeIcon>
           <div>
-            <Title order={2} mb={8}>Building your free ad test</Title>
+            <Title order={2} mb={8}>Generating your ads</Title>
             <Text c="dark.2" maw={400} mx="auto">
-              We're turning your product into 3 ready-to-run ads. This takes about
-              a minute — no card needed.
+              Compositing your product into {templateIds.length} ad
+              {templateIds.length === 1 ? '' : 's'}. Dropping you into the studio…
             </Text>
           </div>
-          <Group gap="sm">
-            <Loader size="sm" color="brand" />
-            <Text c="dark.1" size="sm">
-              {imp?.currentStep && phase === 'importing' ? imp.currentStep : label}
-            </Text>
-          </Group>
+          <Loader size="sm" color="brand" />
         </Stack>
       </Container>
     </Center>
+  )
+}
+
+// ─── Template picker: pick up to 3 ad styles (shown while the scrape runs) ──────
+
+function StarterTemplatePicker({
+  importStep,
+  onContinue,
+  onUseSample,
+}: {
+  importStep: string | null
+  onContinue: (templateIds: Id<'adTemplates'>[]) => void
+  onUseSample: () => void
+}) {
+  const templates = useQuery(api.templates.listPublished, {})
+  const [selected, setSelected] = useState<Id<'adTemplates'>[]>([])
+
+  const toggle = (id: Id<'adTemplates'>) => {
+    setSelected((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : prev.length >= 3
+          ? prev
+          : [...prev, id],
+    )
+  }
+
+  const list = (templates ?? []).slice(0, 60)
+
+  return (
+    <Container size="lg" py={32}>
+      <Stack gap="lg">
+        <div>
+          <Title order={2} fz={26} fw={600}>
+            Pick up to 3 ad styles
+          </Title>
+          <Text c="dark.2" mt={4}>
+            These templates set the look of your ads — your product gets
+            composited into each one.
+          </Text>
+          {importStep && (
+            <Group gap={6} mt={6}>
+              <Loader size="xs" color="brand" />
+              <Text size="xs" c="dark.3">
+                {importStep} (in the background)
+              </Text>
+            </Group>
+          )}
+        </div>
+
+        {!templates ? (
+          <Center py="xl">
+            <Loader color="brand" />
+          </Center>
+        ) : (
+          <SimpleGrid cols={{ base: 3, sm: 4, md: 5 }} spacing="sm">
+            {list.map((t) => {
+              const order = selected.indexOf(t._id)
+              const isSelected = order !== -1
+              return (
+                <Box
+                  key={t._id}
+                  pos="relative"
+                  onClick={() => toggle(t._id)}
+                  style={{
+                    cursor: 'pointer',
+                    borderRadius: 'var(--mantine-radius-md)',
+                    overflow: 'hidden',
+                    outline: isSelected
+                      ? '2px solid var(--mantine-color-brand-5)'
+                      : '1px solid var(--mantine-color-dark-5)',
+                    outlineOffset: isSelected ? -2 : -1,
+                  }}
+                >
+                  <Image
+                    src={t.thumbnailUrl || t.imageUrl}
+                    alt=""
+                    w="100%"
+                    style={{
+                      aspectRatio: '1',
+                      objectFit: 'cover',
+                      display: 'block',
+                      opacity: isSelected ? 1 : 0.85,
+                    }}
+                  />
+                  {isSelected && (
+                    <Badge
+                      size="sm"
+                      circle
+                      color="brand"
+                      pos="absolute"
+                      style={{ top: 4, right: 4 }}
+                    >
+                      {order + 1}
+                    </Badge>
+                  )}
+                </Box>
+              )
+            })}
+          </SimpleGrid>
+        )}
+
+        <Group justify="space-between">
+          <Button variant="subtle" color="gray" size="sm" onClick={onUseSample}>
+            Use a sample instead
+          </Button>
+          <Button
+            color="brand"
+            size="md"
+            disabled={selected.length === 0}
+            onClick={() => onContinue(selected)}
+          >
+            Continue ({selected.length}/3) →
+          </Button>
+        </Group>
+      </Stack>
+    </Container>
   )
 }
 
