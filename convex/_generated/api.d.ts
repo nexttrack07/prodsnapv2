@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activation from "../activation.js";
 import type * as adCopy from "../adCopy.js";
 import type * as adTests from "../adTests.js";
 import type * as admin_audit from "../admin/audit.js";
@@ -70,6 +71,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activation: typeof activation;
   adCopy: typeof adCopy;
   adTests: typeof adTests;
   "admin/audit": typeof admin_audit;

@@ -13,7 +13,7 @@ function SignUpRoute() {
         routing="path"
         path="/sign-up"
         signInUrl="/sign-in"
-        forceRedirectUrl="/onboarding"
+        fallbackRedirectUrl="/onboarding"
       />
     </Center>
   )

@@ -10,6 +10,7 @@ import { useEffect } from 'react'
 import { useQuery } from 'convex/react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { api } from '../../../convex/_generated/api'
+import { STARTER_MODE_KEY } from '../../routes/onboarding'
 
 // Paths the user can visit while onboarding is incomplete.
 const ALLOWED_PREFIXES = [
@@ -27,6 +28,9 @@ const ALLOWED_PREFIXES = [
   '/templates',
 ]
 
+// Extra paths unlocked when the user entered via the no-card starter flow.
+const STARTER_ALLOWED_PREFIXES = ['/home', '/studio']
+
 export function OnboardingGuard() {
   const status = useQuery(api.onboardingProfiles.getOnboardingStatus, {})
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -43,7 +47,19 @@ export function OnboardingGuard() {
     if (status.state === 'pending') {
       if (pathname === '/') return
       if (ALLOWED_PREFIXES.some((p) => pathname.startsWith(p))) return
+
+      // Starter-mode users activated a free test (no card). Allow them to
+      // access /home and /studio so they can see their generated creatives
+      // without being bounced back to onboarding.
+      const isStarterMode = sessionStorage.getItem(STARTER_MODE_KEY) === 'starter'
+      if (isStarterMode && STARTER_ALLOWED_PREFIXES.some((p) => pathname.startsWith(p))) return
+
       navigate({ to: '/onboarding' })
+    }
+
+    // Clear the starter flag once the user completes onboarding (paid plan).
+    if (status.state !== 'pending') {
+      sessionStorage.removeItem(STARTER_MODE_KEY)
     }
   }, [status, pathname, navigate])
 
