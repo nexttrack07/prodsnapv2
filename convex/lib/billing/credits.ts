@@ -253,6 +253,13 @@ export async function grantPlanCredits(
     .withIndex('by_userId', (q) => q.eq('userId', args.userId))
     .unique()
 
+  // Defense-in-depth: never overwrite a starter grant with a free-tier
+  // (zero-credit) grant. Starter users have no Clerk subscription so no
+  // webhook should fire for them, but guard here as a backstop.
+  if (existing?.lastGrantedPlanSlug === 'starter' && args.planSlug === 'free') {
+    return { granted: false, reason: 'already-granted-this-period' }
+  }
+
   // Idempotency check.
   if (
     existing &&
