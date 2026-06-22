@@ -2,10 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { SignUp } from '@clerk/react'
 import { Center } from '@mantine/core'
 
-// Splat route so Clerk's path-based sub-steps (e.g. /sign-up/verify-email-address,
-// /sign-up/continue, /sign-up/sso-callback) all render the SignUp component
-// instead of 404ing. The splat also matches the bare /sign-up path.
-export const Route = createFileRoute('/sign-up/$')({
+// Hash routing keeps every Clerk step (email verification, SSO callback, etc.)
+// on this single /sign-up route via the URL hash — no path-based sub-routes
+// that would 404 (e.g. /sign-up/verify-email-address).
+export const Route = createFileRoute('/sign-up')({
   component: SignUpRoute,
 })
 
@@ -13,8 +13,7 @@ function SignUpRoute() {
   return (
     <Center mih="100vh" p="md">
       <SignUp
-        routing="path"
-        path="/sign-up"
+        routing="hash"
         signInUrl="/sign-in"
         fallbackRedirectUrl="/onboarding"
       />

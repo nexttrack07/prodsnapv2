@@ -16,8 +16,7 @@ export function AuthGuard() {
 
   useEffect(() => {
     if (isAppRoute(pathname)) {
-      // /sign-in is a splat route (Clerk path routing); target the base path.
-      navigate({ to: '/sign-in/$', params: { _splat: '' } })
+      navigate({ to: '/sign-in' })
     }
   }, [pathname, navigate])
 

@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as StudioRouteImport } from './routes/studio'
+import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
@@ -26,8 +28,6 @@ import { Route as ProductsIndexRouteImport } from './routes/products.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as StudioProductIdRouteImport } from './routes/studio.$productId'
-import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
-import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as ProductsNewRouteImport } from './routes/products.new'
 import { Route as AdsAdIdRouteImport } from './routes/ads.$adId'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
@@ -57,6 +57,16 @@ const TemplatesRoute = TemplatesRouteImport.update({
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
   path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignUpRoute = SignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -128,16 +138,6 @@ const StudioProductIdRoute = StudioProductIdRouteImport.update({
   id: '/$productId',
   path: '/$productId',
   getParentRoute: () => StudioRoute,
-} as any)
-const SignUpSplatRoute = SignUpSplatRouteImport.update({
-  id: '/$',
-  path: '/$',
-  getParentRoute: () => SignUpRoute,
-} as any)
-const SignInSplatRoute = SignInSplatRouteImport.update({
-  id: '/$',
-  path: '/$',
-  getParentRoute: () => SignInRoute,
 } as any)
 const ProductsNewRoute = ProductsNewRouteImport.update({
   id: '/new',
@@ -225,6 +225,8 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/products': typeof ProductsRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
   '/studio': typeof StudioRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
@@ -238,8 +240,6 @@ export interface FileRoutesByFullPath {
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
   '/products/new': typeof ProductsNewRoute
-  '/sign-in/$': typeof SignInSplatRoute
-  '/sign-up/$': typeof SignUpSplatRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account/': typeof AccountIndexRoute
   '/admin/': typeof AdminIndexRoute
@@ -259,6 +259,8 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/account/billing': typeof AccountBillingRoute
@@ -270,8 +272,6 @@ export interface FileRoutesByTo {
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
   '/products/new': typeof ProductsNewRoute
-  '/sign-in/$': typeof SignInSplatRoute
-  '/sign-up/$': typeof SignUpSplatRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account': typeof AccountIndexRoute
   '/admin': typeof AdminIndexRoute
@@ -294,6 +294,8 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/products': typeof ProductsRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
   '/studio': typeof StudioRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
@@ -307,8 +309,6 @@ export interface FileRoutesById {
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
   '/products/new': typeof ProductsNewRoute
-  '/sign-in/$': typeof SignInSplatRoute
-  '/sign-up/$': typeof SignUpSplatRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account/': typeof AccountIndexRoute
   '/admin/': typeof AdminIndexRoute
@@ -332,6 +332,8 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/products'
+    | '/sign-in'
+    | '/sign-up'
     | '/studio'
     | '/templates'
     | '/terms'
@@ -345,8 +347,6 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/ads/$adId'
     | '/products/new'
-    | '/sign-in/$'
-    | '/sign-up/$'
     | '/studio/$productId'
     | '/account/'
     | '/admin/'
@@ -366,6 +366,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pricing'
     | '/privacy'
+    | '/sign-in'
+    | '/sign-up'
     | '/templates'
     | '/terms'
     | '/account/billing'
@@ -377,8 +379,6 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/ads/$adId'
     | '/products/new'
-    | '/sign-in/$'
-    | '/sign-up/$'
     | '/studio/$productId'
     | '/account'
     | '/admin'
@@ -400,6 +400,8 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/products'
+    | '/sign-in'
+    | '/sign-up'
     | '/studio'
     | '/templates'
     | '/terms'
@@ -413,8 +415,6 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/ads/$adId'
     | '/products/new'
-    | '/sign-in/$'
-    | '/sign-up/$'
     | '/studio/$productId'
     | '/account/'
     | '/admin/'
@@ -437,6 +437,8 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
   ProductsRoute: typeof ProductsRouteWithChildren
+  SignInRoute: typeof SignInRoute
+  SignUpRoute: typeof SignUpRoute
   StudioRoute: typeof StudioRouteWithChildren
   TemplatesRoute: typeof TemplatesRoute
   TermsRoute: typeof TermsRoute
@@ -467,6 +469,20 @@ declare module '@tanstack/react-router' {
       path: '/studio'
       fullPath: '/studio'
       preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -566,20 +582,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/studio/$productId'
       preLoaderRoute: typeof StudioProductIdRouteImport
       parentRoute: typeof StudioRoute
-    }
-    '/sign-up/$': {
-      id: '/sign-up/$'
-      path: '/$'
-      fullPath: '/sign-up/$'
-      preLoaderRoute: typeof SignUpSplatRouteImport
-      parentRoute: typeof SignUpRoute
-    }
-    '/sign-in/$': {
-      id: '/sign-in/$'
-      path: '/$'
-      fullPath: '/sign-in/$'
-      preLoaderRoute: typeof SignInSplatRouteImport
-      parentRoute: typeof SignInRoute
     }
     '/products/new': {
       id: '/products/new'
@@ -778,6 +780,8 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
   ProductsRoute: ProductsRouteWithChildren,
+  SignInRoute: SignInRoute,
+  SignUpRoute: SignUpRoute,
   StudioRoute: StudioRouteWithChildren,
   TemplatesRoute: TemplatesRoute,
   TermsRoute: TermsRoute,
