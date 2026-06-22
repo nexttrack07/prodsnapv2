@@ -29,7 +29,7 @@
  * lib/billing/credits.ts also skips 'free' grants for rows whose
  * lastGrantedPlanSlug === 'starter'.
  */
-import { action, internalMutation } from './_generated/server'
+import { action, internalMutation, internalQuery } from './_generated/server'
 import { v } from 'convex/values'
 import { api, internal } from './_generated/api'
 
@@ -81,6 +81,19 @@ export const activateStarterFlow = action({
     // missing User-Agent, known datacenter IP ranges (ASN lookup).
     // For now the profile-flag idempotency below is the hard gate.
 
+    // ── Pre-eligibility check (before any side effects) ───────────────────
+    // Run the read-only eligibility check BEFORE calling createProductFromSample
+    // so an ineligible user (e.g. already has a creditBalances row) is rejected
+    // before the clone is committed. The atomic claim in _claimStarterGrant
+    // remains the authoritative guard; this is an early-exit optimisation.
+    const alreadyActivated = await ctx.runQuery(
+      internal.activation._isAlreadyActivated,
+      {},
+    )
+    if (alreadyActivated) {
+      throw new Error('Starter test already activated for this account.')
+    }
+
     // 1. Clone the sample product (throws if user already has products or
     //    the sample isn't configured).
     const productId = await ctx.runMutation(api.products.createProductFromSample, {})
@@ -121,6 +134,32 @@ export const activateStarterFlow = action({
 })
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Read-only pre-check: returns true if the caller is already ineligible for
+ * a starter grant. Called before createProductFromSample so an ineligible
+ * user is rejected before any side-effectful mutations run.
+ */
+export const _isAlreadyActivated = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<boolean> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return true
+    const userId = identity.tokenIdentifier
+
+    const profile = await ctx.db
+      .query('onboardingProfiles')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    if (profile?.hasReceivedStarterGrant) return true
+
+    const balance = await ctx.db
+      .query('creditBalances')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    return !!balance
+  },
+})
 
 /**
  * Atomically checks and claims the starter grant on the onboarding profile.
@@ -175,18 +214,22 @@ export const _claimStarterGrant = internalMutation({
       })
     }
 
-    // Ensure the nano-banana-2 pricing row exists (may not be seeded in dev).
+    // Ensure the nano-banana-2 pricing row exists and is active.
+    // Patch an existing-but-inactive row rather than inserting a duplicate —
+    // billing helpers use .unique() on by_modelKey and throw on duplicates.
     const pricing = await ctx.db
       .query('creditPricing')
       .withIndex('by_modelKey', (q) => q.eq('modelKey', 'nano-banana-2'))
       .unique()
-    if (!pricing || !pricing.active) {
+    if (!pricing) {
       await ctx.db.insert('creditPricing', {
         modelKey: 'nano-banana-2',
         creditsMc: 1_000,
         active: true,
         updatedAt: now,
       })
+    } else if (!pricing.active) {
+      await ctx.db.patch(pricing._id, { active: true, updatedAt: now })
     }
 
     // Write the starter credit balance.
