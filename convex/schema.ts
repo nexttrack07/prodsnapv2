@@ -492,7 +492,10 @@ const schema = defineSchema({
     .index('by_productId_status', ['productId', 'status'])
     .index('by_userId_archivedAt', ['userId', 'archivedAt'])
     .index('by_productId_archivedAt', ['productId', 'archivedAt'])
-    .index('by_productId_createdAt', ['productId', 'createdAt']),
+    .index('by_productId_createdAt', ['productId', 'createdAt'])
+    // Lets the weekly lifecycle cron scan exported tests by export time without
+    // walking every test.
+    .index('by_exportedAt', ['exportedAt']),
 
   // ─── Ad Test recommendations (persisted "what to test next" concepts) ──────
   // Generated during product analysis / winner iteration and stored so Home
