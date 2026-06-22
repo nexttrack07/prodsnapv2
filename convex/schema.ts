@@ -700,6 +700,11 @@ const schema = defineSchema({
     currentStep: v.number(),
     completedAt: v.optional(v.number()),
     updatedAt: v.number(),
+    // ─── Starter grant tracking ───────────────────────────────────────────
+    // Set atomically when the one-time no-card starter test is activated.
+    // Guards against repeated grants even if creditBalances is manually reset.
+    hasReceivedStarterGrant: v.optional(v.boolean()),
+    starterGrantAt: v.optional(v.number()),
   }).index('by_userId', ['userId']),
 
   // ─── Product Inspirations (saved reference ads / swipe file) ────────────
