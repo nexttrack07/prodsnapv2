@@ -69,7 +69,7 @@ export function getRouter() {
         publishableKey={CLERK_PUBLISHABLE_KEY}
         signInUrl="/sign-in"
         signUpUrl="/sign-up"
-        signInForceRedirectUrl="/home"
+        signInFallbackRedirectUrl="/home"
         signUpFallbackRedirectUrl="/onboarding"
         afterSignOutUrl="/"
       >

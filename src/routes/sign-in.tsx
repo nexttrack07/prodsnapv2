@@ -15,7 +15,7 @@ function SignInRoute() {
       <SignIn
         routing="hash"
         signUpUrl="/sign-up"
-        forceRedirectUrl="/home"
+        fallbackRedirectUrl="/home"
       />
     </Center>
   )
