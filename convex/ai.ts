@@ -594,17 +594,17 @@ export const generateCopyBankText = internalAction({
     const fieldSpecs: string[] = []
     if (counts.headlineCount > 0) {
       fieldSpecs.push(
-        `"headlines": an array of EXACTLY ${counts.headlineCount} distinct ad headlines. 20-40 chars each, stand-alone, specific (numbers beat adjectives), never starting with the brand name.`,
+        `"headlines": an array of EXACTLY ${counts.headlineCount} distinct ad headlines. The headline is the caption under the creative: short, snappy and BENEFIT-DRIVEN (lead with the outcome the customer gets). Keep the core message within ~27 characters (Facebook Feed truncates there) and never exceed 40. Use clarity, curiosity or urgency. Stand-alone, never starting with the brand name. Each one a genuinely different angle — not rephrasings.`,
       )
     }
     if (counts.primaryTextCount > 0) {
       fieldSpecs.push(
-        `"primaryTexts": an array of EXACTLY ${counts.primaryTextCount} distinct primary (body) texts. 125-260 chars each; the complete hook must land in the first 80 chars; vary the framework (PAS, BAB, Hook-Proof) across variants. Format each one to scan like a real Facebook ad: put the hook on its own line, then a blank line, then the body — use real line breaks encoded as \\n in the JSON string (e.g. "Hook line.\\n\\nBody sentence. Final nudge.").`,
+        `"primaryTexts": an array of EXACTLY ${counts.primaryTextCount} distinct primary (body) texts. Open with a scroll-stopping hook in the first 3-7 words — a question, a bold specific claim, or a pattern interrupt. Only ~125 characters show on mobile before "See more", so the hook AND the core value + nudge must all land within the first ~125 characters; keep each to 1-3 short lines. Speak directly to the customer ("you"/"your") in a conversational tone, lead with the benefit/outcome (not features), and end with one clear nudge. Vary the framework across variants (PAS, AIDA, BAB). Format like a real Facebook ad: hook on its own line, then a blank line, then a short body — real line breaks encoded as \\n in the JSON string (e.g. "Hook line.\\n\\nBody sentence. Final nudge.").`,
       )
     }
     if (counts.descriptionCount > 0) {
       fieldSpecs.push(
-        `"descriptions": an array of EXACTLY ${counts.descriptionCount} distinct short supporting descriptions (under 50 chars each, link-description style).`,
+        `"descriptions": an array of EXACTLY ${counts.descriptionCount} distinct short supporting descriptions. ≤30 characters each (this field is frequently truncated or hidden). Optional reinforcement of the value prop or CTA — never put critical info here.`,
       )
     }
 
@@ -622,9 +622,14 @@ Return ONLY a JSON object with these fields:
 ${fieldSpecs.map((s) => `  ${s}`).join('\n')}${fieldSpecs.length ? '\n' : ''}${omitted.map((s) => `  ${s}`).join('\n')}${omitted.length ? '\n' : ''}  "recommendedCtaButton": one platform CTA BUTTON value (NOT a sentence) chosen from: ${META_CTA_BUTTONS.join(', ')}
 }
 
-Rules:
+Rules (direct-response best practices):
+- Lead with the BENEFIT/outcome the customer gets, not the product's features or specs.
+- One clear idea and ONE call to action per variant. Every variant must be a genuinely different angle (different hook, framework or benefit) — never a reword of another.
+- Hook first: the opening must earn the next line. Use a question, a bold specific claim, or a pattern interrupt. Be concrete — specifics beat vague adjectives.
+- Write to ONE person in a conversational voice ("you"/"your"), as if talking to the target customer.
+- GROUND every claim in the product info, offer and customer phrases provided. NEVER fabricate statistics, prices, discounts, ratings, awards, "as seen in", testimonials or any social proof. Only reference social proof if it is supported by the inputs, and keep it general (e.g. "loved by customers") rather than inventing numbers.
 - recommendedCtaButton is a Meta call_to_action_type enum value (e.g. SHOP_NOW, LEARN_MORE). Pick the single best fit. Do NOT invent values or write a phrase.
-- Avoid Meta-flagged language: no "guaranteed", "miracle", "revolutionary", no personal-attribute callouts ("Are you struggling with…"), no false urgency.
+- Avoid Meta-flagged language: no "guaranteed", "miracle", "revolutionary", no personal-attribute callouts ("Are you struggling with…"), no false urgency or fake scarcity.
 - Mirror the customer phrases above when natural; respect the brand voice (calm/minimal/premium → no exclamation points).
 ${
   args.emoji
@@ -646,7 +651,7 @@ Return ONLY the JSON object — no markdown, no explanation.`
       const response = await callText({
         prompt,
         systemPrompt:
-          "You are an expert DTC Facebook/Instagram ad copywriter. You write platform-ready copy suggestions, respect Meta's truncation limits and policy, and treat CTA as a button selection rather than prose. Return strict JSON only.",
+          "You are a senior direct-response copywriter specializing in Meta (Facebook/Instagram) ads for DTC brands. You write benefit-led, scroll-stopping copy that opens with a strong hook, speaks to one customer in a conversational voice, makes exactly one clear ask, and respects Meta's visible truncation limits (~125 chars of primary text, ~27-40 char headlines, ~30 char descriptions). You never fabricate claims, numbers or social proof. Treat CTA as a button selection, not prose. Return strict JSON only.",
       })
       const parsed = parseJsonFromResponse(response, copyBankResultSchema)
       return {
