@@ -399,30 +399,36 @@ export function AdTestReviewView({
             onClick={onGenerate}
           />
         ) : (
-          <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
+          // CSS-columns masonry: creatives have mixed aspect ratios (1:1, 4:5,
+          // 9:16), so a fixed grid would stretch every card to the tallest.
+          // Columns let each card keep its natural height. break-inside avoids
+          // splitting a card across columns. (Plain CSS, so selection-state
+          // re-renders work — unlike masonic's cached cells.)
+          <Box style={{ columnWidth: 210, columnGap: 12 }}>
             {generations.map((gen) => (
-              <CreativeCard
-                key={gen._id}
-                gen={gen}
-                selected={selectedCreativeId === gen._id}
-                onSelect={() => {
-                  setSelectedCreativeId((cur) => (cur === gen._id ? null : gen._id))
-                  // Pre-load this creative's saved copy pairing into the builder.
-                  if (selectedCreativeId !== gen._id) preloadPairing(gen)
-                }}
-                onExpand={() => onOpenAd(gen._id)}
-                onToggleWinner={() =>
-                  toggleWinner(
-                    { generationId: gen._id },
-                    {
-                      onError: () =>
-                        notifications.show({ color: 'red', message: 'Could not update winner' }),
-                    },
-                  )
-                }
-              />
+              <Box key={gen._id} mb={12} style={{ breakInside: 'avoid' }}>
+                <CreativeCard
+                  gen={gen}
+                  selected={selectedCreativeId === gen._id}
+                  onSelect={() => {
+                    setSelectedCreativeId((cur) => (cur === gen._id ? null : gen._id))
+                    // Pre-load this creative's saved copy pairing into the builder.
+                    if (selectedCreativeId !== gen._id) preloadPairing(gen)
+                  }}
+                  onExpand={() => onOpenAd(gen._id)}
+                  onToggleWinner={() =>
+                    toggleWinner(
+                      { generationId: gen._id },
+                      {
+                        onError: () =>
+                          notifications.show({ color: 'red', message: 'Could not update winner' }),
+                      },
+                    )
+                  }
+                />
+              </Box>
             ))}
-          </SimpleGrid>
+          </Box>
         )}
       </Section>
 
