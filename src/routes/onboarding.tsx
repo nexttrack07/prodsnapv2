@@ -346,17 +346,21 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
     imp?.status === 'failed' ||
     (imp?.status === 'done' && (imp.uploadedImageUrls?.length ?? 0) === 0)
 
-  // Photos confirmed → create product + generate one ad per template, then go
-  // to the Studio gallery to watch them render.
+  // Photos confirmed → create product + the starter Ad Test, then drop the user
+  // straight into that test to watch its creatives render.
   const handlePhotosConfirm = async (imageUrls: string[]) => {
     setStep('working')
     try {
-      const { productId } = await activateWithTemplates({
+      const { productId, adTestId } = await activateWithTemplates({
         imageUrls,
         importId: importId ?? undefined,
         templateIds,
       })
-      navigate({ to: '/studio/$productId', params: { productId } })
+      navigate({
+        to: '/studio/$productId',
+        params: { productId },
+        search: { adTestId },
+      })
     } catch (err) {
       fail(err instanceof Error ? err.message : 'Could not generate your ads.')
     }

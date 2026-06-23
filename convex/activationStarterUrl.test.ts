@@ -7,8 +7,8 @@
  *     analyzed product; idempotent
  */
 import { convexTest, type TestConvex } from 'convex-test'
-import { expect, test } from 'vitest'
-import { api } from './_generated/api'
+import { expect, test, vi } from 'vitest'
+import { api, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import schema from './schema'
 
@@ -53,7 +53,7 @@ test('creates a product from the SELECTED import images, bypassing the product l
   // User curated: only the 2nd image, as the hero. Metadata comes from the import.
   const productId = await t
     .withIdentity({ tokenIdentifier: USER })
-    .mutation(api.activation.createStarterProductFromImages, {
+    .mutation(internal.activation.createStarterProductFromImages, {
       importId,
       imageUrls: [IMG[1]],
     })
@@ -77,7 +77,7 @@ test('manual-upload path: creates a product from a photo with no import', async 
   const t = convexTest(schema, modules)
   const productId = await t
     .withIdentity({ tokenIdentifier: USER })
-    .mutation(api.activation.createStarterProductFromImages, {
+    .mutation(internal.activation.createStarterProductFromImages, {
       imageUrls: ['https://cdn.example.com/my-upload.png'],
       name: '  My Tee  ',
     })
@@ -91,7 +91,7 @@ test('rejects empty imageUrls', async () => {
   await expect(
     t
       .withIdentity({ tokenIdentifier: USER })
-      .mutation(api.activation.createStarterProductFromImages, { imageUrls: [] }),
+      .mutation(internal.activation.createStarterProductFromImages, { imageUrls: [] }),
   ).rejects.toThrow(/at least one product photo/)
 })
 
@@ -101,7 +101,7 @@ test('rejects a non-owner import', async () => {
   await expect(
     t
       .withIdentity({ tokenIdentifier: OTHER })
-      .mutation(api.activation.createStarterProductFromImages, { importId, imageUrls: IMG }),
+      .mutation(internal.activation.createStarterProductFromImages, { importId, imageUrls: IMG }),
   ).rejects.toThrow(/Import not found/)
 })
 
@@ -121,7 +121,7 @@ test('is repeatable: creates another product even if one already exists', async 
   )
   const productId = await t
     .withIdentity({ tokenIdentifier: USER })
-    .mutation(api.activation.createStarterProductFromImages, { imageUrls: IMG, name: 'Another' })
+    .mutation(internal.activation.createStarterProductFromImages, { imageUrls: IMG, name: 'Another' })
   const product = await t.run((ctx) => ctx.db.get(productId))
   expect(product!.name).toBe('Another')
 })
@@ -239,6 +239,85 @@ test('activateStarterWithTemplates creates a product + one generation per templa
       (g) => g.templateId && g.mode === 'exact' && g.status === 'queued' && g.aspectRatio === '4:5',
     ),
   ).toBe(true)
+
+  // #1: a starter Ad Test is created and the creatives are attached to it, so
+  // they surface in Studio (which renders ad tests, not loose generations).
+  const tests = await t.run((ctx) =>
+    ctx.db
+      .query('adTests')
+      .withIndex('by_productId', (q) => q.eq('productId', productId as Id<'products'>))
+      .collect(),
+  )
+  expect(tests).toHaveLength(1)
+  expect(tests[0].source).toBe('starter')
+  expect(tests[0].plannedImageCount).toBe(3)
+  expect(tests[0].status).toBe('generating')
+  expect(gens.every((g) => g.adTestId === tests[0]._id)).toBe(true)
+})
+
+test('activateStarterWithTemplates re-run with too few credits creates no orphan product (#4)', async () => {
+  const t = convexTest(schema, modules)
+  const templateIds = await t.run(async (ctx) => {
+    const ids: Id<'adTemplates'>[] = []
+    for (let i = 0; i < 3; i++) {
+      ids.push(
+        await ctx.db.insert('adTemplates', {
+          imageUrl: `https://cdn.example.com/t${i}.png`,
+          thumbnailUrl: `https://cdn.example.com/t${i}-thumb.png`,
+          aspectRatio: '4:5',
+          width: 1024,
+          height: 1280,
+          status: 'published',
+        }),
+      )
+    }
+    return ids
+  })
+
+  // Already activated, but only 2 credits (20,000 mc) — not enough for 3 images
+  // (30,000 mc). The preflight must reject BEFORE any product is created.
+  await t.run(async (ctx) => {
+    await ctx.db.insert('creditPricing', {
+      modelKey: 'nano-banana-2',
+      creditsMc: 10_000,
+      active: true,
+      updatedAt: Date.now(),
+    })
+    await ctx.db.insert('creditBalances', {
+      userId: USER,
+      planAllowanceMc: 20_000,
+      planUsedMc: 0,
+      topupBalanceMc: 0,
+      periodStart: Date.now(),
+      periodEnd: Date.now() + 86_400_000,
+      version: 1,
+      updatedAt: Date.now(),
+    })
+    await ctx.db.insert('onboardingProfiles', {
+      userId: USER,
+      currentStep: 1,
+      hasReceivedStarterGrant: true,
+      updatedAt: Date.now(),
+    })
+  })
+
+  await expect(
+    t
+      .withIdentity({ tokenIdentifier: USER, email: 'real@example.com' })
+      .action(api.activation.activateStarterWithTemplates, {
+        imageUrls: ['https://cdn.example.com/p.png'],
+        templateIds,
+      }),
+  ).rejects.toThrow(/credit/i)
+
+  // No orphan product (or analysis) was left behind.
+  const products = await t.run((ctx) =>
+    ctx.db
+      .query('products')
+      .withIndex('by_userId', (q) => q.eq('userId', USER))
+      .collect(),
+  )
+  expect(products).toHaveLength(0)
 })
 
 test('activateStarterWithTemplates rejects when no template is chosen', async () => {
@@ -251,6 +330,26 @@ test('activateStarterWithTemplates rejects when no template is chosen', async ()
         templateIds: [],
       }),
   ).rejects.toThrow(/at least one template/)
+})
+
+test('resetMyActivation is admin-gated, not publicly callable (#2)', async () => {
+  const t = convexTest(schema, modules)
+  vi.unstubAllEnvs()
+
+  // A normal authenticated user cannot call it (the exploit: reset + re-grant).
+  await expect(
+    t
+      .withIdentity({ tokenIdentifier: USER, subject: 'user_random' })
+      .mutation(api.activation.resetMyActivation, {}),
+  ).rejects.toThrow(/admin/i)
+
+  // An admin (subject listed in CLERK_ADMIN_USER_IDS) may use it.
+  vi.stubEnv('CLERK_ADMIN_USER_IDS', 'user_admin')
+  const res = await t
+    .withIdentity({ tokenIdentifier: USER, subject: 'user_admin' })
+    .mutation(api.activation.resetMyActivation, {})
+  expect(res.deletedProducts).toBe(0)
+  vi.unstubAllEnvs()
 })
 
 test('activateStarterForProduct is repeatable and never re-grants credits', async () => {
