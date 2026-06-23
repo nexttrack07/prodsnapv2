@@ -6,7 +6,7 @@
  */
 import { convexTest } from 'convex-test'
 import { expect, test, vi } from 'vitest'
-import { internal } from './_generated/api'
+import { api, internal } from './_generated/api'
 import schema from './schema'
 
 const modules = import.meta.glob('./**/*.*s')
@@ -15,6 +15,40 @@ const modules = import.meta.glob('./**/*.*s')
 async function makeT() {
   return convexTest(schema, modules)
 }
+
+// ─── getBillingStatus: starter credits ─────────────────────────────────────
+
+test('getBillingStatus reflects the starter credit balance when there is no plan row (#1)', async () => {
+  const t = await makeT()
+  const userId = 'user|starter'
+  // No-card starter: a creditBalances grant exists, but BillingSync wrote no
+  // userPlans row, so plan config is absent.
+  await t.run(async (ctx) => {
+    await ctx.db.insert('creditBalances', {
+      userId,
+      planAllowanceMc: 100_000, // 100 credits
+      planUsedMc: 30_000, // 30 used
+      topupBalanceMc: 0,
+      periodStart: Date.now(),
+      periodEnd: Date.now() + 86_400_000,
+      version: 1,
+      lastGrantedPlanSlug: 'starter',
+      updatedAt: Date.now(),
+    })
+  })
+
+  const status = await t
+    .withIdentity({ tokenIdentifier: userId })
+    .query(api.billing.syncPlan.getBillingStatus, {})
+
+  expect(status.signedIn).toBe(true)
+  // plan stays null (no userPlans row) so paid-only gates never treat the
+  // starter as subscribed...
+  expect(status.plan).toBeNull()
+  // ...but the granted credits are now reflected instead of 0/0.
+  expect(status.creditsTotal).toBe(100)
+  expect(status.creditsUsed).toBe(30)
+})
 
 // ─── writePlan tests ─────────────────────────────────────────────────────────
 
