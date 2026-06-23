@@ -1524,11 +1524,11 @@ export const _kickoffGenerationWorkflow = internalMutation({
     if (mode === 'prompt') {
       await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, {
         generationId,
-      })
+      }, { startAsync: true })
     } else {
       await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, {
         generationId,
-      })
+      }, { startAsync: true })
     }
   },
 })

@@ -728,9 +728,14 @@ function ProductHeader({
           mt="md"
           mih={isMobile ? 280 : 280}
           style={{
-            background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.08) 0%, rgba(0, 0, 0, 0) 60%)',
-            border: '1px solid var(--mantine-color-dark-6)',
+            // Solid elevated surface (lighter than the page) + a visible border
+            // + soft shadow so the hero clearly reads as a raised card instead of
+            // dissolving into the background. Brand tint kept as a subtle overlay.
+            background:
+              'linear-gradient(135deg, rgba(84, 116, 180, 0.12) 0%, rgba(84, 116, 180, 0) 55%), var(--mantine-color-dark-6)',
+            border: '1px solid var(--mantine-color-dark-4)',
             borderTopLeftRadius: 0,
+            boxShadow: '0 6px 24px rgba(0, 0, 0, 0.35)',
           }}
         >
           {/* ── Overview ─────────────────────────────────────────────── */}

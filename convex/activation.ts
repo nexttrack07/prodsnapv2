@@ -424,7 +424,7 @@ export const _kickoffTemplateWorkflow = internalMutation({
   handler: async (ctx, { generationId }) => {
     await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
       generationId,
-    })
+    }, { startAsync: true })
   },
 })
 

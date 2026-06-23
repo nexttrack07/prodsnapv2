@@ -20,7 +20,20 @@ import {
 import { requireCredits } from './lib/billing/credits'
 import { enforceGenerationRateLimit, recordGenerationUsage } from './products'
 
-export const workflow = new WorkflowManager(components.workflow)
+// Global cap on how many generation workflow steps run concurrently. This is
+// what bounds simultaneous fal.ai calls (and blocking Convex actions): when more
+// generations are started than this, the extras wait in the workflow pool's
+// queue with status 'queued' instead of all running at once — which is what makes
+// the "queued vs generating" UI accurate AND prevents a burst from exhausting
+// Convex's action concurrency limit.
+//
+// Tune toward your fal.ai account's concurrency limit (self-serve 2→40) so a
+// 'running' row reflects work fal is actually processing rather than work queued
+// at fal. Start conservative; raise once the fal limit is confirmed.
+const GENERATION_MAX_PARALLELISM = 8
+export const workflow = new WorkflowManager(components.workflow, {
+  workpoolOptions: { maxParallelism: GENERATION_MAX_PARALLELISM },
+})
 export const imageGenPool = new Workpool(components.imageGenPool, {
   maxParallelism: 5,
   retryActionsByDefault: true,
@@ -438,22 +451,33 @@ export const retryGeneration = mutation({
       await ctx.db.patch(gen.adTestId, { status: 'generating', updatedAt: Date.now() })
     }
     if (gen.variationSource) {
-      await workflow.start(ctx, internal.studio.generateVariationWorkflow, { generationId })
+      await workflow.start(ctx, internal.studio.generateVariationWorkflow, { generationId }, { startAsync: true })
     } else if (gen.mode === 'prompt') {
-      await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, { generationId })
+      await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, { generationId }, { startAsync: true })
     } else if (gen.mode === 'angle') {
-      await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, { generationId })
+      await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, { generationId }, { startAsync: true })
     } else {
-      await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, { generationId })
+      await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, { generationId }, { startAsync: true })
     }
   },
 })
 
 // ─── Stuck-generation watchdog ────────────────────────────────────────────
-// Rows stuck in 'queued' or 'running' beyond this threshold are considered
-// orphaned (the workflow never started or was dropped by the workpool).
-// Sized comfortably above GENERATION_TIMEOUT_MS (300 000 ms / 5 min) so we
-// never kill genuinely in-flight work.
+// Only times out rows that have ACTUALLY STARTED (status 'running') and then
+// stalled past this threshold (measured from startedAt). Sized comfortably
+// above GENERATION_TIMEOUT_MS (300 000 ms / 5 min) so we never kill genuinely
+// in-flight work.
+//
+// 'queued' rows are deliberately NOT timed out. With the workflow pool's
+// concurrency cap (GENERATION_MAX_PARALLELISM), 'queued' is a legitimately
+// long-lived state: a batch larger than the cap leaves real generations waiting
+// well past this threshold while their workflows are still validly enqueued.
+// Failing those would be wrong twice over — it kills legitimate work, and the
+// pending workflow runs later and resurrects the 'failed' row. (It's also
+// unsafe to key off _creationTime, which a retry of an older row never resets.)
+// Orphaned-queued rows (workflow genuinely dropped) are now rare given
+// startAsync's durable enqueue; if they surface, the fix is an explicit
+// enqueue timestamp + a long queued SLA, not a short _creationTime cutoff.
 const STUCK_GENERATION_THRESHOLD_MS = 6 * 60 * 1000 // 6 minutes
 
 export const markStuckGenerationsFailed = internalMutation({
@@ -462,22 +486,10 @@ export const markStuckGenerationsFailed = internalMutation({
     const now = Date.now()
     const cutoff = now - STUCK_GENERATION_THRESHOLD_MS
 
-    // Collect all queued rows older than the threshold.
-    const stuckQueued = await ctx.db
-      .query('templateGenerations')
-      .withIndex('by_userId') // full scan is acceptable for a small table
-      .filter((q) =>
-        q.and(
-          q.eq(q.field('status'), 'queued'),
-          q.lt(q.field('_creationTime'), cutoff),
-        ),
-      )
-      .collect()
-
-    // Collect all running rows whose startedAt is older than the threshold.
+    // Only running rows whose startedAt is older than the threshold.
     const stuckRunning = await ctx.db
       .query('templateGenerations')
-      .withIndex('by_userId')
+      .withIndex('by_userId') // full scan is acceptable for a small table
       .filter((q) =>
         q.and(
           q.eq(q.field('status'), 'running'),
@@ -486,9 +498,8 @@ export const markStuckGenerationsFailed = internalMutation({
       )
       .collect()
 
-    const allStuck = [...stuckQueued, ...stuckRunning]
     const affectedAdTestIds = new Set<Id<'adTests'>>()
-    for (const gen of allStuck) {
+    for (const gen of stuckRunning) {
       await ctx.db.patch(gen._id, {
         status: 'failed',
         error: 'Generation timed out — please try again.',
@@ -503,6 +514,6 @@ export const markStuckGenerationsFailed = internalMutation({
       await ctx.scheduler.runAfter(0, internal.adTests.setStatusFromChildren, { adTestId })
     }
 
-    return { marked: allStuck.length }
+    return { marked: stuckRunning.length }
   },
 })
