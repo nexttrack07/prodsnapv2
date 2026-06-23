@@ -8,7 +8,7 @@
  * action. Winners, copy generation, export, and performance notes hang off the
  * same screen.
  */
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query'
 import { useAction } from 'convex/react'
@@ -25,9 +25,12 @@ import {
   Loader,
   Modal,
   Paper,
+  Popover,
   SimpleGrid,
   Stack,
   Text,
+  Textarea,
+  TextInput,
   Title,
   Tooltip,
 } from '@mantine/core'
@@ -40,6 +43,9 @@ import {
   IconBrandFacebook,
   IconCheck,
   IconSparkles,
+  IconPencil,
+  IconMoodSmile,
+  IconX,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { api } from '../../../convex/_generated/api'
@@ -102,6 +108,10 @@ export function AdTestReviewView({
   const { mutate: toggleWinner } = useMutation({ mutationFn: toggleWinnerMutation })
   const pairMutation = useConvexMutation(api.adTests.pairCopyWithGeneration)
   const { mutateAsync: pairCopy } = useMutation({ mutationFn: pairMutation })
+  const updateCopyMutation = useConvexMutation(api.adTests.updateCopySuggestion)
+  const { mutateAsync: updateCopy } = useMutation({ mutationFn: updateCopyMutation })
+  const renameMutation = useConvexMutation(api.adTests.renameAdTest)
+  const { mutateAsync: renameAdTest } = useMutation({ mutationFn: renameMutation })
 
   const navigate = useNavigate()
   const exportTestSet = useAction(api.adTestExport.exportTestSet)
@@ -114,6 +124,7 @@ export function AdTestReviewView({
     useState<Id<'templateGenerations'> | null>(null)
   const [selectedHeadline, setSelectedHeadline] = useState<CopyPick | null>(null)
   const [selectedPrimary, setSelectedPrimary] = useState<CopyPick | null>(null)
+  const [selectedDescription, setSelectedDescription] = useState<CopyPick | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -129,6 +140,13 @@ export function AdTestReviewView({
     () =>
       (copySets ?? []).flatMap((s) =>
         s.primaryTexts.map((p) => ({ setId: s._id, index: p.variantIndex, text: p.text })),
+      ),
+    [copySets],
+  )
+  const descriptionCards = useMemo<CopyPick[]>(
+    () =>
+      (copySets ?? []).flatMap((s) =>
+        s.descriptions.map((d) => ({ setId: s._id, index: d.variantIndex, text: d.text })),
       ),
     [copySets],
   )
@@ -168,8 +186,8 @@ export function AdTestReviewView({
           headlineCount: 5,
           includePrimaryTexts: true,
           primaryTextCount: 3,
-          includeDescriptions: false,
-          descriptionCount: 0,
+          includeDescriptions: true,
+          descriptionCount: 2,
         },
       })
       notifications.show({ color: 'green', message: 'Copy generated.' })
@@ -209,7 +227,7 @@ export function AdTestReviewView({
 
   // Resolve the CTA from whichever copy set the chosen copy belongs to.
   const chosenSetId =
-    selectedHeadline?.setId ?? selectedPrimary?.setId ?? undefined
+    selectedHeadline?.setId ?? selectedPrimary?.setId ?? selectedDescription?.setId ?? undefined
   const chosenSet = (copySets ?? []).find((s) => s._id === chosenSetId)
   const cta = chosenSet?.recommendedCtaButton
 
@@ -217,7 +235,8 @@ export function AdTestReviewView({
 
   const handleSavePairing = async () => {
     if (!selectedCreative) return
-    const setId = selectedHeadline?.setId ?? selectedPrimary?.setId
+    const setId =
+      selectedHeadline?.setId ?? selectedPrimary?.setId ?? selectedDescription?.setId
     setSaving(true)
     try {
       await pairCopy({
@@ -230,6 +249,10 @@ export function AdTestReviewView({
         primaryTextIndex:
           selectedPrimary && selectedPrimary.setId === setId
             ? selectedPrimary.index
+            : undefined,
+        descriptionIndex:
+          selectedDescription && selectedDescription.setId === setId
+            ? selectedDescription.index
             : undefined,
       })
       notifications.show({ color: 'green', message: 'Ad saved — creative paired with copy.' })
@@ -254,7 +277,10 @@ export function AdTestReviewView({
           </ActionIcon>
           <Box>
             <Group gap="xs" mb={4} align="center">
-              <Title order={2} fz="xl" fw={600} c="white">{name}</Title>
+              <EditableTitle
+                value={name}
+                onSave={(n) => renameAdTest({ adTestId, name: n })}
+              />
               <Badge size="sm" variant="light" color={STATUS_COLOR[status] ?? 'gray'}>
                 {STATUS_LABEL[status] ?? status}
               </Badge>
@@ -337,6 +363,9 @@ export function AdTestReviewView({
               }
               if (!selectedPrimary && primaryCards.length > 0) {
                 setSelectedPrimary(primaryCards[0])
+              }
+              if (!selectedDescription && descriptionCards.length > 0) {
+                setSelectedDescription(descriptionCards[0])
               }
               setPreviewOpen(true)
             }}
@@ -431,6 +460,9 @@ export function AdTestReviewView({
                     cur && cur.setId === c.setId && cur.index === c.index ? null : c,
                   )
                 }
+                onSave={(text) =>
+                  updateCopy({ copySetId: c.setId, field: 'headlines', variantIndex: c.index, text })
+                }
               />
             ))}
           </SimpleGrid>
@@ -445,11 +477,39 @@ export function AdTestReviewView({
                 key={`${c.setId}:${c.index}`}
                 text={c.text}
                 lines={4}
+                emoji
                 selected={selectedPrimary?.setId === c.setId && selectedPrimary.index === c.index}
                 onSelect={() =>
                   setSelectedPrimary((cur) =>
                     cur && cur.setId === c.setId && cur.index === c.index ? null : c,
                   )
+                }
+                onSave={(text) =>
+                  updateCopy({ copySetId: c.setId, field: 'primaryTexts', variantIndex: c.index, text })
+                }
+              />
+            ))}
+          </SimpleGrid>
+        </Section>
+      )}
+
+      {descriptionCards.length > 0 && (
+        <Section title="Descriptions" count={descriptionCards.length}>
+          <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+            {descriptionCards.map((c) => (
+              <CopyCard
+                key={`${c.setId}:${c.index}`}
+                text={c.text}
+                lines={3}
+                emoji
+                selected={selectedDescription?.setId === c.setId && selectedDescription.index === c.index}
+                onSelect={() =>
+                  setSelectedDescription((cur) =>
+                    cur && cur.setId === c.setId && cur.index === c.index ? null : c,
+                  )
+                }
+                onSave={(text) =>
+                  updateCopy({ copySetId: c.setId, field: 'descriptions', variantIndex: c.index, text })
                 }
               />
             ))}
@@ -475,6 +535,7 @@ export function AdTestReviewView({
             pageName={productName}
             headline={selectedHeadline?.text}
             primaryText={selectedPrimary?.text}
+            description={selectedDescription?.text}
             cta={cta}
           />
           <Group justify="center" w="100%">
@@ -511,11 +572,18 @@ export function AdTestReviewView({
       gen.selectedPrimaryTextIndex !== undefined
         ? set.primaryTexts.find((p) => p.variantIndex === gen.selectedPrimaryTextIndex)
         : undefined
+    const ds =
+      gen.selectedDescriptionIndex !== undefined
+        ? set.descriptions.find((d) => d.variantIndex === gen.selectedDescriptionIndex)
+        : undefined
     setSelectedHeadline(
       hl ? { setId: set._id, index: hl.variantIndex, text: hl.text } : null,
     )
     setSelectedPrimary(
       pt ? { setId: set._id, index: pt.variantIndex, text: pt.text } : null,
+    )
+    setSelectedDescription(
+      ds ? { setId: set._id, index: ds.variantIndex, text: ds.text } : null,
     )
   }
 }
@@ -711,17 +779,144 @@ function CreativeCard({
 
 // ─── Copy card ────────────────────────────────────────────────────────────────
 
+// Common ad-copy emoji palette.
+const EMOJIS = [
+  '🔥', '✨', '💧', '🚀', '⭐️', '✅', '🎉', '💯', '👇', '🛒', '😍', '🙌',
+  '💪', '🌿', '☀️', '🏆', '🎯', '💥', '👀', '❤️', '🙏', '😎', '📣', '⚡️',
+  '🎁', '👉', '💎', '🤝',
+]
+
+function EmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover opened={open} onChange={setOpen} position="bottom-start" withArrow shadow="md">
+      <Popover.Target>
+        <Tooltip label="Add emoji" withArrow>
+          <ActionIcon variant="subtle" color="gray" onClick={() => setOpen((o) => !o)} aria-label="Add emoji">
+            <IconMoodSmile size={18} />
+          </ActionIcon>
+        </Tooltip>
+      </Popover.Target>
+      <Popover.Dropdown p="xs">
+        <SimpleGrid cols={7} spacing={2}>
+          {EMOJIS.map((e) => (
+            <ActionIcon
+              key={e}
+              variant="subtle"
+              color="gray"
+              onClick={() => onPick(e)}
+              style={{ fontSize: 17 }}
+              aria-label={`Insert ${e}`}
+            >
+              {e}
+            </ActionIcon>
+          ))}
+        </SimpleGrid>
+      </Popover.Dropdown>
+    </Popover>
+  )
+}
+
 function CopyCard({
   text,
   selected,
   onSelect,
+  onSave,
   lines = 2,
+  emoji = false,
 }: {
   text: string
   selected: boolean
   onSelect: () => void
+  onSave: (text: string) => Promise<unknown>
   lines?: number
+  emoji?: boolean
 }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(text)
+  const [saving, setSaving] = useState(false)
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  // Sync external edits in only while not actively editing.
+  useEffect(() => {
+    if (!editing) setDraft(text)
+  }, [text, editing])
+
+  const insertEmoji = (e: string) => {
+    const el = ref.current
+    if (!el) {
+      setDraft((d) => d + e)
+      return
+    }
+    const start = el.selectionStart ?? draft.length
+    const end = el.selectionEnd ?? draft.length
+    const next = draft.slice(0, start) + e + draft.slice(end)
+    setDraft(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      const pos = start + e.length
+      el.setSelectionRange(pos, pos)
+    })
+  }
+
+  const cancel = () => {
+    setEditing(false)
+    setDraft(text)
+  }
+
+  const save = async () => {
+    const trimmed = draft.replace(/[ \t]+$/gm, '').trim()
+    if (!trimmed || trimmed === text) {
+      cancel()
+      return
+    }
+    setSaving(true)
+    try {
+      await onSave(trimmed)
+      setEditing(false)
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Could not save',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <Paper
+        radius="md"
+        p="sm"
+        withBorder
+        style={{ borderColor: 'var(--mantine-color-brand-5)', borderWidth: 2 }}
+      >
+        <Textarea
+          ref={ref}
+          value={draft}
+          onChange={(e) => setDraft(e.currentTarget.value)}
+          autosize
+          minRows={lines}
+          maxRows={12}
+          autoFocus
+          styles={{ input: { background: 'var(--mantine-color-dark-7)' } }}
+        />
+        <Group justify="space-between" mt="xs">
+          {emoji ? <EmojiPicker onPick={insertEmoji} /> : <span />}
+          <Group gap={4}>
+            <Button size="compact-sm" variant="subtle" color="gray" onClick={cancel}>
+              Cancel
+            </Button>
+            <Button size="compact-sm" color="brand" loading={saving} onClick={save}>
+              Save
+            </Button>
+          </Group>
+        </Group>
+      </Paper>
+    )
+  }
+
   return (
     <Paper
       radius="md"
@@ -741,10 +936,98 @@ function CopyCard({
         <Text size="sm" c="dark.0" style={{ whiteSpace: 'pre-wrap' }} lineClamp={lines}>
           {text}
         </Text>
-        {selected && (
-          <IconCheck size={16} color="var(--mantine-color-brand-5)" style={{ flexShrink: 0 }} />
-        )}
+        <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+          {selected && <IconCheck size={16} color="var(--mantine-color-brand-5)" />}
+          <ActionIcon
+            size="sm"
+            variant="subtle"
+            color="gray"
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditing(true)
+            }}
+            aria-label="Edit copy"
+          >
+            <IconPencil size={13} />
+          </ActionIcon>
+        </Group>
       </Group>
     </Paper>
+  )
+}
+
+function EditableTitle({
+  value,
+  onSave,
+}: {
+  value: string
+  onSave: (name: string) => Promise<unknown>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!editing) setDraft(value)
+  }, [value, editing])
+
+  const cancel = () => {
+    setEditing(false)
+    setDraft(value)
+  }
+
+  const save = async () => {
+    const trimmed = draft.trim()
+    if (!trimmed || trimmed === value) {
+      cancel()
+      return
+    }
+    setSaving(true)
+    try {
+      await onSave(trimmed)
+      setEditing(false)
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Could not rename',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <Group gap={4} wrap="nowrap">
+        <TextInput
+          value={draft}
+          onChange={(e) => setDraft(e.currentTarget.value)}
+          autoFocus
+          size="sm"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save()
+            if (e.key === 'Escape') cancel()
+          }}
+          styles={{ input: { fontSize: 18, fontWeight: 600 } }}
+        />
+        <ActionIcon color="brand" variant="filled" loading={saving} onClick={save} aria-label="Save name">
+          <IconCheck size={16} />
+        </ActionIcon>
+        <ActionIcon color="gray" variant="subtle" onClick={cancel} aria-label="Cancel rename">
+          <IconX size={16} />
+        </ActionIcon>
+      </Group>
+    )
+  }
+
+  return (
+    <Group gap={4} align="center" wrap="nowrap">
+      <Title order={2} fz="xl" fw={600} c="white">{value}</Title>
+      <Tooltip label="Rename test" withArrow>
+        <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => setEditing(true)} aria-label="Rename test">
+          <IconPencil size={15} />
+        </ActionIcon>
+      </Tooltip>
+    </Group>
   )
 }

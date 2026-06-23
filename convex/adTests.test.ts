@@ -142,6 +142,32 @@ test('createDraft requires auth, a name, placements, and an angle or prompt', as
   expect(created!.status).toBe('draft')
 })
 
+// ─── renameAdTest ────────────────────────────────────────────────────────────
+
+test('renameAdTest trims and updates the name; rejects empty and non-owners', async () => {
+  const t = convexTest(schema, modules)
+  const productId = await seedProduct(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+  const id = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productId),
+    name: 'Old name',
+  })
+
+  await asUser.mutation(api.adTests.renameAdTest, { adTestId: id, name: '  New name  ' })
+  const row = await t.run((ctx) => ctx.db.get(id))
+  expect(row!.name).toBe('New name')
+
+  await expect(
+    asUser.mutation(api.adTests.renameAdTest, { adTestId: id, name: '   ' }),
+  ).rejects.toThrow(/name is required/)
+
+  await expect(
+    t
+      .withIdentity({ tokenIdentifier: OTHER })
+      .mutation(api.adTests.renameAdTest, { adTestId: id, name: 'hijack' }),
+  ).rejects.toThrow(/not found/i)
+})
+
 // ─── listForProduct ────────────────────────────────────────────────────────────
 
 test('listForProduct returns owned tests newest-first and filters archived', async () => {

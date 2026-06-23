@@ -718,6 +718,22 @@ export const createDraft = mutation({
 })
 
 /**
+ * Renames an Ad Test. Trimmed, non-empty, length-capped. Ownership enforced.
+ */
+export const renameAdTest = mutation({
+  args: { adTestId: v.id('adTests'), name: v.string() },
+  handler: async (ctx, { adTestId, name }) => {
+    const userId = await requireAuth(ctx)
+    await requireOwnedAdTest(ctx, userId, adTestId)
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('Ad Test name is required')
+    if (trimmed.length > 100) throw new Error('Ad Test name is too long')
+    await ctx.db.patch(adTestId, { name: trimmed, updatedAt: Date.now() })
+    return null
+  },
+})
+
+/**
  * Fans out `templateGenerations` rows for an Ad Test and starts their workflows.
  * One row per (angle × placement) plus one per (prompt × placement). All rows
  * are linked via adTestId, placement, angleKey, adUnitIndex, aspectRatio, and
