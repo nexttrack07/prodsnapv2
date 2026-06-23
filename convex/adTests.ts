@@ -1331,6 +1331,50 @@ export const updateCopySuggestion = mutation({
 })
 
 /**
+ * Deletes a single Copy Bank suggestion (one headline / primary text /
+ * description) from a set, and clears any creative pairing that referenced it
+ * so no creative is left pointing at a removed suggestion. variantIndex is
+ * stable, so the remaining suggestions keep their indices (no reindexing).
+ */
+export const deleteCopySuggestion = mutation({
+  args: {
+    copySetId: v.id('adTestCopySets'),
+    field: copySetField,
+    variantIndex: v.number(),
+  },
+  handler: async (ctx, { copySetId, field, variantIndex }) => {
+    const userId = await requireAuth(ctx)
+    const copySet = await ctx.db.get(copySetId)
+    if (!copySet || copySet.userId !== userId) {
+      throw new Error('Copy set not found')
+    }
+
+    const current = copySet[field]
+    const next = current.filter((s) => s.variantIndex !== variantIndex)
+    if (next.length === current.length) throw new Error('Suggestion not found')
+    await ctx.db.patch(copySetId, { [field]: next, updatedAt: Date.now() })
+
+    // Clear pairings that referenced the deleted suggestion in this field.
+    const selField: 'selectedHeadlineIndex' | 'selectedPrimaryTextIndex' | 'selectedDescriptionIndex' =
+      field === 'headlines'
+        ? 'selectedHeadlineIndex'
+        : field === 'primaryTexts'
+          ? 'selectedPrimaryTextIndex'
+          : 'selectedDescriptionIndex'
+    const gens = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', copySet.adTestId))
+      .take(MAX_AD_UNITS_PER_TEST)
+    for (const gen of gens) {
+      if (gen.selectedCopySetId === copySetId && gen[selField] === variantIndex) {
+        await ctx.db.patch(gen._id, { [selField]: undefined })
+      }
+    }
+    return null
+  },
+})
+
+/**
  * Updates the recommended CTA button on a Copy Bank set. Pass a Meta button
  * value (e.g. SHOP_NOW) to set it, or omit to clear it. Rejects values that
  * aren't supported platform buttons rather than storing free-form prose.

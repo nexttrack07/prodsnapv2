@@ -399,6 +399,54 @@ test('pairCopyWithGeneration rejects a copy set from a different test', async ()
   ).rejects.toThrow(/does not belong to this Ad Test/)
 })
 
+test('deleteCopySuggestion removes one item, keeps indices, and clears its pairing', async () => {
+  const t = convexTest(schema, modules)
+  const { productId, adTestId } = await seedTest(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  const copySetId = await asUser.action(api.adTests.generateCopySet, {
+    adTestId,
+    request: { ...blankRequest, includeHeadlines: true, headlineCount: 3 },
+  })
+  const genId = await seedGenForTest(t, adTestId, productId)
+  // Pair the creative to headline index 1, then delete that headline.
+  await asUser.mutation(api.adTests.pairCopyWithGeneration, {
+    generationId: genId,
+    copySetId,
+    headlineIndex: 1,
+  })
+
+  await asUser.mutation(api.adTests.deleteCopySuggestion, {
+    copySetId,
+    field: 'headlines',
+    variantIndex: 1,
+  })
+
+  const set = await t.run((ctx) => ctx.db.get(copySetId))
+  // The deleted one is gone; survivors keep their original variantIndex (no reindex).
+  expect(set!.headlines.map((h) => h.variantIndex).sort()).toEqual([0, 2])
+  // The dangling pairing to the deleted headline was cleared (set itself stays paired).
+  const gen = await t.run((ctx) => ctx.db.get(genId))
+  expect(gen!.selectedHeadlineIndex).toBeUndefined()
+  expect(gen!.selectedCopySetId).toBe(copySetId)
+
+  // Deleting a missing index throws; non-owners are rejected.
+  await expect(
+    asUser.mutation(api.adTests.deleteCopySuggestion, {
+      copySetId,
+      field: 'headlines',
+      variantIndex: 1,
+    }),
+  ).rejects.toThrow(/not found/i)
+  await expect(
+    t.withIdentity({ tokenIdentifier: OTHER }).mutation(api.adTests.deleteCopySuggestion, {
+      copySetId,
+      field: 'headlines',
+      variantIndex: 0,
+    }),
+  ).rejects.toThrow(/not found/i)
+})
+
 test('deleteCopySet removes the set and clears its pairings', async () => {
   const t = convexTest(schema, modules)
   const { productId, adTestId } = await seedTest(t)

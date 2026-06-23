@@ -49,6 +49,7 @@ import {
   IconPencil,
   IconMoodSmile,
   IconX,
+  IconTrash,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { api } from '../../../convex/_generated/api'
@@ -122,6 +123,8 @@ export function AdTestReviewView({
   const { mutateAsync: pairCopy } = useMutation({ mutationFn: pairMutation })
   const updateCopyMutation = useConvexMutation(api.adTests.updateCopySuggestion)
   const { mutateAsync: updateCopy } = useMutation({ mutationFn: updateCopyMutation })
+  const deleteCopyMutation = useConvexMutation(api.adTests.deleteCopySuggestion)
+  const { mutateAsync: deleteCopy } = useMutation({ mutationFn: deleteCopyMutation })
   const renameMutation = useConvexMutation(api.adTests.renameAdTest)
   const { mutateAsync: renameAdTest } = useMutation({ mutationFn: renameMutation })
 
@@ -200,6 +203,26 @@ export function AdTestReviewView({
       })
     } finally {
       setGeneratingCopy(false)
+    }
+  }
+
+  const handleDeleteCopy = async (
+    field: 'headlines' | 'primaryTexts' | 'descriptions',
+    c: CopyPick,
+  ) => {
+    // Drop the local selection if the deleted card was selected.
+    const isSame = (p: CopyPick | null) =>
+      p?.setId === c.setId && p.index === c.index
+    if (field === 'headlines' && isSame(selectedHeadline)) setSelectedHeadline(null)
+    if (field === 'primaryTexts' && isSame(selectedPrimary)) setSelectedPrimary(null)
+    if (field === 'descriptions' && isSame(selectedDescription)) setSelectedDescription(null)
+    try {
+      await deleteCopy({ copySetId: c.setId, field, variantIndex: c.index })
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Could not delete',
+      })
     }
   }
 
@@ -469,6 +492,7 @@ export function AdTestReviewView({
                 onSave={(text) =>
                   updateCopy({ copySetId: c.setId, field: 'headlines', variantIndex: c.index, text })
                 }
+                onDelete={() => handleDeleteCopy('headlines', c)}
               />
             ))}
           </SimpleGrid>
@@ -493,6 +517,7 @@ export function AdTestReviewView({
                 onSave={(text) =>
                   updateCopy({ copySetId: c.setId, field: 'primaryTexts', variantIndex: c.index, text })
                 }
+                onDelete={() => handleDeleteCopy('primaryTexts', c)}
               />
             ))}
           </SimpleGrid>
@@ -517,6 +542,7 @@ export function AdTestReviewView({
                 onSave={(text) =>
                   updateCopy({ copySetId: c.setId, field: 'descriptions', variantIndex: c.index, text })
                 }
+                onDelete={() => handleDeleteCopy('descriptions', c)}
               />
             ))}
           </SimpleGrid>
@@ -937,6 +963,7 @@ function CopyCard({
   selected,
   onSelect,
   onSave,
+  onDelete,
   lines = 2,
   emoji = false,
 }: {
@@ -944,6 +971,7 @@ function CopyCard({
   selected: boolean
   onSelect: () => void
   onSave: (text: string) => Promise<unknown>
+  onDelete: () => void
   lines?: number
   emoji?: boolean
 }) {
@@ -1064,6 +1092,18 @@ function CopyCard({
             aria-label="Edit copy"
           >
             <IconPencil size={13} />
+          </ActionIcon>
+          <ActionIcon
+            size="sm"
+            variant="subtle"
+            color="red"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            aria-label="Delete copy"
+          >
+            <IconTrash size={13} />
           </ActionIcon>
         </Group>
       </Group>
