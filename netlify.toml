@@ -11,7 +11,7 @@
 # origin — update this if the production deployment changes.
 [[redirects]]
   from = "/sitemap.xml"
-  to = "https://laudable-anaconda-558.convex.site/sitemap.xml"
+  to = "https://elated-starling-538.convex.site/sitemap.xml"
   status = 200
   force = true
 
