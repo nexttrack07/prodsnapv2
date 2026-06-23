@@ -1,55 +1,52 @@
 /**
- * Ad Test review mode — shown in /studio/$productId?adTestId=...
- * Groups generated creatives by angle/prompt concept and placement,
- * with winner toggles and a back-to-gallery escape hatch.
+ * Ad Test review — the per-test workspace shown at /studio/$productId?adTestId=
+ *
+ * Layout is built around the core feature: pick a creative + the copy you want
+ * (each suggestion is its own card), preview the combination as a real Facebook
+ * feed ad, and save that pairing. Three card grids — Creatives, Headlines,
+ * Primary text — feed a sticky "ad builder" bar with a "Preview as Facebook ad"
+ * action. Winners, copy generation, export, and performance notes hang off the
+ * same screen.
  */
-import { useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query'
 import { useAction } from 'convex/react'
-import { ConvexError } from 'convex/values'
 import { useNavigate } from '@tanstack/react-router'
-import { api } from '../../../convex/_generated/api'
-import type { Id } from '../../../convex/_generated/dataModel'
-import { downloadZipFromUrl } from '../../utils/exportAdTest'
 import {
+  ActionIcon,
+  AspectRatio,
+  Badge,
   Box,
+  Button,
+  Center,
   Group,
+  Image,
+  Loader,
+  Modal,
+  Paper,
+  SimpleGrid,
   Stack,
   Text,
   Title,
-  Badge,
-  Button,
-  Paper,
-  Image,
-  ActionIcon,
-  Loader,
-  AspectRatio,
   Tooltip,
-  Popover,
-  Select,
 } from '@mantine/core'
 import {
   IconArrowLeft,
   IconStar,
   IconStarFilled,
   IconMaximize,
-  IconLink,
   IconPlus,
+  IconBrandFacebook,
+  IconCheck,
+  IconSparkles,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { CopyBankPanel } from './CopyBankPanel'
+import { api } from '../../../convex/_generated/api'
+import type { Id } from '../../../convex/_generated/dataModel'
+import { downloadZipFromUrl } from '../../utils/exportAdTest'
+import { FacebookAdPreview } from './FacebookAdPreview'
 import { PerformanceNotesPanel } from './PerformanceNotesPanel'
-import { WinnerNudge } from './WinnerNudge'
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const PLACEMENT_LABEL: Record<string, string> = {
-  feed_square: 'Feed 1:1',
-  feed_vertical: 'Feed 4:5',
-  story_reel: 'Story 9:16',
-  landscape: 'Landscape 16:9',
-}
 
 const ASPECT_RATIO_VALUE: Record<string, number> = {
   '1:1': 1,
@@ -74,16 +71,19 @@ const STATUS_LABEL: Record<string, string> = {
   failed: 'Failed',
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// A copy card's identity: which set it came from + its stable variant index.
+type CopyPick = { setId: Id<'adTestCopySets'>; index: number; text: string }
 
 export function AdTestReviewView({
   adTestId,
+  productName,
   hasPaidPlan,
   onBack,
   onGenerate,
   onOpenAd,
 }: {
   adTestId: Id<'adTests'>
+  productName: string
   /** When false, the export button shows an upgrade prompt instead of being simply disabled. */
   hasPaidPlan: boolean
   onBack: () => void
@@ -94,22 +94,46 @@ export function AdTestReviewView({
   const { data, isLoading } = useQuery(
     convexQuery(api.adTests.getById, { adTestId }),
   )
-  // Copy sets power the per-creative pairing control (optional pairing — buyers
-  // may also test copy independently from creatives).
   const { data: copySets } = useQuery(
     convexQuery(api.adTests.listCopySets, { adTestId }),
   )
 
   const toggleWinnerMutation = useConvexMutation(api.templateGenerations.toggleWinner)
   const { mutate: toggleWinner } = useMutation({ mutationFn: toggleWinnerMutation })
+  const pairMutation = useConvexMutation(api.adTests.pairCopyWithGeneration)
+  const { mutateAsync: pairCopy } = useMutation({ mutationFn: pairMutation })
 
   const navigate = useNavigate()
   const exportTestSet = useAction(api.adTestExport.exportTestSet)
+  const generateCopySet = useAction(api.adTests.generateCopySet)
   const [exporting, setExporting] = useState(false)
+  const [generatingCopy, setGeneratingCopy] = useState(false)
+
+  // ── Ad-builder selection state ───────────────────────────────────────────
+  const [selectedCreativeId, setSelectedCreativeId] =
+    useState<Id<'templateGenerations'> | null>(null)
+  const [selectedHeadline, setSelectedHeadline] = useState<CopyPick | null>(null)
+  const [selectedPrimary, setSelectedPrimary] = useState<CopyPick | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Flatten every copy set's suggestions into individual cards.
+  const headlineCards = useMemo<CopyPick[]>(
+    () =>
+      (copySets ?? []).flatMap((s) =>
+        s.headlines.map((h) => ({ setId: s._id, index: h.variantIndex, text: h.text })),
+      ),
+    [copySets],
+  )
+  const primaryCards = useMemo<CopyPick[]>(
+    () =>
+      (copySets ?? []).flatMap((s) =>
+        s.primaryTexts.map((p) => ({ setId: s._id, index: p.variantIndex, text: p.text })),
+      ),
+    [copySets],
+  )
 
   const handleExport = async () => {
-    // Free users never reach export work — send them to upgrade instead. The
-    // server also enforces this, so a forged client can't bypass it.
     if (!hasPaidPlan) {
       navigate({ to: '/pricing' })
       return
@@ -124,15 +148,6 @@ export function AdTestReviewView({
         color: 'green',
       })
     } catch (err) {
-      // Defense in depth: if the server denies on entitlement (e.g. a stale
-      // client plan), route to upgrade instead of showing a dead-end error.
-      if (
-        err instanceof ConvexError &&
-        (err.data as { code?: string })?.code === 'NO_SUBSCRIPTION'
-      ) {
-        navigate({ to: '/pricing' })
-        return
-      }
       notifications.show({
         title: 'Export failed',
         message: err instanceof Error ? err.message : 'Please try again.',
@@ -143,88 +158,111 @@ export function AdTestReviewView({
     }
   }
 
-  if (isLoading) {
-    return (
-      <Box py={60} ta="center">
-        <Loader size="sm" color="blue" />
-        <Text size="sm" c="dark.3" mt="sm">Loading test…</Text>
-      </Box>
-    )
+  const handleGenerateCopy = async () => {
+    setGeneratingCopy(true)
+    try {
+      await generateCopySet({
+        adTestId,
+        request: {
+          includeHeadlines: true,
+          headlineCount: 5,
+          includePrimaryTexts: true,
+          primaryTextCount: 3,
+          includeDescriptions: false,
+          descriptionCount: 0,
+        },
+      })
+      notifications.show({ color: 'green', message: 'Copy generated.' })
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Could not generate copy.',
+      })
+    } finally {
+      setGeneratingCopy(false)
+    }
   }
 
+  if (isLoading) {
+    return (
+      <Center mih="50vh">
+        <Loader color="brand" />
+      </Center>
+    )
+  }
   if (!data) {
     return (
       <Box py={60} ta="center">
         <Text size="sm" c="dark.3">Ad Test not found.</Text>
         <Button variant="subtle" size="xs" mt="md" onClick={onBack}>
-          Back to gallery
+          Back
         </Button>
       </Box>
     )
   }
 
   const { adTest, generations } = data
+  const { plannedImageCount, completedImageCount, winnerCount, status, name } = adTest
 
-  // Index prompt text → its position in adTest.prompts so labels stay stable
-  // regardless of how many angle rows precede the prompt rows.
-  const promptIndexByText = new Map((adTest.prompts ?? []).map((p, i) => [p, i]))
+  const selectedCreative =
+    generations.find((g) => g._id === selectedCreativeId) ?? null
 
-  // Group by angleKey for angle rows, or by prompt text for prompt rows.
-  // Using adUnitIndex as the key would create one group per placement instead
-  // of one group per prompt concept.
-  const groups = new Map<string, typeof generations>()
-  for (const gen of generations) {
-    let key: string
-    if (gen.angleKey) {
-      key = gen.angleKey
-    } else if (gen.dynamicPrompt) {
-      key = `_prompt_text_${gen.dynamicPrompt}`
-    } else {
-      // Template-based creatives (generated into the test via the wizard) carry
-      // neither an angle nor a prompt — bucket them together rather than
-      // exploding into one singleton group per creative.
-      key = '_creatives'
+  // Resolve the CTA from whichever copy set the chosen copy belongs to.
+  const chosenSetId =
+    selectedHeadline?.setId ?? selectedPrimary?.setId ?? undefined
+  const chosenSet = (copySets ?? []).find((s) => s._id === chosenSetId)
+  const cta = chosenSet?.recommendedCtaButton
+
+  const canPreview = !!selectedCreative
+
+  const handleSavePairing = async () => {
+    if (!selectedCreative) return
+    const setId = selectedHeadline?.setId ?? selectedPrimary?.setId
+    setSaving(true)
+    try {
+      await pairCopy({
+        generationId: selectedCreative._id,
+        copySetId: setId,
+        headlineIndex:
+          selectedHeadline && selectedHeadline.setId === setId
+            ? selectedHeadline.index
+            : undefined,
+        primaryTextIndex:
+          selectedPrimary && selectedPrimary.setId === setId
+            ? selectedPrimary.index
+            : undefined,
+      })
+      notifications.show({ color: 'green', message: 'Ad saved — creative paired with copy.' })
+      setPreviewOpen(false)
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Could not save pairing.',
+      })
+    } finally {
+      setSaving(false)
     }
-    const bucket = groups.get(key) ?? []
-    bucket.push(gen)
-    groups.set(key, bucket)
   }
 
-  const { plannedImageCount, completedImageCount, winnerCount, status, name, placements, angles } = adTest
-
   return (
-    <Stack gap="lg">
-      {/* ── Test header ─────────────────────────────────────────────────── */}
+    <Stack gap="xl">
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
         <Group gap="sm" align="flex-start">
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="lg"
-            mt={2}
-            onClick={onBack}
-            aria-label="Back to gallery"
-          >
+          <ActionIcon variant="subtle" color="gray" size="lg" mt={2} onClick={onBack} aria-label="Back">
             <IconArrowLeft size={18} />
           </ActionIcon>
-
           <Box>
             <Group gap="xs" mb={4} align="center">
               <Title order={2} fz="xl" fw={600} c="white">{name}</Title>
-              <Badge
-                size="sm"
-                variant="light"
-                color={STATUS_COLOR[status] ?? 'gray'}
-              >
+              <Badge size="sm" variant="light" color={STATUS_COLOR[status] ?? 'gray'}>
                 {STATUS_LABEL[status] ?? status}
               </Badge>
             </Group>
-
             <Group gap="xs" wrap="wrap">
               <Text size="sm" c="dark.2">
-                {completedImageCount}/{plannedImageCount} generated
+                {completedImageCount}/{plannedImageCount} creatives
               </Text>
-
               {winnerCount > 0 && (
                 <Group gap={4}>
                   <IconStarFilled size={12} color="var(--mantine-color-yellow-5)" />
@@ -233,479 +271,471 @@ export function AdTestReviewView({
                   </Text>
                 </Group>
               )}
-
-              {placements.map((p) => (
-                <Badge key={p} size="xs" variant="outline" color="dark.2">
-                  {PLACEMENT_LABEL[p] ?? p}
-                </Badge>
-              ))}
             </Group>
           </Box>
         </Group>
 
         <Group gap="sm">
-          <Button
-            size="sm"
-            color="brand"
-            leftSection={<IconPlus size={16} />}
-            onClick={onGenerate}
-          >
-            {completedImageCount > 0 || plannedImageCount > 0
-              ? 'Generate more'
-              : 'Generate creatives'}
+          <Button size="sm" color="brand" leftSection={<IconPlus size={16} />} onClick={onGenerate}>
+            {plannedImageCount > 0 ? 'Generate more' : 'Generate creatives'}
           </Button>
-
-          {/* Export — paid users get a server-built zip; free users are routed to
-              upgrade. Disabled (with a reason) until at least one creative is ready. */}
           <Tooltip
-          label={
-            !hasPaidPlan
-              ? 'Upgrade to a paid plan to export'
-              : completedImageCount === 0
-                ? 'Generate at least one creative to export'
-                : 'Download images + manifest.csv + copy_bank.csv'
-          }
-          withArrow
-          position="left"
-        >
-          <Button
-            size="sm"
-            variant={hasPaidPlan ? 'filled' : 'default'}
-            color="blue"
-            loading={exporting}
-            disabled={hasPaidPlan && completedImageCount === 0}
-            onClick={handleExport}
+            label={
+              !hasPaidPlan
+                ? 'Upgrade to a paid plan to export'
+                : completedImageCount === 0
+                  ? 'Generate at least one creative to export'
+                  : 'Download images + manifest.csv + copy_bank.csv'
+            }
+            withArrow
+            position="left"
           >
-            {hasPaidPlan ? 'Export test set' : '🔒 Upgrade to export'}
-          </Button>
-        </Tooltip>
+            <Button
+              size="sm"
+              variant={hasPaidPlan ? 'filled' : 'default'}
+              color="blue"
+              loading={exporting}
+              disabled={hasPaidPlan && completedImageCount === 0}
+              onClick={handleExport}
+            >
+              {hasPaidPlan ? 'Export test set' : '🔒 Upgrade to export'}
+            </Button>
+          </Tooltip>
         </Group>
       </Group>
 
-      {/* ── Copy Bank ─────────────────────────────────────────────────────── */}
-      <CopyBankPanel adTestId={adTestId} />
-
-      {/* Performance notes — test-level history (CPA/CTR/ROAS, observations). */}
-      <PerformanceNotesPanel adTestId={adTestId} />
-
-      {/* ── Empty state ──────────────────────────────────────────────────── */}
-      {groups.size === 0 && (
-        <Paper
-          p="xl"
-          radius="lg"
-          withBorder
-          style={{ borderColor: 'var(--mantine-color-dark-5)' }}
-          ta="center"
-        >
-          <Stack align="center" gap="sm">
-            <Text fw={500} c="dark.0">
-              No creatives yet
-            </Text>
-            <Text size="sm" c="dark.3" maw={420}>
-              Generate ad creatives for this test from your template library,
-              then pair them with copy to build complete ads.
-            </Text>
-            <Button
-              color="brand"
-              mt="xs"
-              leftSection={<IconPlus size={16} />}
-              onClick={onGenerate}
-            >
-              Generate creatives
-            </Button>
-          </Stack>
-        </Paper>
-      )}
-
-      {/* ── Angle / prompt groups ─────────────────────────────────────────── */}
-      {[...groups.entries()].map(([groupKey, groupGens]) => {
-        const isPromptGroup = groupKey.startsWith('_prompt_text_')
-        const angle = angles.find((a) => a.key === groupKey)
-        let groupLabel: string
-        if (isPromptGroup) {
-          const promptText = groupKey.slice('_prompt_text_'.length)
-          const idx = promptIndexByText.get(promptText)
-          groupLabel = `Prompt ${idx !== undefined ? idx + 1 : '?'}`
-        } else if (groupKey === '_creatives') {
-          groupLabel = 'Creatives'
-        } else {
-          groupLabel = angle?.title ?? groupKey
-        }
-        const groupDesc = angle?.description
-
-        const groupCompleted = groupGens.filter((g) => g.status === 'complete').length
-        const groupWinners = groupGens.filter((g) => g.isWinner).length
-
-        return (
-          <Paper
-            key={groupKey}
-            p="lg"
-            radius="lg"
-            withBorder
-            style={{ borderColor: 'var(--mantine-color-dark-5)' }}
-          >
-            {/* Group label row */}
-            <Group gap="sm" mb="md" align="flex-start">
-              <Box style={{ flex: 1 }}>
-                <Group gap="xs" mb={2}>
-                  <Text fw={600} c="white" size="sm">{groupLabel}</Text>
-                  <Text size="xs" c="dark.3">
-                    {groupCompleted}/{groupGens.length} complete
-                  </Text>
-                  {groupWinners > 0 && (
-                    <Group gap={4}>
-                      <IconStarFilled size={11} color="var(--mantine-color-yellow-5)" />
-                      <Text size="xs" c="yellow.4">{groupWinners}</Text>
-                    </Group>
-                  )}
-                </Group>
-                {groupDesc && (
-                  <Text size="xs" c="dark.3" lineClamp={1}>{groupDesc}</Text>
-                )}
-              </Box>
-            </Group>
-
-            {/* Card row — one card per placement */}
-            <Box
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 'var(--mantine-spacing-md)',
-              }}
-            >
-              {groupGens.map((gen) => (
-                <Box key={gen._id} style={{ width: 160 }}>
-                  <AdTestGenerationCard
-                    gen={gen}
-                    copySets={copySets ?? []}
-                    onToggleWinner={() =>
-                      toggleWinner(
-                        { generationId: gen._id },
-                        {
-                          onError: () =>
-                            notifications.show({
-                              title: 'Error',
-                              message: 'Could not update winner',
-                              color: 'red',
-                            }),
-                        },
-                      )
-                    }
-                    onExpand={() => onOpenAd(gen._id)}
-                  />
-                </Box>
-              ))}
-            </Box>
-          </Paper>
-        )
-      })}
-    </Stack>
-  )
-}
-
-// ─── Individual card ──────────────────────────────────────────────────────────
-
-type GenRow = {
-  _id: Id<'templateGenerations'>
-  status: string
-  outputUrl?: string
-  placement?: string
-  aspectRatio?: string
-  isWinner?: boolean
-  currentStep?: string
-  adTestId?: Id<'adTests'>
-  productId?: Id<'products'>
-  selectedCopySetId?: Id<'adTestCopySets'>
-  selectedHeadlineIndex?: number
-  selectedPrimaryTextIndex?: number
-  selectedDescriptionIndex?: number
-}
-
-type CopySet = {
-  _id: Id<'adTestCopySets'>
-  headlines: { text: string; variantIndex: number }[]
-  primaryTexts: { text: string; variantIndex: number }[]
-  descriptions: { text: string; variantIndex: number }[]
-}
-
-function AdTestGenerationCard({
-  gen,
-  copySets,
-  onToggleWinner,
-  onExpand,
-}: {
-  gen: GenRow
-  copySets: CopySet[]
-  onToggleWinner: () => void
-  onExpand: () => void
-}) {
-  const isComplete = gen.status === 'complete' && !!gen.outputUrl
-  const isFailed = gen.status === 'failed'
-  const isPending = !isComplete && !isFailed
-
-  const arValue = gen.aspectRatio ? (ASPECT_RATIO_VALUE[gen.aspectRatio] ?? 1) : 1
-  const placementLabel = gen.placement ? (PLACEMENT_LABEL[gen.placement] ?? gen.placement) : null
-
-  return (
-    <Stack gap={6}>
-      <Box
-        pos="relative"
+      {/* ── Ad builder bar ──────────────────────────────────────────────────── */}
+      <Paper
+        radius="md"
+        p="md"
+        withBorder
         style={{
-          borderRadius: 'var(--mantine-radius-sm)',
-          overflow: 'hidden',
-          backgroundColor: 'var(--mantine-color-dark-7)',
-          boxShadow: gen.isWinner
-            ? 'inset 0 0 0 2px var(--mantine-color-yellow-5)'
-            : undefined,
+          borderColor: 'var(--mantine-color-dark-5)',
+          background:
+            'linear-gradient(135deg, rgba(24,119,242,0.10), rgba(255,255,255,0.02))',
+          position: 'sticky',
+          top: 8,
+          zIndex: 3,
+          backdropFilter: 'blur(6px)',
         }}
       >
-        <AspectRatio ratio={arValue}>
-          {isComplete && gen.outputUrl ? (
-            <Image
-              src={gen.outputUrl}
-              alt={placementLabel ?? 'Ad creative'}
-              style={{ objectFit: 'cover', width: '100%', height: '100%' }}
-            />
-          ) : isPending ? (
-            <Box
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-              }}
-            >
-              <Loader size="xs" color="blue" />
-              <Text size="xs" c="dark.3">{gen.currentStep ?? 'Generating…'}</Text>
-            </Box>
-          ) : (
-            <Box
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text size="xs" c="red.4">Failed</Text>
-            </Box>
-          )}
-        </AspectRatio>
-
-        {/* Overlay actions — only shown when complete */}
-        {isComplete && (
-          <Group
-            pos="absolute"
-            bottom={4}
-            right={4}
-            gap={4}
-            style={{ zIndex: 1 }}
-          >
-            <Tooltip label="View details" position="top" withArrow>
-              <ActionIcon
-                size="sm"
-                variant="filled"
-                color="dark"
-                radius="sm"
-                style={{ opacity: 0.85 }}
-                onClick={onExpand}
-                aria-label="View details"
-              >
-                <IconMaximize size={12} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip
-              label={gen.isWinner ? 'Unmark winner' : 'Mark as winner'}
-              position="top"
-              withArrow
-            >
-              <ActionIcon
-                size="sm"
-                variant="filled"
-                color={gen.isWinner ? 'yellow' : 'dark'}
-                radius="sm"
-                style={{ opacity: 0.85 }}
-                onClick={onToggleWinner}
-                aria-label={gen.isWinner ? 'Unmark winner' : 'Mark as winner'}
-              >
-                {gen.isWinner ? <IconStarFilled size={12} /> : <IconStar size={12} />}
-              </ActionIcon>
-            </Tooltip>
+        <Group justify="space-between" wrap="wrap" gap="md">
+          <Group gap="lg" wrap="wrap">
+            <PickSummary label="Creative" value={selectedCreative ? '1 selected' : null} />
+            <PickSummary label="Headline" value={selectedHeadline?.text ?? null} />
+            <PickSummary label="Primary text" value={selectedPrimary?.text ?? null} />
           </Group>
+          <Button
+            color="blue"
+            leftSection={<IconBrandFacebook size={18} />}
+            disabled={!canPreview}
+            onClick={() => setPreviewOpen(true)}
+          >
+            Preview as Facebook ad
+          </Button>
+        </Group>
+        {!canPreview && (
+          <Text size="xs" c="dark.3" mt="xs">
+            Select a creative (and optionally a headline + primary text) to build your ad.
+          </Text>
         )}
-      </Box>
+      </Paper>
 
-      {placementLabel && (
-        <Text size="xs" c="dark.3" ta="center">{placementLabel}</Text>
+      {/* ── Creatives ───────────────────────────────────────────────────────── */}
+      <Section
+        title="Creatives"
+        count={generations.length}
+        action={
+          <Button size="xs" variant="light" color="brand" leftSection={<IconPlus size={14} />} onClick={onGenerate}>
+            Generate creatives
+          </Button>
+        }
+      >
+        {generations.length === 0 ? (
+          <EmptyState
+            text="No creatives yet. Generate ad creatives from your template library."
+            cta="Generate creatives"
+            onClick={onGenerate}
+          />
+        ) : (
+          <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
+            {generations.map((gen) => (
+              <CreativeCard
+                key={gen._id}
+                gen={gen}
+                selected={selectedCreativeId === gen._id}
+                onSelect={() => {
+                  setSelectedCreativeId((cur) => (cur === gen._id ? null : gen._id))
+                  // Pre-load this creative's saved copy pairing into the builder.
+                  if (selectedCreativeId !== gen._id) preloadPairing(gen)
+                }}
+                onExpand={() => onOpenAd(gen._id)}
+                onToggleWinner={() =>
+                  toggleWinner(
+                    { generationId: gen._id },
+                    {
+                      onError: () =>
+                        notifications.show({ color: 'red', message: 'Could not update winner' }),
+                    },
+                  )
+                }
+              />
+            ))}
+          </SimpleGrid>
+        )}
+      </Section>
+
+      {/* ── Copy: headlines + primary text ──────────────────────────────────── */}
+      <Section
+        title="Headlines"
+        count={headlineCards.length}
+        action={
+          <Button
+            size="xs"
+            variant="light"
+            color="grape"
+            leftSection={<IconSparkles size={14} />}
+            loading={generatingCopy}
+            onClick={handleGenerateCopy}
+          >
+            Generate copy
+          </Button>
+        }
+      >
+        {headlineCards.length === 0 ? (
+          <EmptyState
+            text="No copy yet. Generate headlines and primary text to pair with your creatives."
+            cta="Generate copy"
+            onClick={handleGenerateCopy}
+            loading={generatingCopy}
+          />
+        ) : (
+          <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+            {headlineCards.map((c) => (
+              <CopyCard
+                key={`${c.setId}:${c.index}`}
+                text={c.text}
+                selected={selectedHeadline?.setId === c.setId && selectedHeadline.index === c.index}
+                onSelect={() =>
+                  setSelectedHeadline((cur) =>
+                    cur && cur.setId === c.setId && cur.index === c.index ? null : c,
+                  )
+                }
+              />
+            ))}
+          </SimpleGrid>
+        )}
+      </Section>
+
+      {primaryCards.length > 0 && (
+        <Section title="Primary text" count={primaryCards.length}>
+          <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+            {primaryCards.map((c) => (
+              <CopyCard
+                key={`${c.setId}:${c.index}`}
+                text={c.text}
+                lines={4}
+                selected={selectedPrimary?.setId === c.setId && selectedPrimary.index === c.index}
+                onSelect={() =>
+                  setSelectedPrimary((cur) =>
+                    cur && cur.setId === c.setId && cur.index === c.index ? null : c,
+                  )
+                }
+              />
+            ))}
+          </SimpleGrid>
+        </Section>
       )}
 
-      {/* Optional copy pairing — only meaningful once a creative is complete
-          and the test has at least one Copy Bank set to pair from. */}
-      {isComplete && copySets.length > 0 && (
-        <CopyPairingControl gen={gen} copySets={copySets} />
-      )}
+      {/* ── Performance notes ───────────────────────────────────────────────── */}
+      <PerformanceNotesPanel adTestId={adTestId} />
 
-      {/* Winner loop — seed the next test directly from a winning creative. */}
-      {isComplete && gen.isWinner && (
-        <WinnerNudge
-          ad={{ _id: gen._id, productId: gen.productId, adTestId: gen.adTestId }}
-          variant="compact"
-        />
-      )}
+      {/* ── Facebook preview modal ──────────────────────────────────────────── */}
+      <Modal
+        opened={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title="Facebook ad preview"
+        centered
+        size="auto"
+      >
+        <Stack align="center" gap="lg">
+          <FacebookAdPreview
+            imageUrl={selectedCreative?.outputUrl}
+            aspectRatio={selectedCreative?.aspectRatio ?? '1:1'}
+            pageName={productName}
+            headline={selectedHeadline?.text}
+            primaryText={selectedPrimary?.text}
+            cta={cta}
+          />
+          <Group justify="center" w="100%">
+            <Button variant="default" onClick={() => setPreviewOpen(false)}>
+              Close
+            </Button>
+            <Button
+              color="brand"
+              leftSection={<IconCheck size={16} />}
+              loading={saving}
+              onClick={handleSavePairing}
+            >
+              Save this ad
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
+  )
+
+  // Pre-fill the builder from a creative's persisted pairing when it's selected.
+  function preloadPairing(gen: (typeof generations)[number]) {
+    if (!gen.selectedCopySetId) {
+      setSelectedHeadline(null)
+      setSelectedPrimary(null)
+      return
+    }
+    const set = (copySets ?? []).find((s) => s._id === gen.selectedCopySetId)
+    if (!set) return
+    const hl =
+      gen.selectedHeadlineIndex !== undefined
+        ? set.headlines.find((h) => h.variantIndex === gen.selectedHeadlineIndex)
+        : undefined
+    const pt =
+      gen.selectedPrimaryTextIndex !== undefined
+        ? set.primaryTexts.find((p) => p.variantIndex === gen.selectedPrimaryTextIndex)
+        : undefined
+    setSelectedHeadline(
+      hl ? { setId: set._id, index: hl.variantIndex, text: hl.text } : null,
+    )
+    setSelectedPrimary(
+      pt ? { setId: set._id, index: pt.variantIndex, text: pt.text } : null,
+    )
+  }
+}
+
+// ─── Section wrapper ──────────────────────────────────────────────────────────
+
+function Section({
+  title,
+  count,
+  action,
+  children,
+}: {
+  title: string
+  count: number
+  action?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <Stack gap="sm">
+      <Group justify="space-between" align="center">
+        <Group gap="xs" align="center">
+          <Title order={3} fz={16} fw={600} c="white">{title}</Title>
+          {count > 0 && (
+            <Badge size="sm" variant="light" color="dark">{count}</Badge>
+          )}
+        </Group>
+        {action}
+      </Group>
+      {children}
     </Stack>
   )
 }
 
-// ─── Copy pairing control ──────────────────────────────────────────────────────
-
-/** Truncates suggestion text so it fits a Select option label. */
-function truncate(text: string, max = 48): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+function PickSummary({ label, value }: { label: string; value: string | null }) {
+  return (
+    <Box style={{ minWidth: 0, maxWidth: 240 }}>
+      <Text size="10px" tt="uppercase" fw={600} c="dark.3" style={{ letterSpacing: 0.4 }}>
+        {label}
+      </Text>
+      <Text size="sm" c={value ? 'white' : 'dark.4'} lineClamp={1}>
+        {value ?? 'None'}
+      </Text>
+    </Box>
+  )
 }
 
-function suggestionOptions(
-  suggestions: { text: string; variantIndex: number }[],
-): { value: string; label: string }[] {
-  return suggestions.map((s) => ({
-    value: String(s.variantIndex),
-    label: truncate(s.text),
-  }))
-}
-
-/** Compact summary of a copy set's field counts, e.g. "5H · 3P". */
-function copySetSummary(set: CopySet): string {
-  const parts: string[] = []
-  if (set.headlines.length) parts.push(`${set.headlines.length}H`)
-  if (set.primaryTexts.length) parts.push(`${set.primaryTexts.length}P`)
-  if (set.descriptions.length) parts.push(`${set.descriptions.length}D`)
-  return parts.join(' · ') || 'Copy set'
-}
-
-function CopyPairingControl({
-  gen,
-  copySets,
+function EmptyState({
+  text,
+  cta,
+  onClick,
+  loading,
 }: {
-  gen: GenRow
-  copySets: CopySet[]
+  text: string
+  cta: string
+  onClick: () => void
+  loading?: boolean
 }) {
-  const pairMutation = useConvexMutation(api.adTests.pairCopyWithGeneration)
-  const { mutate: pair } = useMutation({
-    mutationFn: pairMutation,
-    onError: () =>
-      notifications.show({
-        title: 'Error',
-        message: 'Could not update copy pairing',
-        color: 'red',
-      }),
-  })
+  return (
+    <Paper
+      radius="lg"
+      p="xl"
+      withBorder
+      ta="center"
+      style={{ borderStyle: 'dashed', borderWidth: 2, borderColor: 'var(--mantine-color-dark-5)' }}
+    >
+      <Stack align="center" gap="sm">
+        <Text size="sm" c="dark.3" maw={440}>{text}</Text>
+        <Button color="brand" leftSection={<IconPlus size={16} />} loading={loading} onClick={onClick}>
+          {cta}
+        </Button>
+      </Stack>
+    </Paper>
+  )
+}
 
-  const selectedSet = copySets.find((s) => s._id === gen.selectedCopySetId)
-  const isPaired = !!selectedSet
+// ─── Creative card ────────────────────────────────────────────────────────────
 
-  const toIndex = (v: string | null): number | undefined =>
-    v === null ? undefined : Number(v)
-
-  // Re-pair with the full current selection, overriding one field at a time so
-  // the server always receives a complete, consistent pairing.
-  const applyIndex = (
-    field: 'headlineIndex' | 'primaryTextIndex' | 'descriptionIndex',
-    value: string | null,
-  ) => {
-    if (!gen.selectedCopySetId) return
-    pair({
-      generationId: gen._id,
-      copySetId: gen.selectedCopySetId,
-      headlineIndex: gen.selectedHeadlineIndex,
-      primaryTextIndex: gen.selectedPrimaryTextIndex,
-      descriptionIndex: gen.selectedDescriptionIndex,
-      [field]: toIndex(value),
-    })
+function CreativeCard({
+  gen,
+  selected,
+  onSelect,
+  onExpand,
+  onToggleWinner,
+}: {
+  gen: {
+    _id: Id<'templateGenerations'>
+    status: string
+    outputUrl?: string
+    aspectRatio?: string
+    isWinner?: boolean
+    currentStep?: string
+    selectedCopySetId?: Id<'adTestCopySets'>
   }
+  selected: boolean
+  onSelect: () => void
+  onExpand: () => void
+  onToggleWinner: () => void
+}) {
+  const ratio = ASPECT_RATIO_VALUE[gen.aspectRatio ?? '1:1'] ?? 1
+  const isComplete = gen.status === 'complete' && !!gen.outputUrl
+  const isFailed = gen.status === 'failed'
+  const isPaired = !!gen.selectedCopySetId
 
   return (
-    <Popover width={240} position="bottom" withArrow shadow="md">
-      <Popover.Target>
-        <Button
-          variant={isPaired ? 'light' : 'subtle'}
-          color={isPaired ? 'blue' : 'gray'}
-          size="compact-xs"
-          fullWidth
-          leftSection={<IconLink size={12} />}
+    <Paper
+      radius="md"
+      withBorder
+      onClick={isComplete ? onSelect : undefined}
+      style={{
+        overflow: 'hidden',
+        cursor: isComplete ? 'pointer' : 'default',
+        borderColor: selected ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-6)',
+        borderWidth: selected ? 2 : 1,
+        position: 'relative',
+        transition: 'border-color 120ms ease',
+      }}
+    >
+      <AspectRatio ratio={ratio} style={{ background: 'var(--mantine-color-dark-7)' }}>
+        {isComplete ? (
+          <Image src={gen.outputUrl} alt="Ad creative" style={{ objectFit: 'cover' }} />
+        ) : isFailed ? (
+          <Center>
+            <Text size="xs" c="red.4">Failed</Text>
+          </Center>
+        ) : (
+          <Center>
+            <Stack align="center" gap={6}>
+              <Loader size="sm" color="brand" />
+              <Text size="10px" c="dark.3" ta="center" px="xs" lineClamp={2}>
+                {gen.currentStep ?? 'Generating…'}
+              </Text>
+            </Stack>
+          </Center>
+        )}
+      </AspectRatio>
+
+      {/* Top-right badges */}
+      <Group gap={4} style={{ position: 'absolute', top: 6, right: 6 }}>
+        {isPaired && (
+          <Badge size="xs" variant="filled" color="teal">Paired</Badge>
+        )}
+        {selected && (
+          <Badge size="xs" variant="filled" color="brand" leftSection={<IconCheck size={9} />}>
+            Selected
+          </Badge>
+        )}
+      </Group>
+
+      {/* Bottom actions on complete */}
+      {isComplete && (
+        <Group
+          gap={4}
+          justify="flex-end"
+          style={{
+            position: 'absolute',
+            bottom: 6,
+            right: 6,
+          }}
         >
-          {isPaired ? 'Copy paired' : 'Pair copy'}
-        </Button>
-      </Popover.Target>
-      <Popover.Dropdown>
-        <Stack gap="xs">
-          <Select
-            size="xs"
-            label="Copy set"
-            placeholder="None"
-            clearable
-            value={gen.selectedCopySetId ?? null}
-            data={copySets.map((s) => ({
-              value: s._id,
-              label: copySetSummary(s),
-            }))}
-            onChange={(val) =>
-              // Switching/clearing the set resets per-field selections.
-              pair(
-                val
-                  ? { generationId: gen._id, copySetId: val as Id<'adTestCopySets'> }
-                  : { generationId: gen._id },
-              )
-            }
-          />
+          <ActionIcon
+            size="sm"
+            variant="filled"
+            color="dark"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleWinner()
+            }}
+            aria-label="Toggle winner"
+          >
+            {gen.isWinner ? (
+              <IconStarFilled size={14} color="var(--mantine-color-yellow-5)" />
+            ) : (
+              <IconStar size={14} />
+            )}
+          </ActionIcon>
+          <ActionIcon
+            size="sm"
+            variant="filled"
+            color="dark"
+            onClick={(e) => {
+              e.stopPropagation()
+              onExpand()
+            }}
+            aria-label="Open details"
+          >
+            <IconMaximize size={14} />
+          </ActionIcon>
+        </Group>
+      )}
+    </Paper>
+  )
+}
 
-          {selectedSet && selectedSet.headlines.length > 0 && (
-            <Select
-              size="xs"
-              label="Headline"
-              placeholder="None"
-              clearable
-              value={
-                gen.selectedHeadlineIndex !== undefined
-                  ? String(gen.selectedHeadlineIndex)
-                  : null
-              }
-              data={suggestionOptions(selectedSet.headlines)}
-              onChange={(val) => applyIndex('headlineIndex', val)}
-            />
-          )}
+// ─── Copy card ────────────────────────────────────────────────────────────────
 
-          {selectedSet && selectedSet.primaryTexts.length > 0 && (
-            <Select
-              size="xs"
-              label="Primary text"
-              placeholder="None"
-              clearable
-              value={
-                gen.selectedPrimaryTextIndex !== undefined
-                  ? String(gen.selectedPrimaryTextIndex)
-                  : null
-              }
-              data={suggestionOptions(selectedSet.primaryTexts)}
-              onChange={(val) => applyIndex('primaryTextIndex', val)}
-            />
-          )}
-
-          {selectedSet && selectedSet.descriptions.length > 0 && (
-            <Select
-              size="xs"
-              label="Description"
-              placeholder="None"
-              clearable
-              value={
-                gen.selectedDescriptionIndex !== undefined
-                  ? String(gen.selectedDescriptionIndex)
-                  : null
-              }
-              data={suggestionOptions(selectedSet.descriptions)}
-              onChange={(val) => applyIndex('descriptionIndex', val)}
-            />
-          )}
-        </Stack>
-      </Popover.Dropdown>
-    </Popover>
+function CopyCard({
+  text,
+  selected,
+  onSelect,
+  lines = 2,
+}: {
+  text: string
+  selected: boolean
+  onSelect: () => void
+  lines?: number
+}) {
+  return (
+    <Paper
+      radius="md"
+      p="sm"
+      withBorder
+      onClick={onSelect}
+      style={{
+        cursor: 'pointer',
+        borderColor: selected ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-6)',
+        borderWidth: selected ? 2 : 1,
+        background: selected ? 'rgba(84,116,180,0.10)' : 'rgba(255,255,255,0.02)',
+        transition: 'border-color 120ms ease, background-color 120ms ease',
+        position: 'relative',
+      }}
+    >
+      <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
+        <Text size="sm" c="dark.0" style={{ whiteSpace: 'pre-wrap' }} lineClamp={lines}>
+          {text}
+        </Text>
+        {selected && (
+          <IconCheck size={16} color="var(--mantine-color-brand-5)" style={{ flexShrink: 0 }} />
+        )}
+      </Group>
+    </Paper>
   )
 }

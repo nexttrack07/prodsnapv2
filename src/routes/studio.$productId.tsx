@@ -432,6 +432,7 @@ function ProductWorkspacePage() {
         <>
           <AdTestReviewView
             adTestId={search.adTestId as Id<'adTests'>}
+            productName={product.name}
             // `free_user` is a real (truthy) plan slug, so `!!plan` would treat
             // starter users as paid. Export is a paid-only feature: exclude it.
             hasPaidPlan={
