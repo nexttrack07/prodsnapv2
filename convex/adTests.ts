@@ -664,9 +664,10 @@ export const createDraft = mutation({
     if (args.placements.length === 0) {
       throw new Error('At least one placement is required')
     }
-    if (args.angles.length === 0 && (args.prompts?.length ?? 0) === 0) {
-      throw new Error('At least one angle or prompt is required')
-    }
+    // Angles/prompts are only required for the angle-based fan-out path
+    // (startGeneration). A template-based test gets its creatives from the
+    // generate wizard (generateFromProduct with adTestId), so an empty
+    // angles+prompts test is valid.
 
     await requireOwnedProduct(ctx, userId, args.productId)
 

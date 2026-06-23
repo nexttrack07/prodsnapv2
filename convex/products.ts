@@ -965,6 +965,19 @@ export const deleteGeneration = mutation({
  * This is the product-centric equivalent of studio.submitRun.
  * Requires authentication and product ownership.
  */
+// Map a generated creative's aspect ratio to its Meta placement, so Ad Test
+// creatives produced by the template wizard carry the same placement metadata
+// as angle-based ones (used for grouping + export filenames).
+const PLACEMENT_FOR_ASPECT: Record<
+  string,
+  'feed_square' | 'feed_vertical' | 'story_reel' | 'landscape'
+> = {
+  '1:1': 'feed_square',
+  '4:5': 'feed_vertical',
+  '9:16': 'story_reel',
+  '16:9': 'landscape',
+}
+
 export const generateFromProduct = mutation({
   args: {
     productId: v.id('products'),
@@ -980,6 +993,14 @@ export const generateFromProduct = mutation({
     applyBrand: v.optional(v.boolean()),
     /** Apply customer voice (brand voice + customer phrases). Defaults to true. */
     applyVoice: v.optional(v.boolean()),
+    /**
+     * Optional: attach these creatives to an Ad Test. The test becomes the
+     * container that groups creatives + copy. When set, each generated row is
+     * tagged with adTestId (+ placement/adUnitIndex) and the test's planned
+     * counter and status are advanced; completion bumps the test's counters via
+     * the generation workflow. When absent, this is a standalone generation.
+     */
+    adTestId: v.optional(v.id('adTests')),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
@@ -1005,18 +1026,46 @@ export const generateFromProduct = mutation({
       throw new Error('Cannot generate from archived product')
     }
 
-    // Billing: capability enforcement.
-    await requireCapability(
-      ctx,
-      CAPABILITIES.GENERATE_VARIATIONS,
-      'generateFromProduct',
-    )
-    if (args.variationsPerTemplate > 2) {
+    // When attaching to an Ad Test, verify it's owned and belongs to this
+    // product. We compute the next adUnitIndex so creatives added across
+    // multiple generate passes keep a stable, gapless order (used for export
+    // filenames and grid ordering).
+    let adTestBaseUnitIndex = 0
+    if (args.adTestId) {
+      const adTest = await ctx.db.get(args.adTestId)
+      if (!adTest || adTest.userId !== userId) throw new Error('Ad Test not found')
+      if (adTest.productId !== args.productId) {
+        throw new Error('Ad Test does not belong to this product')
+      }
+      if (adTest.archivedAt) throw new Error('Cannot add to an archived Ad Test')
+      const existing = await ctx.db
+        .query('templateGenerations')
+        .withIndex('by_adTestId', (q) => q.eq('adTestId', args.adTestId))
+        .collect()
+      adTestBaseUnitIndex = existing.reduce(
+        (max, g) => Math.max(max, (g.adUnitIndex ?? -1) + 1),
+        0,
+      )
+    }
+
+    // Billing: capability enforcement. Standalone generation keeps the legacy
+    // paid-feature gate. In-test generation (adTestId set) is the primary,
+    // credit-metered flow — free users have 100 starter credits and must be
+    // able to generate within them — so it's gated by requireCredits below
+    // only, mirroring the starter activation path.
+    if (!args.adTestId) {
       await requireCapability(
         ctx,
-        CAPABILITIES.BATCH_GENERATION,
+        CAPABILITIES.GENERATE_VARIATIONS,
         'generateFromProduct',
       )
+      if (args.variationsPerTemplate > 2) {
+        await requireCapability(
+          ctx,
+          CAPABILITIES.BATCH_GENERATION,
+          'generateFromProduct',
+        )
+      }
     }
 
     // Resolve the source image: caller-supplied productImageId wins (so the
@@ -1103,15 +1152,38 @@ export const generateFromProduct = mutation({
           colorAdapt: args.colorAdapt,
           applyBrand: args.applyBrand ?? true,
           applyVoice: args.applyVoice ?? true,
-          variationIndex: variationCounter++,
+          variationIndex: variationCounter,
           status: 'queued',
           model: args.model ?? 'nano-banana-2',
+          // Ad Test linkage (only when generating into a test).
+          adTestId: args.adTestId,
+          placement: args.adTestId
+            ? PLACEMENT_FOR_ASPECT[args.aspectRatio]
+            : undefined,
+          adUnitIndex: args.adTestId
+            ? adTestBaseUnitIndex + variationCounter
+            : undefined,
         })
+        variationCounter++
         generationIds.push(genId)
 
         // Start the generation workflow
         await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
           generationId: genId,
+        })
+      }
+    }
+
+    // Advance the Ad Test: bump its planned counter and flip to generating.
+    // (Completion bumps completed/failed/winner via the generation workflow;
+    // plannedImageCount is owned at fan-out time, here.)
+    if (args.adTestId) {
+      const adTest = await ctx.db.get(args.adTestId)
+      if (adTest) {
+        await ctx.db.patch(args.adTestId, {
+          plannedImageCount: adTest.plannedImageCount + generationIds.length,
+          status: 'generating',
+          updatedAt: Date.now(),
         })
       }
     }

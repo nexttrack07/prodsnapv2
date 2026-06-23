@@ -130,12 +130,16 @@ test('createDraft requires auth, a name, placements, and an angle or prompt', as
     }),
   ).rejects.toThrow(/placement/)
 
-  await expect(
-    asUser.mutation(api.adTests.createDraft, {
-      ...baseDraftArgs(productId),
-      angles: [],
-    }),
-  ).rejects.toThrow(/angle or prompt/)
+  // A template-based test has no angles/prompts (creatives come from the
+  // generate wizard), so an empty angles+prompts draft is now valid.
+  const templateOnly = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productId),
+    angles: [],
+    name: 'Template-only',
+  })
+  const created = await t.run((ctx) => ctx.db.get(templateOnly))
+  expect(created!.angles).toEqual([])
+  expect(created!.status).toBe('draft')
 })
 
 // ─── listForProduct ────────────────────────────────────────────────────────────

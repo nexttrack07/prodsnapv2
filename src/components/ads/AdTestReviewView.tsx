@@ -35,6 +35,7 @@ import {
   IconStarFilled,
   IconMaximize,
   IconLink,
+  IconPlus,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { CopyBankPanel } from './CopyBankPanel'
@@ -79,12 +80,15 @@ export function AdTestReviewView({
   adTestId,
   hasPaidPlan,
   onBack,
+  onGenerate,
   onOpenAd,
 }: {
   adTestId: Id<'adTests'>
   /** When false, the export button shows an upgrade prompt instead of being simply disabled. */
   hasPaidPlan: boolean
   onBack: () => void
+  /** Open the generate wizard scoped to this test (creatives attach to it). */
+  onGenerate: () => void
   onOpenAd: (id: Id<'templateGenerations'>) => void
 }) {
   const { data, isLoading } = useQuery(
@@ -176,7 +180,10 @@ export function AdTestReviewView({
     } else if (gen.dynamicPrompt) {
       key = `_prompt_text_${gen.dynamicPrompt}`
     } else {
-      key = `_unknown_${gen._id}`
+      // Template-based creatives (generated into the test via the wizard) carry
+      // neither an angle nor a prompt — bucket them together rather than
+      // exploding into one singleton group per creative.
+      key = '_creatives'
     }
     const bucket = groups.get(key) ?? []
     bucket.push(gen)
@@ -236,9 +243,21 @@ export function AdTestReviewView({
           </Box>
         </Group>
 
-        {/* Export — paid users get a server-built zip; free users are routed to
-            upgrade. Disabled (with a reason) until at least one creative is ready. */}
-        <Tooltip
+        <Group gap="sm">
+          <Button
+            size="sm"
+            color="brand"
+            leftSection={<IconPlus size={16} />}
+            onClick={onGenerate}
+          >
+            {completedImageCount > 0 || plannedImageCount > 0
+              ? 'Generate more'
+              : 'Generate creatives'}
+          </Button>
+
+          {/* Export — paid users get a server-built zip; free users are routed to
+              upgrade. Disabled (with a reason) until at least one creative is ready. */}
+          <Tooltip
           label={
             !hasPaidPlan
               ? 'Upgrade to a paid plan to export'
@@ -260,6 +279,7 @@ export function AdTestReviewView({
             {hasPaidPlan ? 'Export test set' : '🔒 Upgrade to export'}
           </Button>
         </Tooltip>
+        </Group>
       </Group>
 
       {/* ── Copy Bank ─────────────────────────────────────────────────────── */}
@@ -277,9 +297,23 @@ export function AdTestReviewView({
           style={{ borderColor: 'var(--mantine-color-dark-5)' }}
           ta="center"
         >
-          <Text size="sm" c="dark.3">
-            No generations yet. Start generation from the test settings.
-          </Text>
+          <Stack align="center" gap="sm">
+            <Text fw={500} c="dark.0">
+              No creatives yet
+            </Text>
+            <Text size="sm" c="dark.3" maw={420}>
+              Generate ad creatives for this test from your template library,
+              then pair them with copy to build complete ads.
+            </Text>
+            <Button
+              color="brand"
+              mt="xs"
+              leftSection={<IconPlus size={16} />}
+              onClick={onGenerate}
+            >
+              Generate creatives
+            </Button>
+          </Stack>
         </Paper>
       )}
 
@@ -292,6 +326,8 @@ export function AdTestReviewView({
           const promptText = groupKey.slice('_prompt_text_'.length)
           const idx = promptIndexByText.get(promptText)
           groupLabel = `Prompt ${idx !== undefined ? idx + 1 : '?'}`
+        } else if (groupKey === '_creatives') {
+          groupLabel = 'Creatives'
         } else {
           groupLabel = angle?.title ?? groupKey
         }

@@ -213,6 +213,33 @@ function ProductWorkspacePage() {
   const { productId } = Route.useParams()
   const search = Route.useSearch()
   const navigate = useNavigate()
+  const createAdTest = useConvexMutation(api.adTests.createDraft)
+
+  // "New ad test": create an empty (template-based) draft and drop the user
+  // straight into the generate wizard scoped to it. Creatives + copy are added
+  // inside the test.
+  const handleNewAdTest = async () => {
+    try {
+      const id = await createAdTest({
+        productId: productId as Id<'products'>,
+        name: `Ad test ${new Date().toLocaleDateString()}`,
+        source: 'custom',
+        angles: [],
+        placements: ['feed_square', 'feed_vertical', 'story_reel'],
+      })
+      navigate({
+        to: '/studio/$productId',
+        params: { productId },
+        search: { ...search, adTestId: id as string, compose: 'true' },
+      })
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message:
+          err instanceof Error ? err.message : 'Could not create ad test',
+      })
+    }
+  }
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // Nested routes (e.g. /studio/$productId/strategy) take over the page —
   // render only the child Outlet and skip the workspace content.
@@ -369,8 +396,39 @@ function ProductWorkspacePage() {
         />
       )}
 
-      {/* Ad Test review mode — takes over the whole content area */}
-      {isAdTestReview && (
+      {/* Ad Test review mode — takes over the whole content area. With
+          ?compose=true it shows the generate wizard scoped to the test
+          (creatives attach to the test); otherwise the review screen. */}
+      {isAdTestReview && search.compose === 'true' && (
+        <GenerateWizard
+          productId={productId as Id<'products'>}
+          product={product}
+          primaryImageUrl={primaryImageUrl}
+          creditsExhausted={creditsExhausted}
+          initialFilters={initialFilters}
+          adTestId={search.adTestId as Id<'adTests'>}
+          onBack={() => {
+            const { compose: _omit, ...rest } = search
+            navigate({
+              to: '/studio/$productId',
+              params: { productId },
+              search: rest,
+              replace: true,
+            })
+          }}
+          onComplete={() => {
+            const { compose: _omit, ...rest } = search
+            navigate({
+              to: '/studio/$productId',
+              params: { productId },
+              search: rest,
+              replace: true,
+            })
+          }}
+        />
+      )}
+
+      {isAdTestReview && search.compose !== 'true' && (
         <>
           <AdTestReviewView
             adTestId={search.adTestId as Id<'adTests'>}
@@ -380,7 +438,12 @@ function ProductWorkspacePage() {
               billingStatus?.plan != null && billingStatus.plan !== 'free_user'
             }
             onBack={() => {
-              const { adTestId: _omit, ad: _omit2, ...rest } = search
+              // Reset view: entering the in-test wizard flips view→'generate'
+              // (via the compose effect); without resetting, backing out of the
+              // review would land on the standalone wizard instead of gallery.
+              setView('gallery')
+              const { adTestId: _omit, ad: _omit2, compose: _omit3, ...rest } =
+                search
               navigate({
                 to: '/studio/$productId',
                 params: { productId },
@@ -388,6 +451,13 @@ function ProductWorkspacePage() {
                 replace: true,
               })
             }}
+            onGenerate={() =>
+              navigate({
+                to: '/studio/$productId',
+                params: { productId },
+                search: { ...search, compose: 'true' },
+              })
+            }
             onOpenAd={(id) =>
               navigate({
                 to: '/studio/$productId',
@@ -424,7 +494,7 @@ function ProductWorkspacePage() {
               search: { ...search, adTestId: id as string },
             })
           }
-          onNewTest={() => setView('generate')}
+          onNewTest={handleNewAdTest}
           creditsExhausted={creditsExhausted}
         />
       )}
@@ -3025,6 +3095,7 @@ function GenerateWizard({
   prefillTemplateId,
   prefillAngleIndex,
   prefillEditAdId,
+  adTestId,
 }: {
   productId: Id<'products'>
   product: {
@@ -3054,6 +3125,8 @@ function GenerateWizard({
   prefillTemplateId?: Id<'adTemplates'> | null
   prefillAngleIndex?: number | null
   prefillEditAdId?: Id<'templateGenerations'> | null
+  /** When set, generated creatives attach to this Ad Test (template path). */
+  adTestId?: Id<'adTests'> | null
 }) {
   // ── Segment state ──────────────────────────────────────────────────────────
   // Default to Template — picking from the curated library is the recommended
@@ -3538,8 +3611,15 @@ function GenerateWizard({
           productImageId: sourceImageId ?? undefined,
           applyBrand,
           applyVoice,
+          adTestId: adTestId ?? undefined,
         })
-        notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
+        notifications.show({
+          title: 'Success',
+          message: adTestId
+            ? 'Generating creatives for your ad test!'
+            : 'Generation started!',
+          color: 'green',
+        })
       } else if (usePromptPath) {
         await submitPromptMutation({
           productId,
@@ -3661,8 +3741,9 @@ function GenerateWizard({
         </Group>
       </Group>
 
-      {/* Segmented control — hidden when editing an existing ad */}
-      {!prefillEditAdId && (
+      {/* Segmented control — hidden when editing an existing ad, and when
+          generating into an ad test (template-only path). */}
+      {!prefillEditAdId && !adTestId && (
         <Box px="md" mb="lg">
           <SegmentedControl
             value={activeSegment}
