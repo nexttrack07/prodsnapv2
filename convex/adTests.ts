@@ -517,6 +517,50 @@ export const getHomeAdTestSurface = query({
 })
 
 /**
+ * All of the user's active (non-archived) Ad Tests across every product, newest
+ * first, joined with the product name so the /ad-tests page can list them and
+ * deep-link each to /studio/$productId?adTestId=. Capped at 100 — this is a
+ * recent-work surface, not a paginated archive.
+ */
+export const listMyAdTests = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return []
+
+    const tests = await ctx.db
+      .query('adTests')
+      .withIndex('by_userId_archivedAt', (q) =>
+        q.eq('userId', userId).eq('archivedAt', undefined),
+      )
+      .order('desc')
+      .take(100)
+
+    // Resolve product names in one pass (dedupe ids first).
+    const productIds = [...new Set(tests.map((t) => t.productId))]
+    const products = await Promise.all(productIds.map((id) => ctx.db.get(id)))
+    const productNameById = new Map(
+      products.flatMap((p) => (p ? [[p._id, p.name] as const] : [])),
+    )
+
+    return tests.map((t) => ({
+      _id: t._id,
+      name: t.name,
+      status: t.status,
+      source: t.source,
+      productId: t.productId,
+      productName: productNameById.get(t.productId) ?? 'Product',
+      plannedImageCount: t.plannedImageCount,
+      completedImageCount: t.completedImageCount,
+      failedImageCount: t.failedImageCount,
+      winnerCount: t.winnerCount,
+      exportedAt: t.exportedAt ?? null,
+      updatedAt: t.updatedAt,
+    }))
+  },
+})
+
+/**
  * Creates a draft Ad Test from a persisted recommendation and marks the
  * recommendation consumed. Returns the draft's id so the UI can open its review
  * screen — generation isn't started here, so the user confirms before spending

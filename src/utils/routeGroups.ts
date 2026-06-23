@@ -16,6 +16,7 @@ export const APP_ROUTE_PREFIXES = [
   '/templates',
   '/strategy',
   '/ads',
+  '/ad-tests',
 ]
 
 // Wizard-chrome routes (onboarding / checkout). These manage their own auth

@@ -174,6 +174,50 @@ test('listForProduct returns [] for a product owned by someone else', async () =
   expect(rows).toEqual([])
 })
 
+// ─── listMyAdTests (cross-product index for the sidebar page) ────────────────
+
+test('listMyAdTests returns owned tests across products, newest-first, with product names, excluding archived', async () => {
+  const t = convexTest(schema, modules)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  const productA = await t.run((ctx) =>
+    ctx.db.insert('products', { name: 'Hydration Mix', status: 'ready', userId: USER }),
+  )
+  const productB = await t.run((ctx) =>
+    ctx.db.insert('products', { name: 'Trail Tee', status: 'ready', userId: USER }),
+  )
+
+  const first = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productA),
+    name: 'A-first',
+  })
+  await asUser.mutation(api.adTests.createDraft, { ...baseDraftArgs(productB), name: 'B-second' })
+  const third = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productA),
+    name: 'A-third',
+  })
+  // Archived tests drop out; another user's test is never visible.
+  await asUser.mutation(api.adTests.archive, { adTestId: first })
+  const otherProduct = await seedProduct(t, OTHER)
+  await t
+    .withIdentity({ tokenIdentifier: OTHER })
+    .mutation(api.adTests.createDraft, { ...baseDraftArgs(otherProduct), name: 'intruder' })
+
+  const rows = await asUser.query(api.adTests.listMyAdTests, {})
+
+  // Newest-first across products, archived 'A-first' excluded.
+  expect(rows.map((r) => r.name)).toEqual(['A-third', 'B-second'])
+  expect(rows.find((r) => r._id === third)?.productName).toBe('Hydration Mix')
+  expect(rows.find((r) => r.name === 'B-second')?.productName).toBe('Trail Tee')
+  expect(rows.every((r) => r.name !== 'intruder')).toBe(true)
+})
+
+test('listMyAdTests returns [] when unauthenticated', async () => {
+  const t = convexTest(schema, modules)
+  const rows = await t.query(api.adTests.listMyAdTests, {})
+  expect(rows).toEqual([])
+})
+
 // ─── getById ────────────────────────────────────────────────────────────────
 
 test('getById returns the test with child generations ordered by adUnitIndex', async () => {

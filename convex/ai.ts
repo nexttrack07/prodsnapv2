@@ -656,11 +656,29 @@ Return ONLY the JSON object — no markdown, no explanation.`
       r.primaryTexts.length >= counts.primaryTextCount &&
       r.descriptions.length >= counts.descriptionCount
 
-    // First pass; one retry on under-delivery before failing. The request and
-    // prompt both promise exact counts, so a short final result throws rather
-    // than silently persisting a smaller-than-requested Copy Bank.
-    let result = await attempt()
-    if (!meetsCounts(result)) result = await attempt()
+    // Up to two attempts. The retry covers BOTH ways the model misbehaves:
+    // (1) malformed JSON — parseJsonFromResponse throws (an unescaped quote in
+    // a long primary text is the usual culprit) — and (2) under-delivery (fewer
+    // variants than requested). Either failure gives the model one more shot
+    // before we surface it, rather than letting a single bad JSON blob hard-fail
+    // the whole copy set. The request and prompt both promise exact counts, so a
+    // still-short final result throws rather than persisting a smaller bank.
+    let result: Awaited<ReturnType<typeof attempt>> | null = null
+    let lastError: unknown = null
+    for (let pass = 0; pass < 2; pass++) {
+      try {
+        const r = await attempt()
+        result = r
+        if (meetsCounts(r)) break
+      } catch (err) {
+        lastError = err
+      }
+    }
+    if (!result) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error('Failed to generate copy set')
+    }
     assertCopyCountsMet(result, counts)
 
     return result
