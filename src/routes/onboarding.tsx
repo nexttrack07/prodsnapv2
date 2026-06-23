@@ -32,6 +32,10 @@ import {
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import {
+  TemplateBrowser,
+  type BrowserTemplate,
+} from '~/components/templates/TemplateBrowser'
 import { StepRole } from '~/components/onboarding/StepRole'
 import { StepBusiness } from '~/components/onboarding/StepBusiness'
 import { StepPlan } from '~/components/onboarding/StepPlan'
@@ -390,7 +394,6 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
           setTemplateIds(ids)
           setStep('photos')
         }}
-        onUseSample={onUseSample}
       />
     )
   }
@@ -445,13 +448,10 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
 function StarterTemplatePicker({
   importStep,
   onContinue,
-  onUseSample,
 }: {
   importStep: string | null
   onContinue: (templateIds: Id<'adTemplates'>[]) => void
-  onUseSample: () => void
 }) {
-  const templates = useQuery(api.templates.listPublished, {})
   const [selected, setSelected] = useState<Id<'adTemplates'>[]>([])
 
   const toggle = (id: Id<'adTemplates'>) => {
@@ -464,96 +464,112 @@ function StarterTemplatePicker({
     )
   }
 
-  const list = (templates ?? []).slice(0, 60)
-
   return (
-    <Container size="lg" py={32}>
-      <Stack gap="lg">
-        <div>
-          <Title order={2} fz={26} fw={600}>
-            Pick up to 3 ad styles
-          </Title>
-          <Text c="dark.2" mt={4}>
-            These templates set the look of your ads — your product gets
-            composited into each one.
-          </Text>
-          {importStep && (
-            <Group gap={6} mt={6}>
-              <Loader size="xs" color="brand" />
-              <Text size="xs" c="dark.3">
-                {importStep} (in the background)
+    <Container size="lg" py={24}>
+      <Stack gap="md">
+        {/* Sticky header — Continue lives at the TOP, always reachable. */}
+        <Box
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 3,
+            backgroundColor: 'var(--mantine-color-dark-7)',
+            paddingTop: 8,
+            paddingBottom: 12,
+          }}
+        >
+          <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+            <div>
+              <Title order={2} fz={24} fw={600}>
+                Pick up to 3 ad styles
+              </Title>
+              <Text c="dark.2" size="sm" mt={2}>
+                Your product gets composited into each one.
               </Text>
-            </Group>
+              {importStep && (
+                <Group gap={6} mt={4}>
+                  <Loader size="xs" color="brand" />
+                  <Text size="xs" c="dark.3">
+                    {importStep} (in the background)
+                  </Text>
+                </Group>
+              )}
+            </div>
+            <Button
+              color="brand"
+              size="md"
+              disabled={selected.length === 0}
+              onClick={() => onContinue(selected)}
+              style={{ flexShrink: 0 }}
+            >
+              Continue ({selected.length}/3) →
+            </Button>
+          </Group>
+        </Box>
+
+        <TemplateBrowser
+          renderItem={(t) => (
+            <SelectableTemplateTile
+              template={t}
+              order={selected.indexOf(t._id)}
+              onToggle={() => toggle(t._id)}
+            />
           )}
-        </div>
-
-        {!templates ? (
-          <Center py="xl">
-            <Loader color="brand" />
-          </Center>
-        ) : (
-          <SimpleGrid cols={{ base: 3, sm: 4, md: 5 }} spacing="sm">
-            {list.map((t) => {
-              const order = selected.indexOf(t._id)
-              const isSelected = order !== -1
-              return (
-                <Box
-                  key={t._id}
-                  pos="relative"
-                  onClick={() => toggle(t._id)}
-                  style={{
-                    cursor: 'pointer',
-                    borderRadius: 'var(--mantine-radius-md)',
-                    overflow: 'hidden',
-                    outline: isSelected
-                      ? '2px solid var(--mantine-color-brand-5)'
-                      : '1px solid var(--mantine-color-dark-5)',
-                    outlineOffset: isSelected ? -2 : -1,
-                  }}
-                >
-                  <Image
-                    src={t.thumbnailUrl || t.imageUrl}
-                    alt=""
-                    w="100%"
-                    style={{
-                      aspectRatio: '1',
-                      objectFit: 'cover',
-                      display: 'block',
-                      opacity: isSelected ? 1 : 0.85,
-                    }}
-                  />
-                  {isSelected && (
-                    <Badge
-                      size="sm"
-                      circle
-                      color="brand"
-                      pos="absolute"
-                      style={{ top: 4, right: 4 }}
-                    >
-                      {order + 1}
-                    </Badge>
-                  )}
-                </Box>
-              )
-            })}
-          </SimpleGrid>
-        )}
-
-        <Group justify="space-between">
-          <Button variant="subtle" color="gray" size="sm" onClick={onUseSample}>
-            Use a sample instead
-          </Button>
-          <Button
-            color="brand"
-            size="md"
-            disabled={selected.length === 0}
-            onClick={() => onContinue(selected)}
-          >
-            Continue ({selected.length}/3) →
-          </Button>
-        </Group>
+        />
       </Stack>
     </Container>
+  )
+}
+
+function SelectableTemplateTile({
+  template,
+  order,
+  onToggle,
+}: {
+  template: BrowserTemplate
+  order: number
+  onToggle: () => void
+}) {
+  const isSelected = order !== -1
+  const ratio =
+    template.aspectRatio === '4:5'
+      ? '4 / 5'
+      : template.aspectRatio === '9:16'
+        ? '9 / 16'
+        : template.aspectRatio === '16:9'
+          ? '16 / 9'
+          : '1 / 1'
+  return (
+    <Box
+      pos="relative"
+      onClick={onToggle}
+      style={{
+        cursor: 'pointer',
+        borderRadius: 'var(--mantine-radius-sm)',
+        overflow: 'hidden',
+        outline: isSelected
+          ? '2px solid var(--mantine-color-brand-5)'
+          : '1px solid var(--mantine-color-dark-6)',
+        outlineOffset: isSelected ? -2 : -1,
+      }}
+    >
+      <Image
+        src={template.thumbnailUrl || template.imageUrl}
+        alt=""
+        w="100%"
+        style={{
+          aspectRatio: ratio,
+          objectFit: 'cover',
+          display: 'block',
+          opacity: isSelected ? 1 : 0.9,
+        }}
+      />
+      {isSelected && (
+        <Badge size="sm" circle color="brand" pos="absolute" style={{ top: 4, right: 4 }}>
+          {order + 1}
+        </Badge>
+      )}
+    </Box>
   )
 }
 

@@ -52,6 +52,7 @@ import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capitalizeWords } from '../utils/strings'
 import { useCustomTemplateUpload } from '../utils/customTemplateUpload'
+import { TemplateBrowser } from '../components/templates/TemplateBrowser'
 
 type TemplatesSearch = { preview?: string }
 
@@ -114,115 +115,6 @@ function TemplatesBrowsePage() {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const navigate = useNavigate()
   const convex = useConvex()
-
-  // ── Filters ──────────────────────────────────────────────────────────────
-  const [search, setSearch] = useState('')
-  // Debounced copy of `search` that actually drives the query. The input binds
-  // to `search` for instant feedback; the backend only sees the value after a
-  // 300ms pause, so typing no longer fires a listTemplates query per keystroke
-  // (each of which scans all published templates server-side).
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => clearTimeout(id)
-  }, [search])
-  const [filterCategory, setFilterCategory] = useState<string | null>(null)
-  const [filterImageStyle, setFilterImageStyle] = useState<string | null>(null)
-  const [filterSetting, setFilterSetting] = useState<string | null>(null)
-  const [filterAngleType, setFilterAngleType] = useState<string | null>(null)
-  const [filterAspectRatio, setFilterAspectRatio] = useState<string | null>(null)
-
-  const { data: filterOptions } = useQuery(
-    convexQuery(api.products.listTemplateFilterOptions, {}),
-  )
-
-  const filterArgs = {
-    search: debouncedSearch.trim() || undefined,
-    productCategory: filterCategory ?? undefined,
-    imageStyle: filterImageStyle ?? undefined,
-    setting: filterSetting ?? undefined,
-    angleType: filterAngleType ?? undefined,
-    aspectRatio:
-      (filterAspectRatio as '1:1' | '4:5' | '9:16' | undefined) ?? undefined,
-  }
-  const filtersActive =
-    // Use the immediate `search` (not the debounced value) so the "Clear
-    // filters" affordance appears as soon as the user types, not 300ms later.
-    !!search.trim() ||
-    !!filterArgs.productCategory ||
-    !!filterArgs.imageStyle ||
-    !!filterArgs.setting ||
-    !!filterArgs.angleType ||
-    !!filterArgs.aspectRatio
-
-  // Exact count of the (optionally filtered) library — drives the header
-  // tagline so it shows the true total rather than the paginated loaded count.
-  const { data: templateCount } = useQuery(
-    convexQuery(api.products.countTemplates, filterArgs),
-  )
-
-  function clearFilters() {
-    setSearch('')
-    // Cancel the pending debounced value too, so the query clears immediately
-    // rather than re-running with stale text for up to 300ms.
-    setDebouncedSearch('')
-    setFilterCategory(null)
-    setFilterImageStyle(null)
-    setFilterSetting(null)
-    setFilterAngleType(null)
-    setFilterAspectRatio(null)
-  }
-
-  // ── Infinite query ─────────────────────────────────────────────────────────
-  const {
-    data: templatesData,
-    isLoading: templatesLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: [
-      'browseTemplates',
-      filterArgs.search,
-      filterArgs.productCategory,
-      filterArgs.imageStyle,
-      filterArgs.setting,
-      filterArgs.angleType,
-      filterArgs.aspectRatio,
-    ],
-    queryFn: async ({ pageParam }) => {
-      return convex.query(api.products.listTemplates, {
-        cursor: pageParam,
-        limit: 24,
-        ...filterArgs,
-      })
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor,
-    initialPageParam: undefined as string | undefined,
-  })
-
-  const templates = templatesData?.pages.flatMap((page) => page.items) || []
-
-  const observerRef = useRef<IntersectionObserver | null>(null)
-  const loadMoreRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      // Always disconnect first; bailing out during a fetch loses observation
-      // when React calls the callback ref with the same node after dep changes.
-      // The fetch-in-flight guard belongs INSIDE the intersection callback.
-      if (observerRef.current) observerRef.current.disconnect()
-      if (!node) return
-      observerRef.current = new IntersectionObserver(
-        (entries) => {
-          if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-            fetchNextPage()
-          }
-        },
-        { rootMargin: '400px' },
-      )
-      observerRef.current.observe(node)
-    },
-    [isFetchingNextPage, hasNextPage, fetchNextPage],
-  )
 
   // ── Bookmark / saves state ────────────────────────────────────────────────
   const products = useConvexQuery(api.products.listProducts, {})
@@ -357,11 +249,7 @@ function TemplatesBrowsePage() {
           </Title>
           <Text size="sm" c="dark.2">
             {activeTab === 'browse'
-              ? templateCount === undefined
-                ? 'Loading...'
-                : filtersActive
-                  ? `${templateCount} matching template${templateCount === 1 ? '' : 's'}`
-                  : `${templateCount} hand-picked, high-performing ad templates from real brands`
+              ? 'Hand-picked, high-performing ad templates from real brands'
               : 'Your uploaded templates'}
           </Text>
         </Box>
@@ -395,188 +283,18 @@ function TemplatesBrowsePage() {
         </Tabs.List>
 
         <Tabs.Panel value="browse" pt="lg">
-          {/* Filters */}
-          <Paper
-            radius="md"
-            p="md"
-            mb="lg"
-            style={{
-              border: '1px solid var(--mantine-color-dark-6)',
-              background: 'rgba(255,255,255,0.02)',
-            }}
-          >
-            <Group gap="sm" wrap="wrap" align="flex-end">
-              <TextInput
-                placeholder="Search templates..."
-                leftSection={<IconSearch size={14} />}
-                value={search}
-                onChange={(e) => setSearch(e.currentTarget.value)}
-                style={{ flex: 1, minWidth: 180 }}
-                size="sm"
+          <TemplateBrowser
+            renderItem={(t) => (
+              <TemplateTile
+                template={t}
+                onClick={() => setPreviewTemplate(t)}
+                isSaved={isTemplateSavedAnywhere(t._id)}
+                products={products ?? []}
+                isTemplateSavedToProduct={isTemplateSavedToProduct}
+                onToggleSave={handleToggleSave}
               />
-              <Select
-                placeholder="Category"
-                data={
-                  filterOptions?.productCategories.map((v) => ({
-                    value: v,
-                    label: capitalizeWords(v),
-                  })) ?? []
-                }
-                value={filterCategory}
-                onChange={setFilterCategory}
-                clearable
-                size="sm"
-                w={isMobile ? '100%' : 150}
-              />
-              <Select
-                placeholder="Image style"
-                data={
-                  filterOptions?.imageStyles.map((v) => ({
-                    value: v,
-                    label: capitalizeWords(v),
-                  })) ?? []
-                }
-                value={filterImageStyle}
-                onChange={setFilterImageStyle}
-                clearable
-                size="sm"
-                w={isMobile ? '100%' : 150}
-              />
-              <Select
-                placeholder="Setting"
-                data={
-                  filterOptions?.settings.map((v) => ({
-                    value: v,
-                    label: capitalizeWords(v),
-                  })) ?? []
-                }
-                value={filterSetting}
-                onChange={setFilterSetting}
-                clearable
-                size="sm"
-                w={isMobile ? '100%' : 150}
-              />
-              <Select
-                placeholder="Angle type"
-                data={
-                  filterOptions?.angleTypes.map((v) => ({
-                    value: v,
-                    label: angleTypeLabel(v),
-                  })) ?? []
-                }
-                value={filterAngleType}
-                onChange={setFilterAngleType}
-                clearable
-                size="sm"
-                w={isMobile ? '100%' : 150}
-              />
-              <Select
-                placeholder="Aspect ratio"
-                data={[
-                  { value: '1:1', label: '1:1' },
-                  { value: '4:5', label: '4:5' },
-                  { value: '9:16', label: '9:16' },
-                ]}
-                value={filterAspectRatio}
-                onChange={setFilterAspectRatio}
-                clearable
-                size="sm"
-                w={isMobile ? '100%' : 120}
-              />
-              {filtersActive && (
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  size="sm"
-                  leftSection={<IconX size={14} />}
-                  onClick={clearFilters}
-                >
-                  Clear filters
-                </Button>
-              )}
-            </Group>
-          </Paper>
-
-          {/* Grid */}
-          {templatesLoading ? (
-            <Box
-              style={{
-                display: 'grid',
-                gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-                gap: 1,
-              }}
-            >
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton
-                  key={i}
-                  h={i % 3 === 0 ? 240 : i % 3 === 1 ? 320 : 200}
-                  radius="sm"
-                />
-              ))}
-            </Box>
-          ) : templates.length === 0 ? (
-            <Paper
-              radius="lg"
-              p={60}
-              ta="center"
-              withBorder
-              style={{
-                borderStyle: 'dashed',
-                borderWidth: 2,
-                borderColor: 'var(--mantine-color-dark-5)',
-                background:
-                  'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
-              }}
-            >
-              <Text size="lg" fw={500} c="dark.1" mb="xs">
-                No templates match
-              </Text>
-              <Text size="sm" c="dark.3">
-                Try clearing a filter.
-              </Text>
-            </Paper>
-          ) : (
-            <>
-              {/* Masonic caches cell positions and crashes when items shrink.
-                  Re-key on filter changes so it remounts with a fresh cache. */}
-              <Masonry
-                key={[
-                  filterArgs.search ?? '',
-                  filterArgs.productCategory ?? '',
-                  filterArgs.imageStyle ?? '',
-                  filterArgs.setting ?? '',
-                  filterArgs.angleType ?? '',
-                  filterArgs.aspectRatio ?? '',
-                ].join('|')}
-                items={templates}
-                columnCount={isMobile ? 2 : 4}
-                columnGutter={1}
-                rowGutter={1}
-                render={({ data: t }) => (
-                  <TemplateTile
-                    template={t}
-                    onClick={() => setPreviewTemplate(t)}
-                    isSaved={isTemplateSavedAnywhere(t._id)}
-                    products={products ?? []}
-                    isTemplateSavedToProduct={isTemplateSavedToProduct}
-                    onToggleSave={handleToggleSave}
-                  />
-                )}
-              />
-              {/* Infinite scroll sentinel */}
-              {hasNextPage && (
-                <Center ref={loadMoreRef} py="xl">
-                  {isFetchingNextPage ? (
-                    <Loader size="sm" color="brand" />
-                  ) : (
-                    <Text size="sm" c="dark.3">
-                      Scroll for more
-                    </Text>
-                  )}
-                </Center>
-              )}
-            </>
-          )}
+            )}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="my-templates" pt="lg">
