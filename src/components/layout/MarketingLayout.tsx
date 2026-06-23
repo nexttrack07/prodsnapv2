@@ -74,6 +74,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
                   <NavLink to="/" hash="pricing" onClick={handlePricingClick}>
                     Pricing
                   </NavLink>
+                  <NavLink to="/blog">Blog</NavLink>
                 </Group>
               </Group>
               <Group gap="md">
@@ -137,6 +138,9 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
             }}
           >
             Pricing
+          </MobileNavLink>
+          <MobileNavLink to="/blog" onClick={closeMobileNav}>
+            Blog
           </MobileNavLink>
           <Unauthenticated>
             <Button

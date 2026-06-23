@@ -26,10 +26,12 @@ import { Route as AdTestsRouteImport } from './routes/ad-tests'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as ProductsIndexRouteImport } from './routes/products.index'
+import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as StudioProductIdRouteImport } from './routes/studio.$productId'
 import { Route as ProductsNewRouteImport } from './routes/products.new'
+import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AdsAdIdRouteImport } from './routes/ads.$adId'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminPromptsRouteImport } from './routes/admin.prompts'
@@ -130,6 +132,11 @@ const ProductsIndexRoute = ProductsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProductsRoute,
 } as any)
+const BlogIndexRoute = BlogIndexRouteImport.update({
+  id: '/blog/',
+  path: '/blog/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -149,6 +156,11 @@ const ProductsNewRoute = ProductsNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => ProductsRoute,
+} as any)
+const BlogSlugRoute = BlogSlugRouteImport.update({
+  id: '/blog/$slug',
+  path: '/blog/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdsAdIdRoute = AdsAdIdRouteImport.update({
   id: '/ads/$adId',
@@ -246,10 +258,12 @@ export interface FileRoutesByFullPath {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account/': typeof AccountIndexRoute
   '/admin/': typeof AdminIndexRoute
+  '/blog/': typeof BlogIndexRoute
   '/products/': typeof ProductsIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/admin/design-lab/generate': typeof AdminDesignLabGenerateRoute
@@ -279,10 +293,12 @@ export interface FileRoutesByTo {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account': typeof AccountIndexRoute
   '/admin': typeof AdminIndexRoute
+  '/blog': typeof BlogIndexRoute
   '/products': typeof ProductsIndexRoute
   '/studio': typeof StudioIndexRoute
   '/admin/design-lab/generate': typeof AdminDesignLabGenerateRoute
@@ -317,10 +333,12 @@ export interface FileRoutesById {
   '/admin/prompts': typeof AdminPromptsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/ads/$adId': typeof AdsAdIdRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/products/new': typeof ProductsNewRoute
   '/studio/$productId': typeof StudioProductIdRouteWithChildren
   '/account/': typeof AccountIndexRoute
   '/admin/': typeof AdminIndexRoute
+  '/blog/': typeof BlogIndexRoute
   '/products/': typeof ProductsIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/admin/design-lab/generate': typeof AdminDesignLabGenerateRoute
@@ -356,10 +374,12 @@ export interface FileRouteTypes {
     | '/admin/prompts'
     | '/admin/templates'
     | '/ads/$adId'
+    | '/blog/$slug'
     | '/products/new'
     | '/studio/$productId'
     | '/account/'
     | '/admin/'
+    | '/blog/'
     | '/products/'
     | '/studio/'
     | '/admin/design-lab/generate'
@@ -389,10 +409,12 @@ export interface FileRouteTypes {
     | '/admin/prompts'
     | '/admin/templates'
     | '/ads/$adId'
+    | '/blog/$slug'
     | '/products/new'
     | '/studio/$productId'
     | '/account'
     | '/admin'
+    | '/blog'
     | '/products'
     | '/studio'
     | '/admin/design-lab/generate'
@@ -426,10 +448,12 @@ export interface FileRouteTypes {
     | '/admin/prompts'
     | '/admin/templates'
     | '/ads/$adId'
+    | '/blog/$slug'
     | '/products/new'
     | '/studio/$productId'
     | '/account/'
     | '/admin/'
+    | '/blog/'
     | '/products/'
     | '/studio/'
     | '/admin/design-lab/generate'
@@ -458,7 +482,9 @@ export interface RootRouteChildren {
   AccountBillingRoute: typeof AccountBillingRoute
   AccountBrandRoute: typeof AccountBrandRoute
   AdsAdIdRoute: typeof AdsAdIdRoute
+  BlogSlugRoute: typeof BlogSlugRoute
   AccountIndexRoute: typeof AccountIndexRoute
+  BlogIndexRoute: typeof BlogIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -582,6 +608,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductsIndexRouteImport
       parentRoute: typeof ProductsRoute
     }
+    '/blog/': {
+      id: '/blog/'
+      path: '/blog'
+      fullPath: '/blog/'
+      preLoaderRoute: typeof BlogIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/': {
       id: '/admin/'
       path: '/'
@@ -609,6 +642,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/products/new'
       preLoaderRoute: typeof ProductsNewRouteImport
       parentRoute: typeof ProductsRoute
+    }
+    '/blog/$slug': {
+      id: '/blog/$slug'
+      path: '/blog/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof BlogSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/ads/$adId': {
       id: '/ads/$adId'
@@ -809,7 +849,9 @@ const rootRouteChildren: RootRouteChildren = {
   AccountBillingRoute: AccountBillingRoute,
   AccountBrandRoute: AccountBrandRoute,
   AdsAdIdRoute: AdsAdIdRoute,
+  BlogSlugRoute: BlogSlugRoute,
   AccountIndexRoute: AccountIndexRoute,
+  BlogIndexRoute: BlogIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

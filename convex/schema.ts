@@ -815,6 +815,33 @@ const schema = defineSchema({
     sourceInstruction: v.optional(v.string()),  // the user's original instruction
     createdAt: v.number(),
   }).index('by_adminUserId', ['adminUserId', 'createdAt']),
+
+  // ─── Blog posts (SEO) ────────────────────────────────────────────────────
+  // Normalized, source-agnostic blog content rendered on-domain at /blog. Today
+  // it's fed by Outrank via webhook (source: 'outrank'); the normalized shape is
+  // the escape hatch — swapping to a headless CMS later means re-pointing the
+  // route loaders, not reshaping this table. Images are re-hosted to R2 on
+  // ingest so the content survives cancelling the upstream source.
+  blogPosts: defineTable({
+    source: v.string(),                       // 'outrank' (future: 'sanity', 'manual', …)
+    externalId: v.optional(v.string()),       // upstream id (Outrank article id)
+    slug: v.string(),                         // URL permalink (match key for updates)
+    title: v.string(),
+    metaDescription: v.optional(v.string()),
+    contentMarkdown: v.string(),              // source of truth; image URLs rewritten to R2
+    heroImageUrl: v.optional(v.string()),     // R2 URL after re-host (original until processed)
+    tags: v.optional(v.array(v.string())),
+    status: v.union(v.literal('published'), v.literal('hidden')),
+    // Image re-hosting state. Until done, URLs still point at the upstream CDN.
+    imagesRehosted: v.boolean(),
+    imageKeys: v.optional(v.array(v.string())), // R2 keys we own, for cleanup
+    publishedAt: v.number(),                  // upstream created_at (ms) — sort key
+    receivedAt: v.number(),                   // when our webhook ingested it
+    updatedAt: v.number(),
+  })
+    .index('by_slug', ['slug'])
+    .index('by_externalId', ['externalId'])
+    .index('by_status_publishedAt', ['status', 'publishedAt']),
 })
 export default schema
 
