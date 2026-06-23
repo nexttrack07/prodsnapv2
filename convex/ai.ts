@@ -599,7 +599,7 @@ export const generateCopyBankText = internalAction({
     }
     if (counts.primaryTextCount > 0) {
       fieldSpecs.push(
-        `"primaryTexts": an array of EXACTLY ${counts.primaryTextCount} distinct primary (body) texts. 125-260 chars each; the complete hook must land in the first 80 chars; vary the framework (PAS, BAB, Hook-Proof) across variants.`,
+        `"primaryTexts": an array of EXACTLY ${counts.primaryTextCount} distinct primary (body) texts. 125-260 chars each; the complete hook must land in the first 80 chars; vary the framework (PAS, BAB, Hook-Proof) across variants. Format each one to scan like a real Facebook ad: put the hook on its own line, then a blank line, then the body — use real line breaks encoded as \\n in the JSON string (e.g. "Hook line.\\n\\nBody sentence. Final nudge.").`,
       )
     }
     if (counts.descriptionCount > 0) {
