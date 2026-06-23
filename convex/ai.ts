@@ -549,6 +549,8 @@ export const generateCopyBankText = internalAction({
     headlineCount: v.number(),
     primaryTextCount: v.number(),
     descriptionCount: v.number(),
+    /** When true, encourage 1-2 relevant emoji in primary texts / descriptions. */
+    emoji: v.optional(v.boolean()),
   },
   handler: async (
     _ctx,
@@ -623,8 +625,12 @@ ${fieldSpecs.map((s) => `  ${s}`).join('\n')}${fieldSpecs.length ? '\n' : ''}${o
 Rules:
 - recommendedCtaButton is a Meta call_to_action_type enum value (e.g. SHOP_NOW, LEARN_MORE). Pick the single best fit. Do NOT invent values or write a phrase.
 - Avoid Meta-flagged language: no "guaranteed", "miracle", "revolutionary", no personal-attribute callouts ("Are you struggling with…"), no false urgency.
-- Mirror the customer phrases above when natural; respect the brand voice (calm/minimal/premium → no emoji, no exclamation points).
-- Emoji only ever allowed in primaryTexts, max 2, and never when the voice is calm/minimal/premium.
+- Mirror the customer phrases above when natural; respect the brand voice (calm/minimal/premium → no exclamation points).
+${
+  args.emoji
+    ? '- Emoji: include 1-2 relevant, tasteful emoji in EVERY primary text and description (e.g. 🔥 ✨ 🛒 💧). Keep headlines emoji-free. Only skip emoji if the brand voice is explicitly calm/minimal/premium/luxury.'
+    : '- Emoji only ever allowed in primaryTexts, max 2, and never when the voice is calm/minimal/premium.'
+}
 
 Return ONLY the JSON object — no markdown, no explanation.`
 

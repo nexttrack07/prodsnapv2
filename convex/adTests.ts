@@ -1208,8 +1208,10 @@ export const generateCopySet = action({
     adTestId: v.id('adTests'),
     angleKey: v.optional(v.string()),
     request: copySetRequest,
+    /** Encourage 1-2 relevant emoji in primary texts / descriptions. */
+    emoji: v.optional(v.boolean()),
   },
-  handler: async (ctx, { adTestId, angleKey, request }): Promise<Id<'adTestCopySets'>> => {
+  handler: async (ctx, { adTestId, angleKey, request, emoji }): Promise<Id<'adTestCopySets'>> => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -1237,6 +1239,7 @@ export const generateCopySet = action({
       headlineCount: counts.headlineCount,
       primaryTextCount: counts.primaryTextCount,
       descriptionCount: counts.descriptionCount,
+      emoji: emoji ?? false,
     })
 
     // Wrap each generated string as a copySuggestion, stamping the angle it was

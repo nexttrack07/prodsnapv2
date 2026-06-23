@@ -20,14 +20,17 @@ import {
   Box,
   Button,
   Center,
+  Checkbox,
   Group,
   Image,
   Loader,
   Modal,
+  NumberInput,
   Paper,
   Popover,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   Textarea,
   TextInput,
@@ -79,6 +82,15 @@ const STATUS_LABEL: Record<string, string> = {
 
 // A copy card's identity: which set it came from + its stable variant index.
 type CopyPick = { setId: Id<'adTestCopySets'>; index: number; text: string }
+
+type CopyRequest = {
+  includeHeadlines: boolean
+  headlineCount: number
+  includePrimaryTexts: boolean
+  primaryTextCount: number
+  includeDescriptions: boolean
+  descriptionCount: number
+}
 
 export function AdTestReviewView({
   adTestId,
@@ -176,20 +188,10 @@ export function AdTestReviewView({
     }
   }
 
-  const handleGenerateCopy = async () => {
+  const handleGenerateCopy = async (req: CopyRequest, emoji: boolean) => {
     setGeneratingCopy(true)
     try {
-      await generateCopySet({
-        adTestId,
-        request: {
-          includeHeadlines: true,
-          headlineCount: 5,
-          includePrimaryTexts: true,
-          primaryTextCount: 3,
-          includeDescriptions: true,
-          descriptionCount: 2,
-        },
-      })
+      await generateCopySet({ adTestId, request: req, emoji })
       notifications.show({ color: 'green', message: 'Copy generated.' })
     } catch (err) {
       notifications.show({
@@ -428,26 +430,24 @@ export function AdTestReviewView({
       <Section
         title="Headlines"
         count={headlineCards.length}
-        action={
-          <Button
-            size="xs"
-            variant="light"
-            color="grape"
-            leftSection={<IconSparkles size={14} />}
-            loading={generatingCopy}
-            onClick={handleGenerateCopy}
-          >
-            Generate copy
-          </Button>
-        }
+        action={<CopyGenerator onGenerate={handleGenerateCopy} loading={generatingCopy} />}
       >
         {headlineCards.length === 0 ? (
-          <EmptyState
-            text="No copy yet. Generate headlines and primary text to pair with your creatives."
-            cta="Generate copy"
-            onClick={handleGenerateCopy}
-            loading={generatingCopy}
-          />
+          <Paper
+            radius="lg"
+            p="xl"
+            withBorder
+            ta="center"
+            style={{ borderStyle: 'dashed', borderWidth: 2, borderColor: 'var(--mantine-color-dark-5)' }}
+          >
+            <Stack align="center" gap="sm">
+              <Text size="sm" c="dark.3" maw={460}>
+                No copy yet. Choose what to generate — headlines, primary text,
+                descriptions — how many of each, and whether to include emoji.
+              </Text>
+              <CopyGenerator onGenerate={handleGenerateCopy} loading={generatingCopy} />
+            </Stack>
+          </Paper>
         ) : (
           <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
             {headlineCards.map((c) => (
@@ -778,6 +778,115 @@ function CreativeCard({
 }
 
 // ─── Copy card ────────────────────────────────────────────────────────────────
+
+// ─── Copy generator (configurable) ────────────────────────────────────────────
+
+function CopyGenerator({
+  onGenerate,
+  loading,
+}: {
+  onGenerate: (req: CopyRequest, emoji: boolean) => Promise<void>
+  loading: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [inclH, setInclH] = useState(true)
+  const [cH, setCH] = useState<number | string>(5)
+  const [inclP, setInclP] = useState(true)
+  const [cP, setCP] = useState<number | string>(3)
+  const [inclD, setInclD] = useState(true)
+  const [cD, setCD] = useState<number | string>(2)
+  const [emoji, setEmoji] = useState(false)
+
+  const num = (v: number | string) => (typeof v === 'number' ? v : parseInt(v, 10) || 0)
+  const total = (inclH ? num(cH) : 0) + (inclP ? num(cP) : 0) + (inclD ? num(cD) : 0)
+
+  const submit = async () => {
+    await onGenerate(
+      {
+        includeHeadlines: inclH,
+        headlineCount: num(cH),
+        includePrimaryTexts: inclP,
+        primaryTextCount: num(cP),
+        includeDescriptions: inclD,
+        descriptionCount: num(cD),
+      },
+      emoji,
+    )
+    setOpen(false)
+  }
+
+  return (
+    <Popover opened={open} onChange={setOpen} position="bottom-end" withArrow shadow="md" width={300}>
+      <Popover.Target>
+        <Button
+          size="xs"
+          variant="light"
+          color="grape"
+          leftSection={<IconSparkles size={14} />}
+          onClick={() => setOpen((o) => !o)}
+        >
+          Generate copy
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="sm">
+          <Text size="xs" c="dark.2" fw={600}>
+            What should we write?
+          </Text>
+          <FieldRow label="Headlines" checked={inclH} onCheck={setInclH} count={cH} onCount={setCH} />
+          <FieldRow label="Primary text" checked={inclP} onCheck={setInclP} count={cP} onCount={setCP} />
+          <FieldRow label="Descriptions" checked={inclD} onCheck={setInclD} count={cD} onCount={setCD} />
+          <Switch
+            label="Include emoji"
+            checked={emoji}
+            onChange={(e) => setEmoji(e.currentTarget.checked)}
+            size="sm"
+            color="grape"
+          />
+          <Button color="grape" loading={loading} disabled={total === 0} onClick={submit}>
+            Generate {total} item{total === 1 ? '' : 's'}
+          </Button>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  )
+}
+
+function FieldRow({
+  label,
+  checked,
+  onCheck,
+  count,
+  onCount,
+}: {
+  label: string
+  checked: boolean
+  onCheck: (v: boolean) => void
+  count: number | string
+  onCount: (v: number | string) => void
+}) {
+  return (
+    <Group justify="space-between" wrap="nowrap">
+      <Checkbox
+        label={label}
+        checked={checked}
+        onChange={(e) => onCheck(e.currentTarget.checked)}
+        size="sm"
+      />
+      <NumberInput
+        value={count}
+        onChange={onCount}
+        min={1}
+        max={10}
+        disabled={!checked}
+        size="xs"
+        w={64}
+        clampBehavior="strict"
+        hideControls={false}
+      />
+    </Group>
+  )
+}
 
 // Common ad-copy emoji palette.
 const EMOJIS = [
