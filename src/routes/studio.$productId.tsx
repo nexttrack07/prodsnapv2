@@ -96,6 +96,7 @@ import { fetchDownloadAsset } from '../utils/downloads'
 import { downloadGeneratedImage, DOWNLOAD_FORMATS, type DownloadFormat } from '../utils/downloadImage'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 import { AdTestReviewView } from '../components/ads/AdTestReviewView'
+import { AdTestsSection } from '../components/ads/AdTestsSection'
 import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
 import { BrandPicker } from '../components/brand/BrandPicker'
@@ -411,6 +412,21 @@ function ProductWorkspacePage() {
             siblings={[]}
           />
         </>
+      )}
+
+      {!isAdTestReview && view === 'gallery' && (
+        <AdTestsSection
+          productId={productId as Id<'products'>}
+          onOpenTest={(id) =>
+            navigate({
+              to: '/studio/$productId',
+              params: { productId },
+              search: { ...search, adTestId: id as string },
+            })
+          }
+          onNewTest={() => setView('generate')}
+          creditsExhausted={creditsExhausted}
+        />
       )}
 
       {!isAdTestReview && view === 'gallery' && (
