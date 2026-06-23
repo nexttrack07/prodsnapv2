@@ -49,6 +49,34 @@ export const listMyUrlImports = query({
   },
 })
 
+// Only surface a recently-started import in the global progress toast — an old
+// finished/failed row shouldn't pop a notification on a fresh page load.
+const IMPORT_TOAST_WINDOW_MS = 15 * 60_000
+
+// The user's latest import, if it was started recently. Powers the app-wide
+// "importing your product…" toast that follows the user across pages while a
+// scrape runs in the background and resolves itself when it finishes.
+export const getActiveImport = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx)
+    const latest = await ctx.db
+      .query('urlImports')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .order('desc')
+      .first()
+    if (!latest || latest.createdAt < Date.now() - IMPORT_TOAST_WINDOW_MS) {
+      return null
+    }
+    return {
+      _id: latest._id,
+      status: latest.status,
+      currentStep: latest.currentStep ?? null,
+      imageCount: latest.uploadedImageUrls?.length ?? 0,
+    }
+  },
+})
+
 // URL imports trigger Firecrawl (paid) + LLM extraction. Cap at 10/user/min so
 // a runaway loop can't drain Firecrawl credits.
 const URL_IMPORT_RATE_WINDOW_MS = 60_000
