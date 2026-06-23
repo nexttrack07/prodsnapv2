@@ -329,7 +329,17 @@ export function AdTestReviewView({
             color="blue"
             leftSection={<IconBrandFacebook size={18} />}
             disabled={!canPreview}
-            onClick={() => setPreviewOpen(true)}
+            onClick={() => {
+              // Default to the first headline/primary text so the preview is
+              // never empty when copy exists — the user can still swap cards.
+              if (!selectedHeadline && headlineCards.length > 0) {
+                setSelectedHeadline(headlineCards[0])
+              }
+              if (!selectedPrimary && primaryCards.length > 0) {
+                setSelectedPrimary(primaryCards[0])
+              }
+              setPreviewOpen(true)
+            }}
           >
             Preview as Facebook ad
           </Button>
@@ -486,12 +496,11 @@ export function AdTestReviewView({
   )
 
   // Pre-fill the builder from a creative's persisted pairing when it's selected.
+  // If the creative isn't paired yet, KEEP whatever copy the user has already
+  // picked — don't clear it (that wiped the headline/primary text right before
+  // previewing).
   function preloadPairing(gen: (typeof generations)[number]) {
-    if (!gen.selectedCopySetId) {
-      setSelectedHeadline(null)
-      setSelectedPrimary(null)
-      return
-    }
+    if (!gen.selectedCopySetId) return
     const set = (copySets ?? []).find((s) => s._id === gen.selectedCopySetId)
     if (!set) return
     const hl =
