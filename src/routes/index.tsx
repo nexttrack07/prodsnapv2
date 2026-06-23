@@ -1,10 +1,12 @@
 import { createContext, useContext, useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { useAuth } from '@clerk/react'
 import { useMediaQuery } from '@mantine/hooks'
 import { LogoMark } from '~/components/Logo'
 import { seo } from '~/utils/seo'
 import * as Sentry from '@sentry/react'
 import { PLAN_CONFIG } from '../../convex/lib/billing/planConfig'
+import { PENDING_PRODUCT_URL_KEY } from './onboarding'
 
 // Single layout context — replaces 12 per-section useMediaQuery listeners.
 // `getInitialValueInEffect: false` makes Mantine read matchMedia synchronously
@@ -194,6 +196,26 @@ const HERO_VARIANT_SHOTS = [
 // ============================================================
 function Hero() {
   const isMobile = useIsMobile()
+  const { isSignedIn } = useAuth()
+  const [productUrl, setProductUrl] = useState('')
+
+  // Stash the pasted product URL, then hand off to the no-card starter flow
+  // which imports THIS product so the user can pick photos + generate. Already
+  // signed in → go straight there; otherwise sign up first, then resume.
+  const handleStart = () => {
+    const trimmed = productUrl.trim()
+    if (trimmed) {
+      try {
+        sessionStorage.setItem(PENDING_PRODUCT_URL_KEY, trimmed)
+      } catch {
+        /* ignore */
+      }
+    }
+    window.location.href = isSignedIn
+      ? '/onboarding?starter=1'
+      : '/sign-up?redirect_url=' + encodeURIComponent('/onboarding?starter=1')
+  }
+
   return (
     <section aria-labelledby="hero-title" style={{ position: 'relative', overflow: 'hidden' }}>
       {/* Ambient gradient */}
@@ -239,26 +261,71 @@ function Hero() {
         }}>
           Save winning ads to a swipe file. Generate 12 Meta-ready variants per batch — using those exact references.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 20 }}>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Link to="/onboarding" style={{ textDecoration: 'none' }}>
-              <Btn as="span" kind="primary" size="lg">Start 7-day free trial →</Btn>
-            </Link>
-          </div>
-          <MonoLabel>card required · cancel before day 7, no charge</MonoLabel>
-          <a
-            href="/sign-up?redirect_url=%2Fonboarding%3Fstarter%3D1"
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 24 }}>
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleStart() }}
+            style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: 8,
+              width: '100%',
+              maxWidth: 540,
+              margin: '0 auto',
+            }}
+          >
+            <input
+              type="url"
+              inputMode="url"
+              value={productUrl}
+              onChange={(e) => setProductUrl(e.target.value)}
+              placeholder="Paste your product page URL"
+              aria-label="Product page URL"
+              style={{
+                flex: 1,
+                height: 52,
+                padding: '0 16px',
+                fontFamily: fontBody,
+                fontSize: 15,
+                color: T.text,
+                background: T.bgElev,
+                border: `1px solid ${T.border}`,
+                borderRadius: 10,
+                outline: 'none',
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                height: 52,
+                padding: '0 22px',
+                fontFamily: fontDisplay,
+                fontSize: 16,
+                fontWeight: 600,
+                color: '#fff',
+                background: `linear-gradient(180deg, ${T.brandSoft}, ${T.brand})`,
+                border: 'none',
+                borderRadius: 10,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Create my free ad test →
+            </button>
+          </form>
+          <MonoLabel>100 free credits to start · ~10 ads · no card</MonoLabel>
+          <Link
+            to="/pricing"
             style={{
               fontFamily: fontBody,
               fontSize: 13,
               color: T.textMuted,
               textDecoration: 'none',
-              borderBottom: `1px solid ${T.textMuted}`,
+              borderBottom: `1px solid ${T.border}`,
               paddingBottom: 1,
             }}
           >
-            Or try 1 free test — no card needed
-          </a>
+            See plans &amp; pricing
+          </Link>
           <a
             href="#loop-title"
             style={{
@@ -1509,11 +1576,11 @@ function PricingSection() {
             maxWidth: 900,
             paddingBottom: '0.18em',
           }} id="pricing-title">
-            Seven days free.{' '}
+            Start free.{' '}
             <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Then a flat monthly.</span>
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textOnCreamMuted, lineHeight: 1.55, margin: '32px auto 0', maxWidth: 700 }}>
-            Card on file, full feature set, cancel anytime in 7 days.
+            100 free credits to start — no card. Pick a plan when you're ready for more.
           </p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 16 : 20, alignItems: 'stretch', maxWidth: 1100, margin: '0 auto' }}>
@@ -1591,14 +1658,14 @@ function PricingSection() {
                   ))}
                 </div>
                 <div style={{ marginTop: 24 }}>
-                  <Link to="/onboarding" style={{ textDecoration: 'none', display: 'block' }}>
+                  <Link to="/pricing" style={{ textDecoration: 'none', display: 'block' }}>
                     <Btn
                       as="span"
                       kind={popular ? 'primary' : 'secondaryCream'}
                       size="lg"
                       style={{ width: '100%', justifyContent: 'center' }}
                     >
-                      {popular ? 'Start 7-day free trial →' : 'Start free trial'}
+                      {popular ? 'Choose this plan →' : 'Choose plan'}
                     </Btn>
                   </Link>
                 </div>
@@ -1607,7 +1674,7 @@ function PricingSection() {
           })}
         </div>
         <div style={{ marginTop: 24, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-          <MonoLabel>card required · cancel before day 7, no charge · upgrade or downgrade anytime</MonoLabel>
+          <MonoLabel>no card to start · upgrade or downgrade anytime · cancel anytime</MonoLabel>
           <a
             href="/sign-up?redirect_url=%2Fonboarding%3Fstarter%3D1"
             style={{
@@ -1619,7 +1686,7 @@ function PricingSection() {
               paddingBottom: 1,
             }}
           >
-            Not ready to pay? Try 1 free test — no card needed
+            Or start free — 100 credits, no card needed →
           </a>
         </div>
       </div>
@@ -1635,7 +1702,7 @@ function FAQSection() {
   const [open, setOpen] = useState(0)
   const isMobile = useIsMobile()
   const items: FAQItem[] = [
-    { q: 'Why card-required for the trial?', a: "Anti-abuse, not a trick. ProdSnap generates with paid AI models — without a card, the trial gets farmed in 24 hours and the price has to go up for everyone. Cancel anytime in the 7 days, you won't be charged." },
+    { q: 'Is it really free to start — no card?', a: "Yes. Every new account gets 100 free credits (about 10 ads) with no credit card. Generate, preview, and mark winners for free. When you run out — or want to export and run bigger tests — pick a plan. No trial countdown, no surprise charge." },
     { q: 'Is this the same as AdCreative or Glorify?', a: "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want a fast prompt-to-output flow. ProdSnap is built for performance teams — if you're testing 5+ angles a week, this is for you. Angle testing, swipe files, voice of customer, winners loops — the muscles you build when you ship creative every week." },
     { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file. ProdSnap is a swipe file that feeds a generator. Save a winning ad as a template, then generate straight from it — your reference becomes the seed for new creative, not just a folder you scroll. That loop doesn't exist anywhere else." },
     { q: 'What about my brand consistency?', a: "Each brand keeps its own kit — colors, fonts, voice notes. Tag a product with the brand it belongs to, and the generator pulls that kit's colors, voice, and offer into every batch. Lite includes 2 brand kits, Pro 10, Max unlimited. Kits don't bleed into each other across products." },
@@ -1750,14 +1817,14 @@ function FinalCTA() {
         </p>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
           <Link to="/onboarding" style={{ textDecoration: 'none' }}>
-            <Btn as="span" kind="primary" size="lg">Start 7-day free trial →</Btn>
+            <Btn as="span" kind="primary" size="lg">Start free →</Btn>
           </Link>
           <Link to="/templates" style={{ textDecoration: 'none' }}>
             <Btn as="span" kind="secondary" size="lg">Browse templates</Btn>
           </Link>
         </div>
         <div style={{ marginTop: 18 }}>
-          <MonoLabel>card required · cancel before day 7, no charge</MonoLabel>
+          <MonoLabel>100 free credits · no card · ~10 ads</MonoLabel>
         </div>
       </div>
     </section>

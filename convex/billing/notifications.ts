@@ -1,35 +1,21 @@
 /**
  * Transactional email orchestration for billing lifecycle events.
  *
- * The bare-metal `sendTrialEndingEmail` / `sendPaymentFailedEmail` actions in
- * `convex/lib/email/index.ts` are dumb pipes — given an address, they ship the
- * mail. This module is the *policy* layer that:
+ * The bare-metal `sendPaymentFailedEmail` action in `convex/lib/email/index.ts`
+ * is a dumb pipe — given an address, it ships the mail. This module is the
+ * *policy* layer that resolves the Clerk user → primary email, reads `userPlans`
+ * to skip users already notified this period (idempotency via
+ * `notifiedPaymentFailedForPeriodStart`), and stamps the row after a successful
+ * send so retried webhooks never double-email.
  *
- *   1. Resolves the Clerk user → primary email address (single Clerk fetch).
- *   2. Reads the `userPlans` row to skip users we've already notified for the
- *      current billing period (idempotency via
- *      `notifiedTrialEndingForPeriodStart` / `notifiedPaymentFailedForPeriodStart`).
- *   3. Stamps the row after a successful send so retried webhooks and the
- *      daily cron sweep never double-email the same user for the same period.
- *
- * Two entry points wire into the rest of the backend:
- *
- *   - `notifyPaymentFailed`     → scheduled from `webhookHandler.processWebhookPayload`
- *                                 when Clerk fires a `*.past_due` event.
- *   - `scanAndNotifyTrialsEnding` → daily cron (`convex/crons.ts`). Webhook
- *                                   coverage for trial_end is inconsistent
- *                                   across Clerk's billing event subtypes, so
- *                                   we sweep `userPlans` ourselves.
+ * Entry point: `notifyPaymentFailed` → scheduled from
+ * `webhookHandler.processWebhookPayload` when Clerk fires a `*.past_due` event.
+ * (The 7-day trial-ending sweep was retired with the move to free credits.)
  */
 import { v } from 'convex/values'
 import { internalAction, internalMutation, internalQuery } from '../_generated/server'
 import { internal } from '../_generated/api'
 import { getClerkClient } from '../lib/billing/provider.clerk'
-
-// Trial-ending sweep window: email when 0–3 days remain on the trial. Using
-// a 3-day window (instead of "exactly 3 days") means a missed cron run won't
-// silently skip the user — the next day's sweep still catches them.
-const TRIAL_NOTIFY_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
 
 type ClerkUserShape = {
   emailAddresses?: Array<{ id: string; emailAddress: string }>
@@ -150,77 +136,7 @@ export const notifyPaymentFailed = internalAction({
   },
 })
 
-/**
- * Daily cron: walk `userPlans` looking for trials whose `periodEnd` falls
- * within the next 3 days, and email each one — at most once per period.
- *
- * Scope check: we only treat a row as a trial when `billingStatus === 'trialing'`.
- * That matches Clerk's billing status enum; non-trial subscriptions naturally
- * skip the path even if their period happens to end soon.
- */
-export const scanAndNotifyTrialsEnding = internalAction({
-  args: {},
-  returns: v.null(),
-  handler: async (ctx) => {
-    const now = Date.now()
-    const candidates = (await ctx.runQuery(
-      internal.billing.notifications.getTrialEndingCandidates,
-      { now, windowMs: TRIAL_NOTIFY_WINDOW_MS },
-    )) as Array<{ userId: string; clerkUserId: string; periodStart: number }>
-
-    for (const row of candidates) {
-      const contact = await resolveContact(row.clerkUserId)
-      if (!contact) continue
-      try {
-        await ctx.runAction(internal.lib.email.index.sendTrialEndingEmail, {
-          email: contact.email,
-          name: contact.name,
-        })
-        await ctx.runMutation(internal.billing.notifications.stampNotified, {
-          userId: row.userId,
-          kind: 'trial-ending',
-          periodStart: row.periodStart,
-        })
-      } catch (err) {
-        // Logged inside email action; swallow so one bad address doesn't
-        // halt the whole sweep.
-        console.error(
-          `[notifications] trial-ending send failed for ${row.clerkUserId}:`,
-          err instanceof Error ? err.message : err,
-        )
-      }
-    }
-    return null
-  },
-})
-
-export const getTrialEndingCandidates = internalQuery({
-  args: { now: v.number(), windowMs: v.number() },
-  returns: v.array(
-    v.object({
-      userId: v.string(),
-      clerkUserId: v.string(),
-      periodStart: v.number(),
-    }),
-  ),
-  handler: async (ctx, { now, windowMs }) => {
-    const all = await ctx.db.query('userPlans').collect()
-    const cutoff = now + windowMs
-    return all
-      .filter(
-        (r) =>
-          r.billingStatus === 'trialing' &&
-          r.clerkUserId !== undefined &&
-          r.periodEnd !== undefined &&
-          r.periodStart !== undefined &&
-          r.periodEnd > now &&
-          r.periodEnd <= cutoff &&
-          r.notifiedTrialEndingForPeriodStart !== r.periodStart,
-      )
-      .map((r) => ({
-        userId: r.userId,
-        clerkUserId: r.clerkUserId as string,
-        periodStart: r.periodStart as number,
-      }))
-  },
-})
+// NOTE: The trial-ending sweep (scanAndNotifyTrialsEnding /
+// getTrialEndingCandidates / sendTrialEndingEmail) was retired when ProdSnap
+// dropped the 7-day trial for the free-credits model. Payment-failed
+// notifications remain above.

@@ -58,11 +58,11 @@ async function headSize(url: string): Promise<number | null> {
   }
 }
 
-// Reject thumbnails that slipped past upgradeToHighResImageUrl. 30KB is
-// well below a usable product image (Harry's _large.jpg is 32KB / 480px;
-// the original is ~184KB / full-res). Anything below this floor is
-// either a tracking pixel, a tiny preview, or a CDN we don't yet support.
-const MIN_IMAGE_BYTES = 30_000
+// Reject only obvious tracking pixels / icons. The user now curates the
+// surfaced gallery, so we keep this floor LOW (was 30KB, which silently
+// dropped real product shots when a CDN reported a misleading Content-Length)
+// and let the picker show borderline candidates rather than guessing them away.
+const MIN_IMAGE_BYTES = 6_000
 
 type FirecrawlExtractedJson = {
   productName?: string
@@ -293,7 +293,7 @@ export const runUrlImport = internalAction({
           ...htmlImages,
           ...markdownImages,
         ]
-        const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 10)
+        const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 12)
         if (process.env.DEBUG_AI === 'true') {
           console.log(
             `[urlImport ${importId}] image urls: raw=${rawImageUrls.length} ` +

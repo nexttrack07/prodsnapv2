@@ -6,7 +6,7 @@ import { useAction, useQuery as useConvexQuery } from 'convex/react'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
-import { useMediaQuery, useHotkeys, useDisclosure } from '@mantine/hooks'
+import { useMediaQuery, useDisclosure } from '@mantine/hooks'
 import { useConvex } from 'convex/react'
 import {
   Container,
@@ -18,7 +18,6 @@ import {
   Stack,
   Button,
   Paper,
-  Card,
   Image,
   Badge,
   Loader,
@@ -26,11 +25,9 @@ import {
   Checkbox,
   Radio,
   ActionIcon,
-  Overlay,
   Anchor,
   UnstyledButton,
   Modal,
-  Drawer,
   SegmentedControl,
   AspectRatio,
   Tooltip,
@@ -41,25 +38,20 @@ import {
   Textarea,
   Tabs,
   ScrollArea,
-  Menu,
   Collapse,
   Switch,
   ColorSwatch,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
-import { Masonry } from 'masonic'
 import {
   IconChevronLeft,
   IconArrowRight,
   IconCheck,
   IconTag,
-  IconMaximize,
   IconDownload,
   IconTrash,
   IconSparkles,
-  IconAlignLeft,
   IconPhoto,
-  IconPalette,
   IconEraser,
   IconX,
   IconRefresh,
@@ -88,14 +80,13 @@ import {
   type ImageEnhancerImage,
 } from '../components/product/ImageEnhancerModal'
 import { PageHeaderActions } from '../components/layout/PageHeaderActions'
-import { CreditsIndicator } from '../components/billing/CreditsIndicator'
 import { mapGenerationError } from '../lib/billing/mapBillingError'
 import { OutOfCreditsModal } from '../components/billing/OutOfCreditsModal'
 import { ConvexError } from 'convex/values'
 import { fetchDownloadAsset } from '../utils/downloads'
-import { downloadGeneratedImage, DOWNLOAD_FORMATS, type DownloadFormat } from '../utils/downloadImage'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 import { AdTestReviewView } from '../components/ads/AdTestReviewView'
+import { AdTestsSection } from '../components/ads/AdTestsSection'
 import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
 import { BrandPicker } from '../components/brand/BrandPicker'
@@ -136,26 +127,6 @@ type Mode = 'exact' | 'remix'
 type View = 'gallery' | 'generate'
 
 // Type for generation data from the query
-interface GenerationData {
-  _id: Id<'templateGenerations'>
-  _creationTime?: number
-  status: string
-  outputUrl?: string
-  currentStep?: string
-  error?: string
-  startedAt?: number
-  aspectRatio?: string
-  mode?: 'exact' | 'remix' | 'variation' | 'angle' | 'prompt'
-  templateSnapshot?: { name?: string; aspectRatio?: string }
-  isWinner?: boolean
-  adCopy?: {
-    headlines: string[]
-    primaryTexts: string[]
-    ctas: string[]
-    generatedAt: number
-  }
-}
-
 // "Taking too long" UI threshold. The server work isn't cancelled at this
 // point — Fal.ai keeps running and the card flips to complete when the
 // response lands. Sized for the slowest case (gpt-image-2 at quality=high)
@@ -212,6 +183,33 @@ function ProductWorkspacePage() {
   const { productId } = Route.useParams()
   const search = Route.useSearch()
   const navigate = useNavigate()
+  const createAdTest = useConvexMutation(api.adTests.createDraft)
+
+  // "New ad test": create an empty (template-based) draft and drop the user
+  // straight into the generate wizard scoped to it. Creatives + copy are added
+  // inside the test.
+  const handleNewAdTest = async () => {
+    try {
+      const id = await createAdTest({
+        productId: productId as Id<'products'>,
+        name: `Ad test ${new Date().toLocaleDateString()}`,
+        source: 'custom',
+        angles: [],
+        placements: ['feed_square', 'feed_vertical', 'story_reel'],
+      })
+      navigate({
+        to: '/studio/$productId',
+        params: { productId },
+        search: { ...search, adTestId: id as string, compose: 'true' },
+      })
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message:
+          err instanceof Error ? err.message : 'Could not create ad test',
+      })
+    }
+  }
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // Nested routes (e.g. /studio/$productId/strategy) take over the page —
   // render only the child Outlet and skip the workspace content.
@@ -255,10 +253,6 @@ function ProductWorkspacePage() {
 
   const { data: product, isLoading: productLoading } = useQuery(
     convexQuery(api.products.getProductWithStats, { productId: productId as Id<'products'> }),
-  )
-
-  const { data: generations } = useQuery(
-    convexQuery(api.products.getProductGenerations, { productId: productId as Id<'products'> }),
   )
 
   // Fetch product images to get the primary image URL
@@ -334,9 +328,6 @@ function ProductWorkspacePage() {
     )
   }
 
-  const completedGenerations = (generations?.filter((g) => g.status === 'complete') || []) as GenerationData[]
-  const pendingGenerations = (generations?.filter((g) => g.status !== 'complete' && g.status !== 'failed') || []) as GenerationData[]
-
   const anglesCount = product.marketingAngles?.length ?? 0
 
   return (
@@ -368,18 +359,55 @@ function ProductWorkspacePage() {
         />
       )}
 
-      {/* Ad Test review mode — takes over the whole content area */}
-      {isAdTestReview && (
+      {/* Ad Test review mode — takes over the whole content area. With
+          ?compose=true it shows the generate wizard scoped to the test
+          (creatives attach to the test); otherwise the review screen. */}
+      {isAdTestReview && search.compose === 'true' && (
+        <GenerateWizard
+          productId={productId as Id<'products'>}
+          product={product}
+          primaryImageUrl={primaryImageUrl}
+          creditsExhausted={creditsExhausted}
+          initialFilters={initialFilters}
+          adTestId={search.adTestId as Id<'adTests'>}
+          onBack={() => {
+            const { compose: _omit, ...rest } = search
+            navigate({
+              to: '/studio/$productId',
+              params: { productId },
+              search: rest,
+              replace: true,
+            })
+          }}
+          onComplete={() => {
+            const { compose: _omit, ...rest } = search
+            navigate({
+              to: '/studio/$productId',
+              params: { productId },
+              search: rest,
+              replace: true,
+            })
+          }}
+        />
+      )}
+
+      {isAdTestReview && search.compose !== 'true' && (
         <>
           <AdTestReviewView
             adTestId={search.adTestId as Id<'adTests'>}
+            productName={product.name}
             // `free_user` is a real (truthy) plan slug, so `!!plan` would treat
             // starter users as paid. Export is a paid-only feature: exclude it.
             hasPaidPlan={
               billingStatus?.plan != null && billingStatus.plan !== 'free_user'
             }
             onBack={() => {
-              const { adTestId: _omit, ad: _omit2, ...rest } = search
+              // Reset view: entering the in-test wizard flips view→'generate'
+              // (via the compose effect); without resetting, backing out of the
+              // review would land on the standalone wizard instead of gallery.
+              setView('gallery')
+              const { adTestId: _omit, ad: _omit2, compose: _omit3, ...rest } =
+                search
               navigate({
                 to: '/studio/$productId',
                 params: { productId },
@@ -387,6 +415,13 @@ function ProductWorkspacePage() {
                 replace: true,
               })
             }}
+            onGenerate={() =>
+              navigate({
+                to: '/studio/$productId',
+                params: { productId },
+                search: { ...search, compose: 'true' },
+              })
+            }
             onOpenAd={(id) =>
               navigate({
                 to: '/studio/$productId',
@@ -414,36 +449,23 @@ function ProductWorkspacePage() {
       )}
 
       {!isAdTestReview && view === 'gallery' && (
-        <GalleryView
-          product={product}
+        <AdTestsSection
           productId={productId as Id<'products'>}
-          primaryImageUrl={primaryImageUrl}
-          legacyImageUrl={product?.imageUrl}
-          completedGenerations={completedGenerations}
-          pendingGenerations={pendingGenerations}
-          onGenerateMore={() => setView('generate')}
+          onOpenTest={(id) =>
+            navigate({
+              to: '/studio/$productId',
+              params: { productId },
+              search: { ...search, adTestId: id as string },
+            })
+          }
+          onNewTest={handleNewAdTest}
           creditsExhausted={creditsExhausted}
-          activeAdId={
-            (search.ad ?? null) as Id<'templateGenerations'> | null
-          }
-          onOpenAd={(id) =>
-            navigate({
-              to: '/studio/$productId',
-              params: { productId },
-              search: { ...search, ad: id as string },
-            })
-          }
-          onCloseAd={() => {
-            const { ad: _omit, ...rest } = search
-            navigate({
-              to: '/studio/$productId',
-              params: { productId },
-              search: rest,
-              replace: true,
-            })
-          }}
         />
       )}
+
+      {/* The flat "all generations" grid was removed: creatives now live inside
+          their ad test (each test card on the product page shows its own photo
+          mosaic). Past standalone generations remain browsable in /library. */}
 
       {!isAdTestReview && view === 'generate' && (
         <GenerateWizard
@@ -954,18 +976,10 @@ function ProductHeader({
         </Paper>
       </Tabs>
 
-      {/* "New ad" stays below the tabs so it's always reachable. */}
-      <Group justify="flex-end" gap="sm" mt="md" mb="xl">
-        <Button
-          color="brand"
-          size="md"
-          leftSection={<IconPlus size={16} />}
-          disabled={creditsExhausted || product.status !== 'ready'}
-          onClick={onNewAd}
-        >
-          New ad
-        </Button>
-      </Group>
+      {/* Generation is ad-test-centric now: the "Ad tests" section below is the
+          single entry point ("New ad test"). The old standalone "New ad" button
+          was removed to avoid a competing "generate ad" vs "generate ad test"
+          CTA on the same page. */}
 
       <ImageEnhancerModal
         opened={activeImage !== null}
@@ -2101,893 +2115,6 @@ function ImageCard({
   )
 }
 
-function GalleryView({
-  product,
-  productId,
-  primaryImageUrl,
-  legacyImageUrl,
-  completedGenerations,
-  pendingGenerations,
-  onGenerateMore,
-  creditsExhausted,
-  activeAdId,
-  onOpenAd,
-  onCloseAd,
-}: {
-  product: {
-    status: string
-    name: string
-    primaryImageId?: Id<'productImages'>
-  }
-  productId: Id<'products'>
-  primaryImageUrl?: string
-  legacyImageUrl?: string
-  completedGenerations: GenerationData[]
-  pendingGenerations: GenerationData[]
-  onGenerateMore: () => void
-  creditsExhausted: boolean
-  activeAdId: Id<'templateGenerations'> | null
-  onOpenAd: (id: Id<'templateGenerations'>) => void
-  onCloseAd: () => void
-}) {
-  const isMobile = useMediaQuery('(max-width: 768px)')
-  const [variationTarget, setVariationTarget] = useState<{ _id: Id<'templateGenerations'>; outputUrl: string } | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Id<'templateGenerations'> | null>(null)
-  const [retryingId, setRetryingId] = useState<Id<'templateGenerations'> | null>(null)
-  const [winnersOnly, setWinnersOnly] = useState(false)
-  const [oocOpen, setOocOpen] = useState(false)
-  const winnerCount = completedGenerations.filter((g) => g.isWinner).length
-  const visibleCompleted = winnersOnly
-    ? completedGenerations.filter((g) => g.isWinner)
-    : completedGenerations
-  const hasAny = completedGenerations.length > 0 || pendingGenerations.length > 0
-
-  // Build sibling list from completed generations for prev/next nav
-  const siblingIds = completedGenerations.map((g) => g._id)
-
-  // Keyboard shortcuts
-  useHotkeys([
-    ['Escape', () => {
-      if (activeAdId) onCloseAd()
-      else if (variationTarget) setVariationTarget(null)
-      else if (deleteTarget) setDeleteTarget(null)
-    }],
-  ])
-
-  const deleteGeneration = useConvexMutation(api.products.deleteGeneration)
-  const deleteMutation = useMutation({ mutationFn: deleteGeneration })
-  const retryGeneration = useConvexMutation(api.studio.retryGeneration)
-  const retryMutation = useMutation({ mutationFn: retryGeneration })
-
-  function handleDelete(id: Id<'templateGenerations'>) {
-    setDeleteTarget(id)
-  }
-
-  async function confirmDelete() {
-    if (!deleteTarget) return
-    try {
-      await deleteMutation.mutateAsync({ generationId: deleteTarget })
-      notifications.show({ title: 'Success', message: 'Deleted', color: 'green' })
-    } catch {
-      notifications.show({ title: 'Error', message: 'Failed to delete', color: 'red' })
-    } finally {
-      setDeleteTarget(null)
-    }
-  }
-
-  async function handleRetry(id: Id<'templateGenerations'>) {
-    setRetryingId(id)
-    try {
-      await retryMutation.mutateAsync({ generationId: id })
-      notifications.show({ title: 'Retry started', message: 'Generation queued again.', color: 'green' })
-    } catch (err) {
-      if (err instanceof ConvexError && (err.data as { code?: string })?.code === 'CREDITS_EXHAUSTED') {
-        setOocOpen(true)
-      } else {
-        const info = mapGenerationError(err)
-        notifications.show({
-          title: info.title,
-          message: info.action ? (
-            <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
-          ) : info.message,
-          color: 'red',
-          autoClose: 8000,
-        })
-      }
-    } finally {
-      setRetryingId(null)
-    }
-  }
-
-  return (
-    <Box>
-      {/* Section header — source images live in the product card above; this
-          section is now the ads gallery only. */}
-      <Group justify="space-between" align="flex-end" mb="lg" wrap="wrap" gap="md">
-        <Box>
-          <Title order={2} fz="xl" fw={600} c="white" mb={4}>Generations</Title>
-          <Text size="sm" c="dark.2">Your AI-generated ad variations</Text>
-        </Box>
-        {winnerCount > 0 && (
-          <Group gap="xs">
-            <Button
-              size="xs"
-              variant={winnersOnly ? 'filled' : 'default'}
-              color="yellow"
-              radius="xl"
-              leftSection={<IconStarFilled size={12} />}
-              onClick={() => setWinnersOnly((v) => !v)}
-            >
-              Winners ({winnerCount})
-            </Button>
-            {winnersOnly && (
-              <Button
-                size="xs"
-                variant="subtle"
-                color="gray"
-                onClick={() => setWinnersOnly(false)}
-              >
-                Show all
-              </Button>
-            )}
-          </Group>
-        )}
-      </Group>
-
-      {/* Pending generations */}
-      {pendingGenerations.length > 0 && (
-        <Box mb="xl">
-          <Text size="sm" fw={500} c="dark.2" mb="sm">In Progress</Text>
-          <Box style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-            gap: '1rem',
-            alignItems: 'start',
-          }}>
-            {pendingGenerations.map((gen, index) => (
-              <GenerationCard
-                key={gen._id}
-                generation={gen}
-                title={`${product.name} #${completedGenerations.length + index + 1}`}
-                onExpand={(gen) => onOpenAd(gen._id)}
-                onDelete={handleDelete}
-                onCreateVariations={setVariationTarget}
-                onRetry={handleRetry}
-                retrying={retryingId === gen._id}
-              />
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {/* Completed generations or empty state */}
-      {!hasAny ? (
-        <Paper
-          radius="lg"
-          p={64}
-          ta="center"
-          withBorder
-          style={{
-            borderStyle: 'dashed',
-            borderWidth: 2,
-            borderColor: 'var(--mantine-color-dark-5)',
-            background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
-          }}
-        >
-          {product.status === 'analyzing' ? (
-            <>
-              <IconSparkles size={48} style={{ color: 'var(--mantine-color-brand-5)', marginBottom: 16 }} />
-              <Title order={3} fz="lg" fw={600} c="white" mb={8}>Analyzing your product…</Title>
-              <Text c="dark.2" mb="xl" maw={400} mx="auto">
-                This usually takes 10-15 seconds. We're figuring out the product details so we can pick the best ad templates.
-              </Text>
-              <Loader size="md" color="brand" mx="auto" />
-            </>
-          ) : (
-            <>
-              <IconSparkles size={48} style={{ color: 'var(--mantine-color-brand-5)', marginBottom: 16 }} />
-              <Title order={3} fz="lg" fw={600} c="white" mb={8}>Ready when you are</Title>
-              <Text c="dark.2" mb="xl" maw={400} mx="auto">
-                Pick ad templates above, hit <strong>Generate Ads</strong>, and new variations will appear here in under a minute.
-              </Text>
-              <Button
-                onClick={onGenerateMore}
-                disabled={product.status !== 'ready' || creditsExhausted}
-                color="brand"
-                size="md"
-                fz="sm"
-                rightSection={<IconArrowRight size={16} />}
-                styles={{
-                  root: {
-                    boxShadow: '0 4px 14px rgba(84, 116, 180, 0.25)',
-                  },
-                }}
-              >
-                Generate Ads
-              </Button>
-            </>
-          )}
-        </Paper>
-      ) : visibleCompleted.length > 0 ? (
-        // Masonic caches cell positions and crashes when items shrink
-        // (delete / winners-toggle). Re-key on filter + length so it
-        // remounts with a fresh cache.
-        <Masonry
-          key={`${winnersOnly ? 'win' : 'all'}:${visibleCompleted.length}`}
-          items={visibleCompleted}
-          columnCount={isMobile ? 2 : 4}
-          columnGutter={1}
-          rowGutter={1}
-          render={({ data: gen, index }) => (
-            <GenerationCard
-              generation={gen}
-              title={`${product.name} #${index + 1}`}
-              onExpand={(g) => onOpenAd(g._id)}
-              onDelete={handleDelete}
-              onCreateVariations={setVariationTarget}
-              onRetry={handleRetry}
-              retrying={retryingId === gen._id}
-            />
-          )}
-        />
-      ) : winnersOnly ? (
-        <Paper
-          radius="lg"
-          p="xl"
-          ta="center"
-          withBorder
-          style={{
-            borderStyle: 'dashed',
-            borderColor: 'var(--mantine-color-dark-5)',
-          }}
-        >
-          <Text c="dark.2" size="sm" mb="md">
-            No winners marked yet. Star an ad you like and it'll show up here.
-          </Text>
-          <Button
-            variant="subtle"
-            color="gray"
-            size="xs"
-            onClick={() => setWinnersOnly(false)}
-          >
-            Show all ads
-          </Button>
-        </Paper>
-      ) : null}
-
-      {/* Ad Detail Panel (replaces old lightbox) */}
-      <AdDetailPanel
-        opened={!!activeAdId}
-        onClose={onCloseAd}
-        adId={activeAdId}
-        siblings={siblingIds}
-      />
-
-      {/* Variation Drawer */}
-      <VariationDrawer
-        opened={!!variationTarget}
-        onClose={() => setVariationTarget(null)}
-        generation={variationTarget}
-        productId={productId}
-        productImageUrl={primaryImageUrl || ''}
-        onComplete={() => setVariationTarget(null)}
-        creditsExhausted={creditsExhausted}
-      />
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        opened={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete Generation"
-        centered
-        size="sm"
-        data-testid="delete-modal"
-      >
-        <Text size="sm" c="dark.1" mb="lg">
-          Are you sure you want to delete this generation? This action cannot be undone.
-        </Text>
-        <Group justify="flex-end" gap="sm">
-          <Button variant="subtle" color="gray" onClick={() => setDeleteTarget(null)}>
-            Cancel
-          </Button>
-          <Button color="red" onClick={confirmDelete} loading={deleteMutation.isPending}>
-            Delete
-          </Button>
-        </Group>
-      </Modal>
-      <OutOfCreditsModal opened={oocOpen} onClose={() => setOocOpen(false)} />
-    </Box>
-  )
-}
-
-function VariationDrawer({
-  opened,
-  onClose,
-  generation,
-  productId,
-  productImageUrl,
-  onComplete,
-  creditsExhausted = false,
-}: {
-  opened: boolean
-  onClose: () => void
-  generation: { _id: Id<'templateGenerations'>; outputUrl: string } | null
-  productId: Id<'products'>
-  productImageUrl: string
-  onComplete: () => void
-  creditsExhausted?: boolean
-}) {
-  const isMobile = useMediaQuery('(max-width: 768px)')
-  const [changeText, setChangeText] = useState(false)
-  const [changeIcons, setChangeIcons] = useState(false)
-  const [changeColors, setChangeColors] = useState(false)
-  const [variationCount, setVariationCount] = useState('2')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [oocOpen, setOocOpen] = useState(false)
-
-  // Reset state when drawer opens
-  useEffect(() => {
-    if (opened) {
-      setChangeText(false)
-      setChangeIcons(false)
-      setChangeColors(false)
-      setVariationCount('2')
-    }
-  }, [opened])
-
-  const generateVariations = useConvexMutation(api.products.generateVariations)
-  const generateMutation = useMutation({ mutationFn: generateVariations })
-
-  const hasSelection = changeText || changeIcons || changeColors
-
-  async function handleGenerate() {
-    if (!generation) return
-    if (!hasSelection) {
-      notifications.show({ title: 'Error', message: 'Select at least one thing to change', color: 'red' })
-      return
-    }
-    setIsSubmitting(true)
-    try {
-      await generateMutation.mutateAsync({
-        generationId: generation._id,
-        productId,
-        sourceImageUrl: generation.outputUrl,
-        productImageUrl,
-        changeText,
-        changeIcons,
-        changeColors,
-        variationCount: parseInt(variationCount, 10),
-        model: 'nano-banana-2',
-      })
-      notifications.show({ title: 'Success', message: 'Variations started!', color: 'green' })
-      onComplete()
-    } catch (err) {
-      if (err instanceof ConvexError && (err.data as { code?: string })?.code === 'CREDITS_EXHAUSTED') {
-        setOocOpen(true)
-      } else {
-        const info = mapGenerationError(err)
-        notifications.show({
-          title: info.title,
-          message: info.action ? (
-            <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
-          ) : info.message,
-          color: 'red',
-          autoClose: 8000,
-        })
-      }
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  return (
-    <>
-    <OutOfCreditsModal opened={oocOpen} onClose={() => setOocOpen(false)} />
-    <Drawer
-      opened={opened}
-      onClose={onClose}
-      position="right"
-      size={isMobile ? '100%' : 'md'}
-      title={<Title order={3} fz="lg" fw={600}>Create Variations</Title>}
-      padding={isMobile ? 'md' : 'lg'}
-      data-testid="variation-drawer"
-    >
-      {generation && (
-        <Stack gap="lg">
-          {/* Source image preview */}
-          <Box>
-            <Text size="sm" c="dark.2" mb="xs">Source image</Text>
-            <Image
-              src={generation.outputUrl}
-              alt="Source"
-              radius="md"
-              style={{ border: '1px solid var(--mantine-color-dark-5)' }}
-            />
-          </Box>
-
-          {/* What to change */}
-          <Box>
-            <Text size="sm" fw={500} c="white" mb="sm">What would you like to change?</Text>
-            <Stack gap="sm">
-              <Checkbox
-                checked={changeText}
-                onChange={(e) => setChangeText(e.currentTarget.checked)}
-                label={
-                  <Group gap="xs">
-                    <IconAlignLeft size={16} color="var(--mantine-color-dark-2)" />
-                    <Box>
-                      <Text fw={500} size="sm">Text</Text>
-                      <Text size="xs" c="dark.2">Generate new headlines, copy, and messaging</Text>
-                    </Box>
-                  </Group>
-                }
-                styles={{
-                  root: {
-                    padding: 'var(--mantine-spacing-sm)',
-                    border: `2px solid ${changeText ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
-                    borderRadius: 'var(--mantine-radius-md)',
-                    backgroundColor: changeText ? 'var(--mantine-color-dark-6)' : 'transparent',
-                  },
-                  body: { alignItems: 'flex-start' },
-                  labelWrapper: { width: '100%' },
-                }}
-              />
-              <Checkbox
-                checked={changeIcons}
-                onChange={(e) => setChangeIcons(e.currentTarget.checked)}
-                label={
-                  <Group gap="xs">
-                    <IconPhoto size={16} color="var(--mantine-color-dark-2)" />
-                    <Box>
-                      <Text fw={500} size="sm">Icons & Graphics</Text>
-                      <Text size="xs" c="dark.2">Replace icons, badges, and decorative elements</Text>
-                    </Box>
-                  </Group>
-                }
-                styles={{
-                  root: {
-                    padding: 'var(--mantine-spacing-sm)',
-                    border: `2px solid ${changeIcons ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
-                    borderRadius: 'var(--mantine-radius-md)',
-                    backgroundColor: changeIcons ? 'var(--mantine-color-dark-6)' : 'transparent',
-                  },
-                  body: { alignItems: 'flex-start' },
-                  labelWrapper: { width: '100%' },
-                }}
-              />
-              <Checkbox
-                checked={changeColors}
-                onChange={(e) => setChangeColors(e.currentTarget.checked)}
-                label={
-                  <Group gap="xs">
-                    <IconPalette size={16} color="var(--mantine-color-dark-2)" />
-                    <Box>
-                      <Text fw={500} size="sm">Colors</Text>
-                      <Text size="xs" c="dark.2">Adjust color scheme and tones</Text>
-                    </Box>
-                  </Group>
-                }
-                styles={{
-                  root: {
-                    padding: 'var(--mantine-spacing-sm)',
-                    border: `2px solid ${changeColors ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
-                    borderRadius: 'var(--mantine-radius-md)',
-                    backgroundColor: changeColors ? 'var(--mantine-color-dark-6)' : 'transparent',
-                  },
-                  body: { alignItems: 'flex-start' },
-                  labelWrapper: { width: '100%' },
-                }}
-              />
-            </Stack>
-          </Box>
-
-          {/* Variation count */}
-          <Box>
-            <Text size="sm" fw={500} c="white" mb="sm">Number of variations</Text>
-            <SegmentedControl
-              value={variationCount}
-              onChange={setVariationCount}
-              data={['1', '2', '3']}
-              fullWidth
-              color="brand"
-            />
-          </Box>
-
-          {/* Generate button */}
-          {(() => {
-            const count = parseInt(variationCount, 10)
-            const required = count * 10
-            const balance = creditsExhausted ? 0 : undefined
-            const notEnough = creditsExhausted
-            const label = isSubmitting
-              ? 'Starting...'
-              : `Generate ${count} Variation${count > 1 ? 's' : ''} — ${required} credits`
-            return notEnough ? (
-              <Tooltip label="Not enough credits — buy more or upgrade" position="top">
-                <Button
-                  fullWidth
-                  size="md"
-                  fz="sm"
-                  color="brand"
-                  onClick={handleGenerate}
-                  disabled
-                  loading={isSubmitting}
-                  leftSection={!isSubmitting && <IconSparkles size={18} />}
-                >
-                  {label}
-                </Button>
-              </Tooltip>
-            ) : (
-              <Button
-                fullWidth
-                size="md"
-                fz="sm"
-                color="brand"
-                onClick={handleGenerate}
-                disabled={!hasSelection}
-                loading={isSubmitting}
-                leftSection={!isSubmitting && <IconSparkles size={18} />}
-              >
-                {label}
-              </Button>
-            )
-          })()}
-        </Stack>
-      )}
-    </Drawer>
-    </>
-  )
-}
-
-function GenerationCard({
-  generation,
-  title,
-  onExpand,
-  onDelete,
-  onCreateVariations,
-  onRetry,
-  retrying,
-}: {
-  generation: GenerationData
-  title: string
-  onExpand: (generation: GenerationData) => void
-  onDelete: (id: Id<'templateGenerations'>) => void
-  onCreateVariations: (generation: { _id: Id<'templateGenerations'>; outputUrl: string }) => void
-  onRetry: (id: Id<'templateGenerations'>) => void
-  retrying?: boolean
-}) {
-  const isComplete = generation.status === 'complete' && generation.outputUrl
-  const isFailed = generation.status === 'failed'
-  const isPending = !isComplete && !isFailed
-  const [now, setNow] = useState(() => Date.now())
-  const [isDownloading, setIsDownloading] = useState(false)
-
-  useEffect(() => {
-    if (!isPending) return
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [isPending])
-
-  const pendingStartedAt = generation.startedAt ?? generation._creationTime ?? now
-  const isTimedOut = isPending && now - pendingStartedAt >= GENERATION_TIMEOUT_MS
-  const failureInfo = generation.error ? mapGenerationError(generation.error) : null
-
-  const getAspectRatioValue = (): number => {
-    switch (generation.aspectRatio) {
-      case '4:5':
-        return 4 / 5
-      case '9:16':
-        return 9 / 16
-      default:
-        return 1
-    }
-  }
-
-  const formatDate = (timestamp: number): string => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / (1000 * 60))
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays === 1) return 'Yesterday'
-    if (diffDays < 7) return `${diffDays}d ago`
-
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  }
-
-  const getModeLabel = (mode: string): string => {
-    switch (mode) {
-      case 'exact': return 'Exact'
-      case 'remix': return 'Remix'
-      case 'variation': return 'Variation'
-      case 'angle': return 'From Angle'
-      default: return mode
-    }
-  }
-
-  const getModeColor = (mode: string): string => {
-    switch (mode) {
-      case 'variation': return 'violet'
-      case 'remix': return 'orange'
-      case 'angle': return 'lime'
-      default: return 'teal'
-    }
-  }
-
-  async function handleDownload(format: DownloadFormat) {
-    if (!generation.outputUrl) return
-
-    setIsDownloading(true)
-    try {
-      await downloadGeneratedImage(
-        generation.outputUrl,
-        `${title}-${generation.mode || 'generation'}`,
-        format,
-      )
-    } catch (err) {
-      notifications.show({
-        title: 'Download failed',
-        message: err instanceof Error ? err.message : 'Could not download generation',
-        color: 'red',
-      })
-    } finally {
-      setIsDownloading(false)
-    }
-  }
-
-  // Complete state: image fills the card, blurred bottom overlay carries
-  // four icon-only actions. Pending / timed-out / failed states keep the
-  // existing aspect-ratio info panel since there's no image to overlay.
-  if (isComplete && generation.outputUrl) {
-    return (
-      <Box
-        pos="relative"
-        style={{
-          borderRadius: 'var(--mantine-radius-sm)',
-          overflow: 'hidden',
-          cursor: 'pointer',
-          backgroundColor: 'var(--mantine-color-dark-7)',
-          boxShadow: generation.isWinner
-            ? 'inset 0 0 0 2px var(--mantine-color-yellow-5)'
-            : 'none',
-        }}
-        onClick={() => onExpand(generation)}
-      >
-        <Image
-          src={generation.outputUrl}
-          alt={title}
-          fit="cover"
-          w="100%"
-          style={{ display: 'block' }}
-        />
-
-        {/* Gradient bottom overlay — fades from transparent to dark so the
-            image and the icons read together rather than as two stacked
-            zones. Matches the home collage hero treatment. */}
-        <Box
-          pos="absolute"
-          left={0}
-          right={0}
-          bottom={0}
-          style={{
-            height: '45%',
-            background:
-              'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.85) 100%)',
-            pointerEvents: 'none',
-          }}
-        />
-        <Box
-          pos="absolute"
-          left={0}
-          right={0}
-          bottom={0}
-          px={8}
-          py={6}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: 4,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ActionIcon
-            variant="subtle"
-            color="gray.0"
-            size="md"
-            radius="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              onCreateVariations({
-                _id: generation._id,
-                outputUrl: generation.outputUrl!,
-              })
-            }}
-            aria-label="Make variations"
-          >
-            <IconSparkles size={16} />
-          </ActionIcon>
-          <WinnerToggle generation={generation} />
-          <Menu position="top-end" withinPortal shadow="md">
-            <Menu.Target>
-              <ActionIcon
-                variant="subtle"
-                color="gray.0"
-                size="md"
-                radius="sm"
-                loading={isDownloading}
-                aria-label="Download"
-              >
-                <IconDownload size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
-              <Menu.Label>Download as</Menu.Label>
-              {DOWNLOAD_FORMATS.map((f) => (
-                <Menu.Item key={f.value} onClick={() => handleDownload(f.value)}>
-                  {f.label}
-                </Menu.Item>
-              ))}
-            </Menu.Dropdown>
-          </Menu>
-          <ActionIcon
-            variant="subtle"
-            color="red.4"
-            size="md"
-            radius="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete(generation._id)
-            }}
-            aria-label="Delete generation"
-          >
-            <IconTrash size={16} />
-          </ActionIcon>
-        </Box>
-      </Box>
-    )
-  }
-
-  // Pending / timed-out / failed — keep the aspect-ratio info panel.
-  return (
-    <Card
-      radius="sm"
-      withBorder
-      padding={0}
-      style={{
-        overflow: 'hidden',
-        borderColor: 'var(--mantine-color-dark-5)',
-        backgroundColor: 'var(--mantine-color-dark-7)',
-      }}
-    >
-      <Card.Section>
-        {isPending && !isTimedOut && (
-          <AspectRatio ratio={getAspectRatioValue()}>
-            <Box
-              bg="dark.6"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-                height: '100%',
-              }}
-            >
-              <Loader size="md" color="brand" type="dots" mb="xs" />
-              <Text size="xs" c="dark.2">{generation.currentStep || 'Processing...'}</Text>
-            </Box>
-          </AspectRatio>
-        )}
-
-        {isTimedOut && (
-          <AspectRatio ratio={getAspectRatioValue()}>
-            <Box
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-                height: '100%',
-                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-              }}
-            >
-              <IconAlertTriangle size={24} style={{ color: 'var(--mantine-color-yellow-5)' }} />
-              <Text size="sm" fw={500} c="yellow.5" mt={6}>Taking too long</Text>
-              <Text size="xs" c="dark.2" mt={4} px="xs" ta="center">
-                This generation may be stuck.
-              </Text>
-              <Button
-                size="xs"
-                variant="light"
-                color="yellow"
-                mt="sm"
-                leftSection={<IconRefresh size={13} />}
-                loading={retrying}
-                onClick={() => onRetry(generation._id)}
-              >
-                Retry
-              </Button>
-            </Box>
-          </AspectRatio>
-        )}
-
-        {isFailed && (
-          <AspectRatio ratio={getAspectRatioValue()}>
-            <Box
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-                height: '100%',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              }}
-            >
-              <IconAlertTriangle size={24} style={{ color: 'var(--mantine-color-red-5)' }} />
-              <Text size="sm" fw={500} c="red.5" mt={6}>{failureInfo?.title ?? 'Failed'}</Text>
-              <Text size="xs" c="red.4" mt={4} px="xs" ta="center" lineClamp={2}>
-                {failureInfo?.message ?? 'Generation failed.'}
-              </Text>
-              <Button
-                size="xs"
-                variant="light"
-                color="red"
-                mt="sm"
-                leftSection={<IconRefresh size={13} />}
-                loading={retrying}
-                onClick={() => onRetry(generation._id)}
-              >
-                Retry
-              </Button>
-            </Box>
-          </AspectRatio>
-        )}
-      </Card.Section>
-    </Card>
-  )
-}
-
-function WinnerToggle({ generation }: { generation: GenerationData }) {
-  const [pending, setPending] = useState(false)
-  const toggleWinner = useConvexMutation(api.templateGenerations.toggleWinner)
-  const isWinner = !!generation.isWinner
-  return (
-    <ActionIcon
-      variant="subtle"
-      color={isWinner ? 'yellow' : 'gray.0'}
-      size="md"
-      radius="sm"
-      loading={pending}
-      onClick={async (e) => {
-        e.stopPropagation()
-        setPending(true)
-        try {
-          await toggleWinner({ generationId: generation._id })
-        } catch (err) {
-          notifications.show({
-            title: "Couldn't update",
-            message: err instanceof Error ? err.message : 'Try again',
-            color: 'red',
-          })
-        } finally {
-          setPending(false)
-        }
-      }}
-      aria-label={isWinner ? 'Unmark winner' : 'Mark as winner'}
-    >
-      {isWinner ? <IconStarFilled size={16} /> : <IconStar size={16} />}
-    </ActionIcon>
-  )
-}
-
 type WizardSegment = 'custom' | 'template'
 
 // ── Chip taxonomy for the structured prompt builder ─────────────────────────
@@ -3009,6 +2136,7 @@ function GenerateWizard({
   prefillTemplateId,
   prefillAngleIndex,
   prefillEditAdId,
+  adTestId,
 }: {
   productId: Id<'products'>
   product: {
@@ -3038,6 +2166,8 @@ function GenerateWizard({
   prefillTemplateId?: Id<'adTemplates'> | null
   prefillAngleIndex?: number | null
   prefillEditAdId?: Id<'templateGenerations'> | null
+  /** When set, generated creatives attach to this Ad Test (template path). */
+  adTestId?: Id<'adTests'> | null
 }) {
   // ── Segment state ──────────────────────────────────────────────────────────
   // Default to Template — picking from the curated library is the recommended
@@ -3522,8 +2652,15 @@ function GenerateWizard({
           productImageId: sourceImageId ?? undefined,
           applyBrand,
           applyVoice,
+          adTestId: adTestId ?? undefined,
         })
-        notifications.show({ title: 'Success', message: 'Generation started!', color: 'green' })
+        notifications.show({
+          title: 'Success',
+          message: adTestId
+            ? 'Generating creatives for your ad test!'
+            : 'Generation started!',
+          color: 'green',
+        })
       } else if (usePromptPath) {
         await submitPromptMutation({
           productId,
@@ -3624,7 +2761,9 @@ function GenerateWizard({
               Back
             </Group>
           </Anchor>
-          <Text fw={600} size="lg" c="white">Create ad</Text>
+          <Text fw={600} size="lg" c="white">
+            {adTestId ? 'Generate creatives' : 'Create ad'}
+          </Text>
         </Group>
         <Group gap="xs" wrap="wrap">
           {hasTemplates && (
@@ -3645,8 +2784,9 @@ function GenerateWizard({
         </Group>
       </Group>
 
-      {/* Segmented control — hidden when editing an existing ad */}
-      {!prefillEditAdId && (
+      {/* Segmented control — hidden when editing an existing ad, and when
+          generating into an ad test (template-only path). */}
+      {!prefillEditAdId && !adTestId && (
         <Box px="md" mb="lg">
           <SegmentedControl
             value={activeSegment}

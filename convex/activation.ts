@@ -29,15 +29,44 @@
  * lib/billing/credits.ts also skips 'free' grants for rows whose
  * lastGrantedPlanSlug === 'starter'.
  */
-import { action, internalMutation, internalQuery } from './_generated/server'
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+} from './_generated/server'
 import { v } from 'convex/values'
+import type { Doc, Id } from './_generated/dataModel'
 import { api, internal } from './_generated/api'
+import { requireCredits } from './lib/billing/credits'
+import { requireAdminIdentity } from './lib/admin/requireAdmin'
+import { recordGenerationUsage } from './products'
+import { workflow } from './studio'
 
 // Starter test is always 1 concept × these 3 placements.
 const STARTER_PLACEMENTS = ['feed_square', 'feed_vertical', 'story_reel'] as const
 
-// 1 credit = 1 000 mc; exactly enough for 3 images (one per placement).
-const STARTER_CREDITS_MC = 3 * 1_000
+// Map a template's aspect ratio to a Meta placement, so template-driven starter
+// creatives carry the same placement metadata as angle-based ones.
+const PLACEMENT_FOR_ASPECT: Record<
+  string,
+  'feed_square' | 'feed_vertical' | 'story_reel' | 'landscape'
+> = {
+  '1:1': 'feed_square',
+  '4:5': 'feed_vertical',
+  '9:16': 'story_reel',
+  '16:9': 'landscape',
+}
+
+// One-time free grant for new accounts (no card, no trial). 1 credit = 1 000 mc;
+// nano-banana-2 costs 10 credits (10 000 mc) per image, so 100 credits =
+// 100 000 mc = 10 images (~$0.80 COGS). The starter Ad Test spends 30 credits
+// (3 images); the remainder lets the user keep generating before the paywall.
+const STARTER_CREDITS_MC = 100 * 1_000
+
+// Per-image cost in mc — must match the seeded creditPricing row
+// (lib/billing/seedPricing.ts). Used only as a fallback insert below.
+const NANO_BANANA_PRICE_MC = 10_000
 
 // ─── Disposable-email block ───────────────────────────────────────────────────
 // TODO (#36 follow-up): Replace with a real-time API call (e.g. Abstract API,
@@ -133,6 +162,454 @@ export const activateStarterFlow = action({
   },
 })
 
+// ─── URL-first starter (paste your product URL → free test on YOUR product) ───
+
+/**
+ * Creates the starter user's product from a completed URL import, bypassing the
+ * plan's product limit (free_user has a limit of 0). This is the one-time
+ * starter on-ramp, so it's tightly guarded: the import must be owned + done with
+ * at least one image, the user must have no products yet, and must not have
+ * already claimed the starter grant. Schedules analysis (→ marketing angles)
+ * exactly like createProductRich. Returns the new productId.
+ */
+export const createStarterProductFromImages = internalMutation({
+  args: {
+    // The user-chosen product photos (first = hero/primary). Must be images we
+    // host on R2 (from a URL import or a manual upload) — never arbitrary URLs.
+    imageUrls: v.array(v.string()),
+    // Optional: the URL import these were curated from, used only to carry
+    // distilled metadata (description/category/price/reviews) onto the product.
+    importId: v.optional(v.id('urlImports')),
+    // Optional product name (manual-upload path); falls back to the import's
+    // distilled name, then a default.
+    name: v.optional(v.string()),
+  },
+  handler: async (ctx, { imageUrls, importId, name }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    const userId = identity.tokenIdentifier
+
+    if (imageUrls.length === 0) {
+      throw new Error('Pick at least one product photo to continue.')
+    }
+    const urls = imageUrls.slice(0, 10)
+
+    // Security: only accept images we host (R2). Blocks arbitrary/SSRF URLs the
+    // client could otherwise pass in. Skipped only if R2_PUBLIC_URL is unset.
+    const r2Public = process.env.R2_PUBLIC_URL
+    if (r2Public) {
+      for (const u of urls) {
+        if (!u.startsWith(r2Public)) throw new Error('Unsupported image URL')
+      }
+    }
+
+    // Optional import row, for distilled metadata only.
+    let imp: Doc<'urlImports'> | null = null
+    if (importId) {
+      const row = await ctx.db.get(importId)
+      if (!row || row.userId !== userId) throw new Error('Import not found')
+      imp = row
+    }
+
+    // (No one-time / existing-product guard here: the starter flow is
+    // repeatable. The actual free-credit grant is still claimed at most once —
+    // see activateStarterForProduct — so re-runs reuse the existing balance
+    // rather than re-granting credits.)
+
+    const productName =
+      (name?.trim() || imp?.distilledName?.trim() || 'My product').slice(0, 80) ||
+      'My product'
+    const productId = await ctx.db.insert('products', {
+      name: productName,
+      status: 'analyzing',
+      userId,
+      imageUrl: urls[0],
+      ...(imp?.distilledDescription ? { productDescription: imp.distilledDescription } : {}),
+      ...(imp?.distilledCategory ? { category: imp.distilledCategory } : {}),
+      ...(imp?.distilledPrice != null ? { price: imp.distilledPrice } : {}),
+      ...(imp?.distilledCurrency ? { currency: imp.distilledCurrency } : {}),
+      ...(imp?.distilledTags && imp.distilledTags.length > 0
+        ? { tags: imp.distilledTags.slice(0, 20) }
+        : {}),
+      ...(imp?.distilledAiNotes ? { aiNotes: imp.distilledAiNotes } : {}),
+      ...(imp?.distilledReviewSnippets && imp.distilledReviewSnippets.length > 0
+        ? { customerLanguage: imp.distilledReviewSnippets }
+        : {}),
+    })
+
+    const imageIds = []
+    for (const url of urls) {
+      imageIds.push(
+        await ctx.db.insert('productImages', {
+          productId,
+          userId,
+          imageUrl: url,
+          type: 'original',
+          status: 'ready',
+        }),
+      )
+    }
+    await ctx.db.patch(productId, { primaryImageId: imageIds[0] })
+    await ctx.scheduler.runAfter(0, internal.products.runProductAnalysis, {
+      productId,
+    })
+    return productId
+  },
+})
+
+/**
+ * Activates the starter Ad Test on an existing, owned, analyzed product (the one
+ * the user just imported). Same grant + draft + generation as
+ * `activateStarterFlow`, but without cloning the sample. Idempotent via the
+ * onboarding-profile grant flag.
+ */
+export const activateStarterForProduct = action({
+  args: { productId: v.id('products') },
+  handler: async (
+    ctx,
+    { productId },
+  ): Promise<{ adTestId: string; productId: string }> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    if (isDisposableEmail(identity.email)) {
+      throw new Error('Please sign up with a real email address to activate the free test.')
+    }
+
+    const alreadyActivated = await ctx.runQuery(
+      internal.activation._isAlreadyActivated,
+      {},
+    )
+
+    const product = await ctx.runQuery(api.products.getProductWithStats, {
+      productId,
+    })
+    if (!product) throw new Error('Product not found')
+    if (product.status !== 'ready') {
+      throw new Error('Product analysis is not ready yet')
+    }
+    if (!product.marketingAngles?.length) {
+      throw new Error('Product has no marketing angles yet')
+    }
+    const angle = product.marketingAngles[0]
+
+    // Grant the one-time free credits only on the FIRST activation. Re-runs
+    // reuse the existing balance (no double grant), so the flow is repeatable
+    // without re-granting free credits.
+    if (!alreadyActivated) {
+      await ctx.runMutation(internal.activation._claimStarterGrant, {})
+    }
+
+    const adTestId = await ctx.runMutation(api.adTests.createDraft, {
+      productId,
+      name: 'Starter Ad Test',
+      source: 'starter',
+      angles: [
+        {
+          key: 'starter_concept',
+          title: angle.title,
+          description: angle.description,
+          hook: angle.hook,
+          suggestedAdStyle: angle.suggestedAdStyle,
+        },
+      ],
+      placements: [...STARTER_PLACEMENTS],
+    })
+
+    await ctx.runMutation(api.adTests.startGeneration, { adTestId })
+
+    return { adTestId: adTestId as string, productId: productId as string }
+  },
+})
+
+// ─── Template-driven starter: pick up to 3 templates → 3 ads on the product ────
+
+/**
+ * Fans out one template-driven generation per chosen template (the product
+ * image composited into each template's style). Unlike `products.generateFromProduct`
+ * this does NOT require the GENERATE_VARIATIONS capability — the starter is free
+ * for new (capability-less) accounts — but it still charges credits. Each ad
+ * uses its template's native aspect ratio.
+ */
+export const _startStarterTemplateGenerations = internalMutation({
+  args: {
+    userId: v.string(),
+    productId: v.id('products'),
+    templateIds: v.array(v.id('adTemplates')),
+    // The starter Ad Test these creatives belong to, so they show up in Studio
+    // (which renders ad tests, not loose generations) and can be reviewed.
+    adTestId: v.id('adTests'),
+  },
+  handler: async (ctx, { userId, productId, templateIds, adTestId }) => {
+    const ids = templateIds.slice(0, 3)
+    if (ids.length === 0) throw new Error('Pick at least one template')
+
+    const product = await ctx.db.get(productId)
+    if (!product || product.userId !== userId) throw new Error('Product not found')
+
+    // Resolve the source product image (primary, then legacy fallback).
+    let productImageUrl: string
+    let productImageId: Id<'productImages'> | undefined
+    if (product.primaryImageId) {
+      const primary = await ctx.db.get(product.primaryImageId)
+      if (!primary) throw new Error('Primary image not found')
+      productImageUrl = primary.imageUrl
+      productImageId = primary._id
+    } else if (product.imageUrl) {
+      productImageUrl = product.imageUrl
+    } else {
+      throw new Error('Product has no image')
+    }
+
+    // Credit preflight + charge for the whole batch (no capability gate).
+    await requireCredits(ctx, 'nano-banana-2', ids.length)
+    await recordGenerationUsage(ctx, userId, 'activateStarterWithTemplates', ids.length)
+
+    let variationIndex = 0
+    for (const templateId of ids) {
+      const tpl = await ctx.db.get(templateId)
+      if (!tpl || tpl.status !== 'published') continue
+      // Curated, own, or anyone's public custom — never someone else's private.
+      if (tpl.ownerUserId && tpl.ownerUserId !== userId && tpl.visibility !== 'public') {
+        continue
+      }
+      const genId = await ctx.db.insert('templateGenerations', {
+        productId,
+        productImageId,
+        userId,
+        templateId,
+        productImageUrl,
+        templateImageUrl: tpl.imageUrl,
+        templateSnapshot: {
+          name: tpl.name || tpl.category || undefined,
+          aspectRatio: tpl.aspectRatio,
+        },
+        aspectRatio: tpl.aspectRatio,
+        mode: 'exact',
+        colorAdapt: false,
+        applyBrand: true,
+        applyVoice: true,
+        variationIndex: variationIndex,
+        status: 'queued',
+        model: 'nano-banana-2',
+        // Ad Test linkage so the creatives surface in Studio.
+        adTestId,
+        placement: PLACEMENT_FOR_ASPECT[tpl.aspectRatio],
+        adUnitIndex: variationIndex,
+      })
+      variationIndex++
+      await ctx.scheduler.runAfter(
+        0,
+        internal.activation._kickoffTemplateWorkflow,
+        { generationId: genId },
+      )
+    }
+
+    // Advance the starter Ad Test: planned = creatives actually queued, status
+    // generating. Completion bumps completed/failed/winner via the workflow.
+    const adTest = await ctx.db.get(adTestId)
+    if (adTest) {
+      await ctx.db.patch(adTestId, {
+        plannedImageCount: adTest.plannedImageCount + variationIndex,
+        status: variationIndex > 0 ? 'generating' : adTest.status,
+        updatedAt: Date.now(),
+      })
+    }
+    return null
+  },
+})
+
+/** Starts the template generation workflow for one row (scheduled from above). */
+export const _kickoffTemplateWorkflow = internalMutation({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }) => {
+    await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
+      generationId,
+    })
+  },
+})
+
+/**
+ * Read-only credit preflight (throws if the caller can't afford `count` images).
+ * Used to validate eligibility BEFORE creating a product, so a re-run by an
+ * already-activated user with too few credits fails up front instead of leaving
+ * an orphan product + scheduled analysis behind. No writes.
+ */
+export const _preflightStarterCredits = internalMutation({
+  args: { count: v.number() },
+  handler: async (ctx, { count }) => {
+    await requireCredits(ctx, 'nano-banana-2', Math.max(1, count))
+    return null
+  },
+})
+
+/**
+ * The URL-first starter, end to end: create the product from the chosen photos,
+ * grant the one-time free credits (at most once), and generate one ad per
+ * chosen template. Returns the productId so the UI can drop the user into the
+ * Studio gallery to watch them render.
+ */
+export const activateStarterWithTemplates = action({
+  args: {
+    imageUrls: v.array(v.string()),
+    importId: v.optional(v.id('urlImports')),
+    name: v.optional(v.string()),
+    templateIds: v.array(v.id('adTemplates')),
+  },
+  handler: async (
+    ctx,
+    { imageUrls, importId, name, templateIds },
+  ): Promise<{ productId: string; adTestId: string }> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    if (isDisposableEmail(identity.email)) {
+      throw new Error('Please sign up with a real email address to activate the free test.')
+    }
+    if (templateIds.length === 0) throw new Error('Pick at least one template.')
+    const templateCount = Math.min(templateIds.length, 3)
+
+    // Eligibility / credits FIRST, before any product side effects — otherwise a
+    // re-run that can't afford the templates would leave an orphan product +
+    // scheduled analysis behind (actions aren't transactional).
+    const alreadyActivated = await ctx.runQuery(
+      internal.activation._isAlreadyActivated,
+      {},
+    )
+    if (!alreadyActivated) {
+      // First activation: the grant provisions enough credits for the batch.
+      await ctx.runMutation(internal.activation._claimStarterGrant, {})
+    } else {
+      // Re-run: must already have enough credits before we create anything.
+      await ctx.runMutation(internal.activation._preflightStarterCredits, {
+        count: templateCount,
+      })
+    }
+
+    const productId = await ctx.runMutation(
+      internal.activation.createStarterProductFromImages,
+      { imageUrls, importId, name },
+    )
+
+    // Create the starter Ad Test (template-based: no angles) and attach the
+    // generated creatives to it so they appear in Studio.
+    const adTestId = await ctx.runMutation(api.adTests.createDraft, {
+      productId,
+      name: 'Starter Ad Test',
+      source: 'starter',
+      angles: [],
+      placements: [...STARTER_PLACEMENTS],
+    })
+
+    await ctx.runMutation(internal.activation._startStarterTemplateGenerations, {
+      userId: identity.tokenIdentifier,
+      productId,
+      templateIds,
+      adTestId,
+    })
+
+    return { productId: productId as string, adTestId: adTestId as string }
+  },
+})
+
+// ─── Dev-only: reset the caller's activation so the starter flow can re-run ────
+
+/**
+ * LOCAL TESTING ONLY. Wipes the signed-in user's activation state — products
+ * and all their children, ad tests, recommendations, url imports, the credit
+ * balance, and the one-time starter-grant flag — so you can run landing → free
+ * test repeatedly on a single account instead of signing up new ones.
+ *
+ * Self-scoped: it only ever touches the CALLER's own data, and the UI button
+ * that calls it renders only in a Vite dev build. (Temporary testing tool —
+ * revert before any real launch.)
+ */
+export const resetMyActivation = mutation({
+  args: {},
+  handler: async (ctx) => {
+    // Server-side gate: this is a destructive, credit-grant-resetting tool, so
+    // it must NOT be callable by arbitrary authenticated users (hiding the UI
+    // button behind import.meta.env.DEV is not a backend guard). Restrict to
+    // admins (CLERK_ADMIN_USER_IDS) — the same gate the admin mutations use.
+    await requireAdminIdentity(ctx)
+
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error('Not authenticated')
+    const userId = identity.tokenIdentifier
+
+    const products = await ctx.db
+      .query('products')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .collect()
+
+    for (const p of products) {
+      const imgs = await ctx.db
+        .query('productImages')
+        .withIndex('by_product', (q) => q.eq('productId', p._id))
+        .collect()
+      for (const i of imgs) await ctx.db.delete(i._id)
+
+      const tests = await ctx.db
+        .query('adTests')
+        .withIndex('by_productId', (q) => q.eq('productId', p._id))
+        .collect()
+      for (const t of tests) {
+        const copySets = await ctx.db
+          .query('adTestCopySets')
+          .withIndex('by_adTestId', (q) => q.eq('adTestId', t._id))
+          .collect()
+        for (const c of copySets) await ctx.db.delete(c._id)
+        const notes = await ctx.db
+          .query('adTestPerformanceNotes')
+          .withIndex('by_adTestId', (q) => q.eq('adTestId', t._id))
+          .collect()
+        for (const n of notes) await ctx.db.delete(n._id)
+        await ctx.db.delete(t._id)
+      }
+
+      const recs = await ctx.db
+        .query('adTestRecommendations')
+        .withIndex('by_productId', (q) => q.eq('productId', p._id))
+        .collect()
+      for (const r of recs) await ctx.db.delete(r._id)
+
+      const gens = await ctx.db
+        .query('templateGenerations')
+        .withIndex('by_product', (q) => q.eq('productId', p._id))
+        .collect()
+      for (const g of gens) await ctx.db.delete(g._id)
+
+      await ctx.db.delete(p._id)
+    }
+
+    const imports = await ctx.db
+      .query('urlImports')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .collect()
+    for (const im of imports) await ctx.db.delete(im._id)
+
+    const balance = await ctx.db
+      .query('creditBalances')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    if (balance) await ctx.db.delete(balance._id)
+
+    const profile = await ctx.db
+      .query('onboardingProfiles')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique()
+    if (profile) {
+      await ctx.db.patch(profile._id, {
+        hasReceivedStarterGrant: undefined,
+        starterGrantAt: undefined,
+        completedAt: undefined,
+        currentStep: 1,
+        updatedAt: Date.now(),
+      })
+    }
+
+    return { deletedProducts: products.length }
+  },
+})
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -224,7 +701,7 @@ export const _claimStarterGrant = internalMutation({
     if (!pricing) {
       await ctx.db.insert('creditPricing', {
         modelKey: 'nano-banana-2',
-        creditsMc: 1_000,
+        creditsMc: NANO_BANANA_PRICE_MC,
         active: true,
         updatedAt: now,
       })

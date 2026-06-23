@@ -22,6 +22,7 @@ import { Route as LibraryRouteImport } from './routes/library'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdTestsRouteImport } from './routes/ad-tests'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as ProductsIndexRouteImport } from './routes/products.index'
@@ -107,6 +108,11 @@ const CheckoutRoute = CheckoutRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdTestsRoute = AdTestsRouteImport.update({
+  id: '/ad-tests',
+  path: '/ad-tests',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -217,6 +223,7 @@ const AdminDesignLabGenerateRoute = AdminDesignLabGenerateRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ad-tests': typeof AdTestsRoute
   '/admin': typeof AdminRouteWithChildren
   '/checkout': typeof CheckoutRoute
   '/home': typeof HomeRoute
@@ -253,6 +260,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ad-tests': typeof AdTestsRoute
   '/checkout': typeof CheckoutRoute
   '/home': typeof HomeRoute
   '/library': typeof LibraryRoute
@@ -286,6 +294,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ad-tests': typeof AdTestsRoute
   '/admin': typeof AdminRouteWithChildren
   '/checkout': typeof CheckoutRoute
   '/home': typeof HomeRoute
@@ -324,6 +333,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/ad-tests'
     | '/admin'
     | '/checkout'
     | '/home'
@@ -360,6 +370,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/ad-tests'
     | '/checkout'
     | '/home'
     | '/library'
@@ -392,6 +403,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/ad-tests'
     | '/admin'
     | '/checkout'
     | '/home'
@@ -429,6 +441,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdTestsRoute: typeof AdTestsRoute
   AdminRoute: typeof AdminRouteWithChildren
   CheckoutRoute: typeof CheckoutRoute
   HomeRoute: typeof HomeRoute
@@ -539,6 +552,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ad-tests': {
+      id: '/ad-tests'
+      path: '/ad-tests'
+      fullPath: '/ad-tests'
+      preLoaderRoute: typeof AdTestsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -772,6 +792,7 @@ const StudioRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdTestsRoute: AdTestsRoute,
   AdminRoute: AdminRouteWithChildren,
   CheckoutRoute: CheckoutRoute,
   HomeRoute: HomeRoute,

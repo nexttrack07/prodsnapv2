@@ -22,6 +22,7 @@ import {
   IconBrush,
   IconLibrary,
   IconSparkles,
+  IconFlask2,
   IconReceipt,
   IconCoins,
   IconShield,
@@ -41,6 +42,7 @@ const PRIMARY_NAV: ReadonlyArray<NavItem> = [
   { to: '/home', icon: IconHome2, label: 'Home' },
   { to: '/products', icon: IconLayoutGrid, label: 'Products' },
   { to: '/templates', icon: IconSparkles, label: 'Templates' },
+  { to: '/ad-tests', icon: IconFlask2, label: 'Ad tests' },
   { to: '/library', icon: IconLibrary, label: 'Library' },
   { to: '/account/brand', icon: IconBrush, label: 'Brand kit' },
 ]

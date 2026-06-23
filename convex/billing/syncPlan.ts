@@ -496,7 +496,6 @@ export const getBillingStatus = query({
     const planConfig = planSlug ? PLAN_CONFIG[planSlug] : undefined
 
     const productLimit = planConfig?.productLimit ?? 0
-    const creditsTotal = planConfig?.imageCredits ?? 0
 
     const products = await ctx.db
       .query('products')
@@ -513,6 +512,16 @@ export const getBillingStatus = query({
     const creditsUsed = creditBalance
       ? Math.floor(mcToCredits(creditBalance.planUsedMc))
       : 0
+
+    // creditsTotal: a configured plan's allowance, OR — for no-card starter
+    // users who hold a creditBalances grant but have no userPlans row — the
+    // granted allowance read from the balance, so the starter's 100 free
+    // credits are reflected instead of 0/0 (the backend can already spend them).
+    const creditsTotal = planConfig
+      ? planConfig.imageCredits
+      : creditBalance
+        ? Math.floor(mcToCredits(creditBalance.planAllowanceMc))
+        : 0
 
     // Use Clerk's period end if available; suppress the date until it is known
     // so the UI doesn't show a misleading "Resets on 1st of next month" before

@@ -85,7 +85,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
                     </Button>
                   </SignInButton>
                   <Button component={Link} to="/onboarding" size="sm" color="brand">
-                    Start free trial
+                    Start free
                   </Button>
                 </Unauthenticated>
                 <Authenticated>
@@ -147,7 +147,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
               fullWidth
               mt="xs"
             >
-              Start free trial
+              Start free
             </Button>
           </Unauthenticated>
           <Divider my="sm" color="dark.5" />

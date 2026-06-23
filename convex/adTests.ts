@@ -185,7 +185,31 @@ export const listForProduct = query({
 
     // Defense in depth: the product is owned, but filter by userId anyway so a
     // shared productId can never surface another user's test.
-    return tests.filter((t) => t.userId === userId)
+    const owned = tests.filter((t) => t.userId === userId)
+
+    // Attach a few creative thumbnails per test so the product page can show
+    // each test as a photo mosaic (winners first). Typical products have a
+    // handful of tests, so the per-test fan-out is small.
+    return await Promise.all(
+      owned.map(async (t) => {
+        const gens = await ctx.db
+          .query('templateGenerations')
+          .withIndex('by_adTestId', (q) => q.eq('adTestId', t._id))
+          .take(30)
+        const complete = gens
+          .filter((g) => g.status === 'complete' && !!g.outputUrl)
+          .sort((a, b) => Number(!!b.isWinner) - Number(!!a.isWinner))
+        const pending = gens.filter(
+          (g) => g.status !== 'complete' && g.status !== 'failed',
+        ).length
+        return {
+          ...t,
+          previewUrls: complete.slice(0, 4).map((g) => g.outputUrl as string),
+          completeCount: complete.length,
+          pendingCount: pending,
+        }
+      }),
+    )
   },
 })
 
@@ -517,6 +541,50 @@ export const getHomeAdTestSurface = query({
 })
 
 /**
+ * All of the user's active (non-archived) Ad Tests across every product, newest
+ * first, joined with the product name so the /ad-tests page can list them and
+ * deep-link each to /studio/$productId?adTestId=. Capped at 100 — this is a
+ * recent-work surface, not a paginated archive.
+ */
+export const listMyAdTests = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return []
+
+    const tests = await ctx.db
+      .query('adTests')
+      .withIndex('by_userId_archivedAt', (q) =>
+        q.eq('userId', userId).eq('archivedAt', undefined),
+      )
+      .order('desc')
+      .take(100)
+
+    // Resolve product names in one pass (dedupe ids first).
+    const productIds = [...new Set(tests.map((t) => t.productId))]
+    const products = await Promise.all(productIds.map((id) => ctx.db.get(id)))
+    const productNameById = new Map(
+      products.flatMap((p) => (p ? [[p._id, p.name] as const] : [])),
+    )
+
+    return tests.map((t) => ({
+      _id: t._id,
+      name: t.name,
+      status: t.status,
+      source: t.source,
+      productId: t.productId,
+      productName: productNameById.get(t.productId) ?? 'Product',
+      plannedImageCount: t.plannedImageCount,
+      completedImageCount: t.completedImageCount,
+      failedImageCount: t.failedImageCount,
+      winnerCount: t.winnerCount,
+      exportedAt: t.exportedAt ?? null,
+      updatedAt: t.updatedAt,
+    }))
+  },
+})
+
+/**
  * Creates a draft Ad Test from a persisted recommendation and marks the
  * recommendation consumed. Returns the draft's id so the UI can open its review
  * screen — generation isn't started here, so the user confirms before spending
@@ -620,9 +688,10 @@ export const createDraft = mutation({
     if (args.placements.length === 0) {
       throw new Error('At least one placement is required')
     }
-    if (args.angles.length === 0 && (args.prompts?.length ?? 0) === 0) {
-      throw new Error('At least one angle or prompt is required')
-    }
+    // Angles/prompts are only required for the angle-based fan-out path
+    // (startGeneration). A template-based test gets its creatives from the
+    // generate wizard (generateFromProduct with adTestId), so an empty
+    // angles+prompts test is valid.
 
     await requireOwnedProduct(ctx, userId, args.productId)
 
@@ -669,6 +738,22 @@ export const createDraft = mutation({
     })
 
     return adTestId
+  },
+})
+
+/**
+ * Renames an Ad Test. Trimmed, non-empty, length-capped. Ownership enforced.
+ */
+export const renameAdTest = mutation({
+  args: { adTestId: v.id('adTests'), name: v.string() },
+  handler: async (ctx, { adTestId, name }) => {
+    const userId = await requireAuth(ctx)
+    await requireOwnedAdTest(ctx, userId, adTestId)
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('Ad Test name is required')
+    if (trimmed.length > 100) throw new Error('Ad Test name is too long')
+    await ctx.db.patch(adTestId, { name: trimmed, updatedAt: Date.now() })
+    return null
   },
 })
 
@@ -1147,8 +1232,10 @@ export const generateCopySet = action({
     adTestId: v.id('adTests'),
     angleKey: v.optional(v.string()),
     request: copySetRequest,
+    /** Encourage 1-2 relevant emoji in primary texts / descriptions. */
+    emoji: v.optional(v.boolean()),
   },
-  handler: async (ctx, { adTestId, angleKey, request }): Promise<Id<'adTestCopySets'>> => {
+  handler: async (ctx, { adTestId, angleKey, request, emoji }): Promise<Id<'adTestCopySets'>> => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -1176,6 +1263,7 @@ export const generateCopySet = action({
       headlineCount: counts.headlineCount,
       primaryTextCount: counts.primaryTextCount,
       descriptionCount: counts.descriptionCount,
+      emoji: emoji ?? false,
     })
 
     // Wrap each generated string as a copySuggestion, stamping the angle it was
@@ -1238,6 +1326,50 @@ export const updateCopySuggestion = mutation({
       i === idx ? { ...s, text: trimmed } : s,
     )
     await ctx.db.patch(copySetId, { [field]: updated, updatedAt: Date.now() })
+    return null
+  },
+})
+
+/**
+ * Deletes a single Copy Bank suggestion (one headline / primary text /
+ * description) from a set, and clears any creative pairing that referenced it
+ * so no creative is left pointing at a removed suggestion. variantIndex is
+ * stable, so the remaining suggestions keep their indices (no reindexing).
+ */
+export const deleteCopySuggestion = mutation({
+  args: {
+    copySetId: v.id('adTestCopySets'),
+    field: copySetField,
+    variantIndex: v.number(),
+  },
+  handler: async (ctx, { copySetId, field, variantIndex }) => {
+    const userId = await requireAuth(ctx)
+    const copySet = await ctx.db.get(copySetId)
+    if (!copySet || copySet.userId !== userId) {
+      throw new Error('Copy set not found')
+    }
+
+    const current = copySet[field]
+    const next = current.filter((s) => s.variantIndex !== variantIndex)
+    if (next.length === current.length) throw new Error('Suggestion not found')
+    await ctx.db.patch(copySetId, { [field]: next, updatedAt: Date.now() })
+
+    // Clear pairings that referenced the deleted suggestion in this field.
+    const selField: 'selectedHeadlineIndex' | 'selectedPrimaryTextIndex' | 'selectedDescriptionIndex' =
+      field === 'headlines'
+        ? 'selectedHeadlineIndex'
+        : field === 'primaryTexts'
+          ? 'selectedPrimaryTextIndex'
+          : 'selectedDescriptionIndex'
+    const gens = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_adTestId', (q) => q.eq('adTestId', copySet.adTestId))
+      .take(MAX_AD_UNITS_PER_TEST)
+    for (const gen of gens) {
+      if (gen.selectedCopySetId === copySetId && gen[selField] === variantIndex) {
+        await ctx.db.patch(gen._id, { [selField]: undefined })
+      }
+    }
     return null
   },
 })

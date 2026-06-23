@@ -22,15 +22,6 @@ crons.daily(
   internal.lib.billing.seedPricing.seedPricing,
 )
 
-// Sweep userPlans for trials ending within the next 3 days and email each
-// user once per period. Webhook coverage for trial_end is inconsistent across
-// Clerk billing event subtypes, so we own the schedule ourselves.
-crons.daily(
-  'notify-trials-ending',
-  { hourUTC: 14, minuteUTC: 0 }, // ~9am Central, post-coffee, pre-rage
-  internal.billing.notifications.scanAndNotifyTrialsEnding,
-)
-
 // Mark templateGenerations rows that are stuck in 'queued'/'running' as
 // 'failed'. Client-side timeout only fires while the tab is open; this cron
 // provides server-side reconciliation for orphaned workflows.

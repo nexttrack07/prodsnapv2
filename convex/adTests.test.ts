@@ -130,12 +130,91 @@ test('createDraft requires auth, a name, placements, and an angle or prompt', as
     }),
   ).rejects.toThrow(/placement/)
 
+  // A template-based test has no angles/prompts (creatives come from the
+  // generate wizard), so an empty angles+prompts draft is now valid.
+  const templateOnly = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productId),
+    angles: [],
+    name: 'Template-only',
+  })
+  const created = await t.run((ctx) => ctx.db.get(templateOnly))
+  expect(created!.angles).toEqual([])
+  expect(created!.status).toBe('draft')
+})
+
+// ─── renameAdTest ────────────────────────────────────────────────────────────
+
+test('renameAdTest trims and updates the name; rejects empty and non-owners', async () => {
+  const t = convexTest(schema, modules)
+  const productId = await seedProduct(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+  const id = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productId),
+    name: 'Old name',
+  })
+
+  await asUser.mutation(api.adTests.renameAdTest, { adTestId: id, name: '  New name  ' })
+  const row = await t.run((ctx) => ctx.db.get(id))
+  expect(row!.name).toBe('New name')
+
   await expect(
-    asUser.mutation(api.adTests.createDraft, {
-      ...baseDraftArgs(productId),
-      angles: [],
-    }),
-  ).rejects.toThrow(/angle or prompt/)
+    asUser.mutation(api.adTests.renameAdTest, { adTestId: id, name: '   ' }),
+  ).rejects.toThrow(/name is required/)
+
+  await expect(
+    t
+      .withIdentity({ tokenIdentifier: OTHER })
+      .mutation(api.adTests.renameAdTest, { adTestId: id, name: 'hijack' }),
+  ).rejects.toThrow(/not found/i)
+})
+
+// ─── deleteGeneration (ad-test aware) ────────────────────────────────────────
+
+test('deleteGeneration recomputes the parent ad test counters + status', async () => {
+  const t = convexTest(schema, modules)
+  const productId = await seedProduct(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+  const adTestId = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productId),
+    name: 'Counters',
+  })
+
+  // Two complete creatives; the first is a winner. Simulate a generated test.
+  const gens = await t.run(async (ctx) => {
+    const ids: Id<'templateGenerations'>[] = []
+    for (let i = 0; i < 2; i++) {
+      ids.push(
+        await ctx.db.insert('templateGenerations', {
+          productId,
+          userId: USER,
+          productImageUrl: 'https://example.com/p.png',
+          mode: 'angle',
+          colorAdapt: false,
+          variationIndex: i,
+          status: 'complete',
+          adTestId,
+          adUnitIndex: i,
+          outputUrl: 'https://cdn.example.com/o.png',
+          isWinner: i === 0,
+        }),
+      )
+    }
+    await ctx.db.patch(adTestId, {
+      plannedImageCount: 2,
+      completedImageCount: 2,
+      winnerCount: 1,
+      status: 'ready',
+    })
+    return ids
+  })
+
+  await asUser.mutation(api.products.deleteGeneration, { generationId: gens[0] })
+
+  const adTest = await t.run((ctx) => ctx.db.get(adTestId))
+  expect(adTest!.plannedImageCount).toBe(1) // one fewer planned
+  expect(adTest!.completedImageCount).toBe(1)
+  expect(adTest!.winnerCount).toBe(0) // deleted creative was the winner
+  expect(adTest!.status).toBe('ready') // remaining one is complete
 })
 
 // ─── listForProduct ────────────────────────────────────────────────────────────
@@ -171,6 +250,50 @@ test('listForProduct returns [] for a product owned by someone else', async () =
   const productId = await seedProduct(t, OTHER)
   const asUser = t.withIdentity({ tokenIdentifier: USER })
   const rows = await asUser.query(api.adTests.listForProduct, { productId })
+  expect(rows).toEqual([])
+})
+
+// ─── listMyAdTests (cross-product index for the sidebar page) ────────────────
+
+test('listMyAdTests returns owned tests across products, newest-first, with product names, excluding archived', async () => {
+  const t = convexTest(schema, modules)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  const productA = await t.run((ctx) =>
+    ctx.db.insert('products', { name: 'Hydration Mix', status: 'ready', userId: USER }),
+  )
+  const productB = await t.run((ctx) =>
+    ctx.db.insert('products', { name: 'Trail Tee', status: 'ready', userId: USER }),
+  )
+
+  const first = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productA),
+    name: 'A-first',
+  })
+  await asUser.mutation(api.adTests.createDraft, { ...baseDraftArgs(productB), name: 'B-second' })
+  const third = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productA),
+    name: 'A-third',
+  })
+  // Archived tests drop out; another user's test is never visible.
+  await asUser.mutation(api.adTests.archive, { adTestId: first })
+  const otherProduct = await seedProduct(t, OTHER)
+  await t
+    .withIdentity({ tokenIdentifier: OTHER })
+    .mutation(api.adTests.createDraft, { ...baseDraftArgs(otherProduct), name: 'intruder' })
+
+  const rows = await asUser.query(api.adTests.listMyAdTests, {})
+
+  // Newest-first across products, archived 'A-first' excluded.
+  expect(rows.map((r) => r.name)).toEqual(['A-third', 'B-second'])
+  expect(rows.find((r) => r._id === third)?.productName).toBe('Hydration Mix')
+  expect(rows.find((r) => r.name === 'B-second')?.productName).toBe('Trail Tee')
+  expect(rows.every((r) => r.name !== 'intruder')).toBe(true)
+})
+
+test('listMyAdTests returns [] when unauthenticated', async () => {
+  const t = convexTest(schema, modules)
+  const rows = await t.query(api.adTests.listMyAdTests, {})
   expect(rows).toEqual([])
 })
 
