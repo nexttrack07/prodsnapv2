@@ -27,7 +27,6 @@ import {
   IconStar,
   IconStarFilled,
   IconUpload,
-  IconCheck,
   IconPhoto,
 } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
@@ -415,6 +414,7 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
       <StarterImagePicker
         candidates={candidates}
         scrapeFailed={scrapeFailed}
+        adCount={templateIds.length}
         onConfirm={handlePhotosConfirm}
         onUseSample={onUseSample}
       />
@@ -578,11 +578,13 @@ function SelectableTemplateTile({
 function StarterImagePicker({
   candidates,
   scrapeFailed,
+  adCount,
   onConfirm,
   onUseSample,
 }: {
   candidates: string[]
   scrapeFailed: boolean
+  adCount: number
   onConfirm: (imageUrls: string[]) => void
   onUseSample: () => void
 }) {
@@ -670,7 +672,7 @@ function StarterImagePicker({
           <Text c="dark.2" mt={4}>
             {showEmptyState
               ? "We couldn't grab your photos automatically — some sites block us. Upload your product photo and we'll generate from it."
-              : 'Choose the photos to generate ads from. Tap ★ to set your hero — it leads every ad.'}
+              : 'Your hero photo generates all your ads. Any other photos you pick are saved to your product to use later.'}
           </Text>
           {scrapeFailed && !showEmptyState && (
             <Text c="yellow.5" size="sm" mt={6}>
@@ -721,32 +723,46 @@ function StarterImagePicker({
                   }}
                 >
                   <Image src={u} alt="" w="100%" style={{ aspectRatio: '1', objectFit: 'cover', display: 'block', opacity: isSelected ? 1 : 0.55 }} />
-                  {isSelected && (
-                    <ThemeIcon
-                      size="sm"
-                      radius="xl"
+                  {isHero && (
+                    <Badge
+                      size="xs"
                       color="brand"
+                      variant="filled"
+                      leftSection={<IconStarFilled size={9} />}
                       pos="absolute"
-                      style={{ top: 4, right: 4 }}
+                      style={{ top: 4, left: 4 }}
                     >
-                      <IconCheck size={12} />
-                    </ThemeIcon>
+                      For ads
+                    </Badge>
                   )}
-                  <ActionIcon
-                    size="sm"
-                    radius="xl"
-                    variant={isHero ? 'filled' : 'default'}
-                    color="yellow"
-                    pos="absolute"
-                    style={{ top: 4, left: 4 }}
-                    aria-label="Set as hero"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      makeHero(u)
-                    }}
-                  >
-                    {isHero ? <IconStarFilled size={12} /> : <IconStar size={12} />}
-                  </ActionIcon>
+                  {isSelected && !isHero && (
+                    <>
+                      <ActionIcon
+                        size="sm"
+                        radius="xl"
+                        variant="default"
+                        color="yellow"
+                        pos="absolute"
+                        style={{ top: 4, left: 4 }}
+                        aria-label="Use this photo for the ads"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          makeHero(u)
+                        }}
+                      >
+                        <IconStar size={12} />
+                      </ActionIcon>
+                      <Badge
+                        size="xs"
+                        color="gray"
+                        variant="filled"
+                        pos="absolute"
+                        style={{ top: 4, right: 4 }}
+                      >
+                        Saved
+                      </Badge>
+                    </>
+                  )}
                 </Box>
               )
             })}
@@ -785,10 +801,10 @@ function StarterImagePicker({
             color="brand"
             size="md"
             loading={submitting}
-            disabled={chosenCount === 0}
+            disabled={chosenCount === 0 || !hero}
             onClick={handleGenerate}
           >
-            Generate my free ad test →
+            Generate {adCount} ad{adCount === 1 ? '' : 's'} from this hero →
           </Button>
         </Group>
       </Stack>
