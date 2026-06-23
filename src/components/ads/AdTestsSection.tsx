@@ -66,7 +66,7 @@ export function AdTestsSection({
   const tests = useQuery(api.adTests.listForProduct, { productId })
 
   return (
-    <Stack gap="md" mb="xl">
+    <Stack gap="md" mt="xl" mb="xl">
       <Group justify="space-between" align="center">
         <Group gap="xs" align="center">
           <IconFlask2 size={20} color="var(--mantine-color-brand-5)" />
