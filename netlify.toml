@@ -5,6 +5,16 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# Dynamic sitemap: served by Convex (the backend that owns the blog posts) and
+# proxied on-domain so it resolves at https://prodsnap.io/sitemap.xml (which
+# robots.txt already points to). `to` is the PROD Convex deployment's .site
+# origin — update this if the production deployment changes.
+[[redirects]]
+  from = "/sitemap.xml"
+  to = "https://elated-starling-538.convex.site/sitemap.xml"
+  status = 200
+  force = true
+
 # Headers for security and caching
 [[headers]]
   for = "/*"

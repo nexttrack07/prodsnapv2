@@ -1816,7 +1816,7 @@ function FinalCTA() {
           Three paths. Twelve variants per batch. One loop that learns from what wins.
         </p>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
-          <Link to="/onboarding" style={{ textDecoration: 'none' }}>
+          <Link to="/onboarding" search={{ starter: true }} style={{ textDecoration: 'none' }}>
             <Btn as="span" kind="primary" size="lg">Start free →</Btn>
           </Link>
           <Link to="/templates" style={{ textDecoration: 'none' }}>

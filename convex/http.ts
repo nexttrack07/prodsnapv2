@@ -1,6 +1,6 @@
 import { httpRouter } from 'convex/server'
 import { httpAction } from './_generated/server'
-import { internal } from './_generated/api'
+import { api, internal } from './_generated/api'
 import { Webhook } from 'svix'
 
 const http = httpRouter()
@@ -154,6 +154,108 @@ http.route({
         'Content-Type': res.headers.get('content-type') ?? 'image/png',
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Cache-Control': 'private, max-age=3600',
+      },
+    })
+  }),
+})
+
+// ─── Outrank → blog webhook ─────────────────────────────────────────────────
+// Outrank POSTs published/updated articles here. Auth is a static Bearer token
+// (Authorization: Bearer <OUTRANK_WEBHOOK_TOKEN>). We schedule the upserts and
+// return 200 immediately; each upsert then re-hosts images out-of-band.
+type OutrankArticle = {
+  id?: string
+  title?: string
+  content_markdown?: string
+  content_html?: string
+  meta_description?: string
+  created_at?: string
+  image_url?: string
+  slug?: string
+  tags?: string[]
+}
+
+http.route({
+  path: '/webhooks/outrank',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const token = process.env.OUTRANK_WEBHOOK_TOKEN
+    if (!token) {
+      console.error('[webhooks/outrank] OUTRANK_WEBHOOK_TOKEN not set')
+      return new Response('Webhook token not configured', { status: 500 })
+    }
+    const auth = request.headers.get('authorization') ?? ''
+    if (!auth.startsWith('Bearer ') || auth.slice(7).trim() !== token) {
+      return new Response('Invalid access token', { status: 401 })
+    }
+
+    let body: { event_type?: string; data?: { articles?: OutrankArticle[]; article?: OutrankArticle } }
+    try {
+      body = await request.json()
+    } catch {
+      return new Response('Invalid JSON', { status: 400 })
+    }
+
+    const articles: OutrankArticle[] =
+      body.event_type === 'update_article'
+        ? body.data?.article
+          ? [body.data.article]
+          : []
+        : body.data?.articles ?? []
+
+    let scheduled = 0
+    for (const a of articles) {
+      const slug = a.slug?.trim()
+      const markdown = a.content_markdown ?? ''
+      if (!slug || !a.title || !markdown) continue // skip malformed rows
+      const publishedAt = a.created_at ? Date.parse(a.created_at) : Date.now()
+      await ctx.scheduler.runAfter(0, internal.blog.upsertFromOutrank, {
+        externalId: a.id,
+        slug,
+        title: a.title,
+        metaDescription: a.meta_description,
+        contentMarkdown: markdown,
+        heroImageUrl: a.image_url,
+        tags: a.tags,
+        publishedAt: Number.isFinite(publishedAt) ? publishedAt : Date.now(),
+      })
+      scheduled++
+    }
+
+    return new Response(JSON.stringify({ ok: true, scheduled }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }),
+})
+
+// ─── Dynamic sitemap (blog posts) ──────────────────────────────────────────
+// Served from Convex (the backend that owns the posts) and proxied on-domain
+// via Netlify (_redirects) so it lives at https://prodsnap.io/sitemap.xml.
+const SITE_ORIGIN = 'https://prodsnap.io'
+const STATIC_SITEMAP_PATHS = ['/', '/blog', '/pricing']
+
+http.route({
+  path: '/sitemap.xml',
+  method: 'GET',
+  handler: httpAction(async (ctx) => {
+    const posts = await ctx.runQuery(api.blog.listForSitemap, {})
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const urls = [
+      ...STATIC_SITEMAP_PATHS.map((p) => `<url><loc>${SITE_ORIGIN}${p}</loc></url>`),
+      ...posts.map(
+        (p) =>
+          `<url><loc>${esc(`${SITE_ORIGIN}/blog/${p.slug}`)}</loc>` +
+          `<lastmod>${new Date(p.updatedAt).toISOString()}</lastmod></url>`,
+      ),
+    ].join('')
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
+    return new Response(xml, {
+      status: 200,
+      headers: {
+        'content-type': 'application/xml; charset=utf-8',
+        'cache-control': 'public, max-age=3600',
       },
     })
   }),

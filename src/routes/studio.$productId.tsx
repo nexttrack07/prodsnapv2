@@ -608,13 +608,6 @@ function ProductHeader({
   })()
   const originalCount = originals.length
 
-  // Inspiration count for the tab badge. Reuses the same query key as the
-  // Inspiration panel, so react-query dedupes it — no extra backend cost.
-  const { data: inspirations } = useQuery(
-    convexQuery(api.productInspirations.listInspirationsForProduct, { productId }),
-  )
-  const inspirationCount = inspirations?.length ?? 0
-
   async function handleSaveName() {
     if (!editedName.trim()) return
     try {
@@ -726,32 +719,6 @@ function ProductHeader({
             }
           >
             Source images
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="inspiration"
-            leftSection={<Box visibleFrom="sm"><IconBookmark size={14} /></Box>}
-            rightSection={
-              inspirationCount > 0 ? (
-                <Badge size="xs" variant="light" color="gray" radius="sm">
-                  {inspirationCount}
-                </Badge>
-              ) : null
-            }
-          >
-            Inspiration
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="voice"
-            leftSection={<Box visibleFrom="sm"><IconBlockquote size={14} /></Box>}
-            rightSection={
-              (product.customerLanguage?.length ?? 0) > 0 ? (
-                <Badge size="xs" variant="light" color="gray" radius="sm">
-                  {product.customerLanguage!.length}
-                </Badge>
-              ) : null
-            }
-          >
-            Customer voice
           </Tabs.Tab>
         </Tabs.List>
 
@@ -869,28 +836,6 @@ function ProductHeader({
                       <StatusBadge status={product.status} />
                     </Group>
                   </Box>
-
-                  <Link
-                    to="/studio/$productId/strategy"
-                    params={{ productId: product._id }}
-                    style={{
-                      textDecoration: 'none',
-                      color: 'var(--mantine-color-brand-4)',
-                      fontSize: 14,
-                      fontWeight: 500,
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Group gap={4}>
-                      Strategy
-                      {anglesCount > 0 && (
-                        <Badge size="xs" variant="light" color="brand" radius="sm">
-                          {anglesCount}
-                        </Badge>
-                      )}
-                      <IconArrowRight size={14} />
-                    </Group>
-                  </Link>
                 </Group>
 
                 {product.productDescription && (
@@ -961,18 +906,6 @@ function ProductHeader({
             </Group>
           </Tabs.Panel>
 
-          {/* ── Inspiration ──────────────────────────────────────────── */}
-          <Tabs.Panel value="inspiration">
-            <InspirationRow productId={productId} onNewAd={onNewAd} />
-          </Tabs.Panel>
-
-          {/* ── Customer voice ───────────────────────────────────────── */}
-          <Tabs.Panel value="voice">
-            <CustomerVoiceSection
-              productId={productId}
-              customerLanguage={product.customerLanguage ?? []}
-            />
-          </Tabs.Panel>
         </Paper>
       </Tabs>
 

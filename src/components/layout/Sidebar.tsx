@@ -44,7 +44,6 @@ const PRIMARY_NAV: ReadonlyArray<NavItem> = [
   { to: '/templates', icon: IconSparkles, label: 'Templates' },
   { to: '/ad-tests', icon: IconFlask2, label: 'Ad tests' },
   { to: '/library', icon: IconLibrary, label: 'Library' },
-  { to: '/account/brand', icon: IconBrush, label: 'Brand kit' },
 ]
 
 // Admin nav is included only when publicMetadata.role === 'admin'. This is

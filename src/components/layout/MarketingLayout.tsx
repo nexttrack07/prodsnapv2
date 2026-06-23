@@ -74,6 +74,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
                   <NavLink to="/" hash="pricing" onClick={handlePricingClick}>
                     Pricing
                   </NavLink>
+                  <NavLink to="/blog">Blog</NavLink>
                 </Group>
               </Group>
               <Group gap="md">
@@ -84,7 +85,14 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
                       Sign In
                     </Button>
                   </SignInButton>
-                  <Button component={Link} to="/onboarding" size="sm" color="brand">
+                  <Button
+                    onClick={() => {
+                      window.location.href =
+                        '/sign-up?redirect_url=' + encodeURIComponent('/onboarding?starter=1')
+                    }}
+                    size="sm"
+                    color="brand"
+                  >
                     Start free
                   </Button>
                 </Unauthenticated>
@@ -138,11 +146,16 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
           >
             Pricing
           </MobileNavLink>
+          <MobileNavLink to="/blog" onClick={closeMobileNav}>
+            Blog
+          </MobileNavLink>
           <Unauthenticated>
             <Button
-              component={Link}
-              to="/onboarding"
-              onClick={closeMobileNav}
+              onClick={() => {
+                closeMobileNav()
+                window.location.href =
+                  '/sign-up?redirect_url=' + encodeURIComponent('/onboarding?starter=1')
+              }}
               color="brand"
               fullWidth
               mt="xs"
