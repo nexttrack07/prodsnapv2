@@ -168,6 +168,55 @@ test('renameAdTest trims and updates the name; rejects empty and non-owners', as
   ).rejects.toThrow(/not found/i)
 })
 
+// ─── deleteGeneration (ad-test aware) ────────────────────────────────────────
+
+test('deleteGeneration recomputes the parent ad test counters + status', async () => {
+  const t = convexTest(schema, modules)
+  const productId = await seedProduct(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+  const adTestId = await asUser.mutation(api.adTests.createDraft, {
+    ...baseDraftArgs(productId),
+    name: 'Counters',
+  })
+
+  // Two complete creatives; the first is a winner. Simulate a generated test.
+  const gens = await t.run(async (ctx) => {
+    const ids: Id<'templateGenerations'>[] = []
+    for (let i = 0; i < 2; i++) {
+      ids.push(
+        await ctx.db.insert('templateGenerations', {
+          productId,
+          userId: USER,
+          productImageUrl: 'https://example.com/p.png',
+          mode: 'angle',
+          colorAdapt: false,
+          variationIndex: i,
+          status: 'complete',
+          adTestId,
+          adUnitIndex: i,
+          outputUrl: 'https://cdn.example.com/o.png',
+          isWinner: i === 0,
+        }),
+      )
+    }
+    await ctx.db.patch(adTestId, {
+      plannedImageCount: 2,
+      completedImageCount: 2,
+      winnerCount: 1,
+      status: 'ready',
+    })
+    return ids
+  })
+
+  await asUser.mutation(api.products.deleteGeneration, { generationId: gens[0] })
+
+  const adTest = await t.run((ctx) => ctx.db.get(adTestId))
+  expect(adTest!.plannedImageCount).toBe(1) // one fewer planned
+  expect(adTest!.completedImageCount).toBe(1)
+  expect(adTest!.winnerCount).toBe(0) // deleted creative was the winner
+  expect(adTest!.status).toBe('ready') // remaining one is complete
+})
+
 // ─── listForProduct ────────────────────────────────────────────────────────────
 
 test('listForProduct returns owned tests newest-first and filters archived', async () => {

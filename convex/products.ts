@@ -954,7 +954,45 @@ export const deleteGeneration = mutation({
       }
     }
 
+    const adTestId = generation.adTestId
     await ctx.db.delete(generationId)
+
+    // If this creative belonged to an Ad Test, keep the test's planned counter,
+    // completed/failed/winner counters and status consistent with the remaining
+    // children (mirrors updateCountersForGeneration + setStatusFromChildren).
+    if (adTestId) {
+      const adTest = await ctx.db.get(adTestId)
+      if (adTest) {
+        const children = await ctx.db
+          .query('templateGenerations')
+          .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+          .take(500)
+        let completed = 0
+        let failed = 0
+        let winners = 0
+        let inFlight = 0
+        for (const g of children) {
+          if (g.status === 'complete') completed++
+          else if (g.status === 'failed') failed++
+          else inFlight++
+          if (g.isWinner) winners++
+        }
+        let status: typeof adTest.status = adTest.status
+        if (children.length === 0) status = 'draft'
+        else if (inFlight > 0) status = 'generating'
+        else if (failed === 0) status = 'ready'
+        else if (completed === 0) status = 'failed'
+        else status = 'partially_failed'
+        await ctx.db.patch(adTestId, {
+          plannedImageCount: Math.max(0, adTest.plannedImageCount - 1),
+          completedImageCount: completed,
+          failedImageCount: failed,
+          winnerCount: winners,
+          status,
+          updatedAt: Date.now(),
+        })
+      }
+    }
   },
 })
 

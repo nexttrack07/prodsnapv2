@@ -52,6 +52,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
+import { modals } from '@mantine/modals'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { downloadZipFromUrl } from '../../utils/exportAdTest'
@@ -125,6 +126,8 @@ export function AdTestReviewView({
   const { mutateAsync: updateCopy } = useMutation({ mutationFn: updateCopyMutation })
   const deleteCopyMutation = useConvexMutation(api.adTests.deleteCopySuggestion)
   const { mutateAsync: deleteCopy } = useMutation({ mutationFn: deleteCopyMutation })
+  const deleteGenMutation = useConvexMutation(api.products.deleteGeneration)
+  const { mutateAsync: deleteGeneration } = useMutation({ mutationFn: deleteGenMutation })
   const renameMutation = useConvexMutation(api.adTests.renameAdTest)
   const { mutateAsync: renameAdTest } = useMutation({ mutationFn: renameMutation })
 
@@ -224,6 +227,31 @@ export function AdTestReviewView({
         message: err instanceof Error ? err.message : 'Could not delete',
       })
     }
+  }
+
+  const handleDeleteCreative = (genId: Id<'templateGenerations'>) => {
+    modals.openConfirmModal({
+      title: 'Delete creative?',
+      children: (
+        <Text size="sm" c="dark.2">
+          This permanently removes the generated image from this test. It can't
+          be undone (re-generating costs credits).
+        </Text>
+      ),
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        if (selectedCreativeId === genId) setSelectedCreativeId(null)
+        try {
+          await deleteGeneration({ generationId: genId })
+        } catch (err) {
+          notifications.show({
+            color: 'red',
+            message: err instanceof Error ? err.message : 'Could not delete',
+          })
+        }
+      },
+    })
   }
 
   if (isLoading) {
@@ -439,6 +467,7 @@ export function AdTestReviewView({
                     if (selectedCreativeId !== gen._id) preloadPairing(gen)
                   }}
                   onExpand={() => onOpenAd(gen._id)}
+                  onDelete={() => handleDeleteCreative(gen._id)}
                   onToggleWinner={() =>
                     toggleWinner(
                       { generationId: gen._id },
@@ -699,6 +728,7 @@ function CreativeCard({
   onSelect,
   onExpand,
   onToggleWinner,
+  onDelete,
 }: {
   gen: {
     _id: Id<'templateGenerations'>
@@ -713,6 +743,7 @@ function CreativeCard({
   onSelect: () => void
   onExpand: () => void
   onToggleWinner: () => void
+  onDelete: () => void
 }) {
   const ratio = ASPECT_RATIO_VALUE[gen.aspectRatio ?? '1:1'] ?? 1
   const isComplete = gen.status === 'complete' && !!gen.outputUrl
@@ -803,7 +834,36 @@ function CreativeCard({
           >
             <IconMaximize size={14} />
           </ActionIcon>
+          <ActionIcon
+            size="sm"
+            variant="filled"
+            color="dark"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            aria-label="Delete creative"
+          >
+            <IconTrash size={14} color="var(--mantine-color-red-5)" />
+          </ActionIcon>
         </Group>
+      )}
+
+      {/* Failed creatives still need a way to be removed. */}
+      {isFailed && (
+        <ActionIcon
+          size="sm"
+          variant="filled"
+          color="dark"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+          aria-label="Delete creative"
+          style={{ position: 'absolute', bottom: 6, right: 6 }}
+        >
+          <IconTrash size={14} color="var(--mantine-color-red-5)" />
+        </ActionIcon>
       )}
     </Paper>
   )
