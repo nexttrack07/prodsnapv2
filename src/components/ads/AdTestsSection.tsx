@@ -7,10 +7,14 @@
  */
 import { useQuery } from 'convex/react'
 import {
+  AspectRatio,
   Badge,
   Box,
   Button,
+  Center,
   Group,
+  Image,
+  Loader,
   Paper,
   SimpleGrid,
   Skeleton,
@@ -18,7 +22,7 @@ import {
   Text,
   Title,
 } from '@mantine/core'
-import { IconFlask2, IconPlus, IconTrophy } from '@tabler/icons-react'
+import { IconFlask2, IconPhoto, IconPlus, IconTrophy } from '@tabler/icons-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 
@@ -144,11 +148,11 @@ function AdTestCard({ test, onOpen }: { test: TestRow; onOpen: () => void }) {
   return (
     <Paper
       radius="md"
-      p="md"
       withBorder
       onClick={onOpen}
       style={{
         cursor: 'pointer',
+        overflow: 'hidden',
         borderColor: 'var(--mantine-color-dark-6)',
         background: 'rgba(255,255,255,0.02)',
         transition: 'border-color 120ms ease, background-color 120ms ease',
@@ -162,7 +166,9 @@ function AdTestCard({ test, onOpen }: { test: TestRow; onOpen: () => void }) {
         },
       }}
     >
-      <Stack gap={6}>
+      <CreativeMosaic urls={test.previewUrls} pending={test.pendingCount} />
+
+      <Stack gap={6} p="md">
         <Group justify="space-between" wrap="nowrap" align="flex-start">
           <Text fw={600} c="white" truncate style={{ minWidth: 0 }}>
             {test.name}
@@ -188,5 +194,52 @@ function AdTestCard({ test, onOpen }: { test: TestRow; onOpen: () => void }) {
         </Group>
       </Stack>
     </Paper>
+  )
+}
+
+// A compact 2×2 photo mosaic of a test's creatives (winners first), preserving
+// the gallery feel while organizing creatives by test. Falls back to a
+// placeholder for a draft / still-generating test.
+function CreativeMosaic({ urls, pending }: { urls: string[]; pending: number }) {
+  if (urls.length === 0) {
+    return (
+      <Center h={150} style={{ background: 'var(--mantine-color-dark-7)' }}>
+        <Stack align="center" gap={6}>
+          {pending > 0 ? (
+            <>
+              <Loader size="sm" color="brand" />
+              <Text size="xs" c="dark.3">
+                Generating {pending}…
+              </Text>
+            </>
+          ) : (
+            <>
+              <IconPhoto size={26} color="var(--mantine-color-dark-3)" />
+              <Text size="xs" c="dark.4">
+                No creatives yet
+              </Text>
+            </>
+          )}
+        </Stack>
+      </Center>
+    )
+  }
+
+  if (urls.length === 1) {
+    return (
+      <AspectRatio ratio={16 / 9} style={{ background: 'var(--mantine-color-dark-7)' }}>
+        <Image src={urls[0]} alt="" style={{ objectFit: 'cover' }} />
+      </AspectRatio>
+    )
+  }
+
+  return (
+    <SimpleGrid cols={2} spacing={2} style={{ background: 'var(--mantine-color-dark-7)' }}>
+      {urls.slice(0, 4).map((u, i) => (
+        <AspectRatio key={i} ratio={1}>
+          <Image src={u} alt="" style={{ objectFit: 'cover' }} />
+        </AspectRatio>
+      ))}
+    </SimpleGrid>
   )
 }

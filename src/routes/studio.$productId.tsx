@@ -500,37 +500,9 @@ function ProductWorkspacePage() {
         />
       )}
 
-      {!isAdTestReview && view === 'gallery' && (
-        <GalleryView
-          product={product}
-          productId={productId as Id<'products'>}
-          primaryImageUrl={primaryImageUrl}
-          legacyImageUrl={product?.imageUrl}
-          completedGenerations={completedGenerations}
-          pendingGenerations={pendingGenerations}
-          onGenerateMore={handleNewAdTest}
-          creditsExhausted={creditsExhausted}
-          activeAdId={
-            (search.ad ?? null) as Id<'templateGenerations'> | null
-          }
-          onOpenAd={(id) =>
-            navigate({
-              to: '/studio/$productId',
-              params: { productId },
-              search: { ...search, ad: id as string },
-            })
-          }
-          onCloseAd={() => {
-            const { ad: _omit, ...rest } = search
-            navigate({
-              to: '/studio/$productId',
-              params: { productId },
-              search: rest,
-              replace: true,
-            })
-          }}
-        />
-      )}
+      {/* The flat "all generations" grid was removed: creatives now live inside
+          their ad test (each test card on the product page shows its own photo
+          mosaic). Past standalone generations remain browsable in /library. */}
 
       {!isAdTestReview && view === 'generate' && (
         <GenerateWizard

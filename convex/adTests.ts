@@ -185,7 +185,31 @@ export const listForProduct = query({
 
     // Defense in depth: the product is owned, but filter by userId anyway so a
     // shared productId can never surface another user's test.
-    return tests.filter((t) => t.userId === userId)
+    const owned = tests.filter((t) => t.userId === userId)
+
+    // Attach a few creative thumbnails per test so the product page can show
+    // each test as a photo mosaic (winners first). Typical products have a
+    // handful of tests, so the per-test fan-out is small.
+    return await Promise.all(
+      owned.map(async (t) => {
+        const gens = await ctx.db
+          .query('templateGenerations')
+          .withIndex('by_adTestId', (q) => q.eq('adTestId', t._id))
+          .take(30)
+        const complete = gens
+          .filter((g) => g.status === 'complete' && !!g.outputUrl)
+          .sort((a, b) => Number(!!b.isWinner) - Number(!!a.isWinner))
+        const pending = gens.filter(
+          (g) => g.status !== 'complete' && g.status !== 'failed',
+        ).length
+        return {
+          ...t,
+          previewUrls: complete.slice(0, 4).map((g) => g.outputUrl as string),
+          completeCount: complete.length,
+          pendingCount: pending,
+        }
+      }),
+    )
   },
 })
 
