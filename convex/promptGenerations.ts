@@ -146,7 +146,7 @@ export const submitPromptGeneration = mutation({
       })
       await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, {
         generationId,
-      })
+      }, { startAsync: true })
     }
 
     return { ok: true, count }

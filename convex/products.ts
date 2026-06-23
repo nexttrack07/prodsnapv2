@@ -1208,7 +1208,7 @@ export const generateFromProduct = mutation({
         // Start the generation workflow
         await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
           generationId: genId,
-        })
+        }, { startAsync: true })
       }
     }
 
@@ -1569,7 +1569,7 @@ export const generateVariations = mutation({
       // Start the variation workflow
       await workflow.start(ctx, internal.studio.generateVariationWorkflow, {
         generationId: genId,
-      })
+      }, { startAsync: true })
     }
 
     return { ok: true, generationIds }

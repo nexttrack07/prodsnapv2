@@ -50,6 +50,7 @@ import {
   IconMoodSmile,
   IconX,
   IconTrash,
+  IconClock,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
@@ -748,6 +749,9 @@ function CreativeCard({
   const ratio = ASPECT_RATIO_VALUE[gen.aspectRatio ?? '1:1'] ?? 1
   const isComplete = gen.status === 'complete' && !!gen.outputUrl
   const isFailed = gen.status === 'failed'
+  // 'queued' = accepted but waiting for a generation slot (capped by the
+  // workflow pool); 'running'/'uploading' = fal is actively working on it.
+  const isQueued = gen.status === 'queued'
   const isPaired = !!gen.selectedCopySetId
 
   return (
@@ -770,6 +774,15 @@ function CreativeCard({
         ) : isFailed ? (
           <Center>
             <Text size="xs" c="red.4">Failed</Text>
+          </Center>
+        ) : isQueued ? (
+          <Center>
+            <Stack align="center" gap={6}>
+              <IconClock size={16} color="var(--mantine-color-dark-3)" />
+              <Text size="10px" c="dark.4" ta="center" px="xs">
+                Queued
+              </Text>
+            </Stack>
           </Center>
         ) : (
           <Center>

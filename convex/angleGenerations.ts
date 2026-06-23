@@ -122,7 +122,7 @@ export const submitAngleGeneration = mutation({
       })
       await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, {
         generationId,
-      })
+      }, { startAsync: true })
     }
 
     return { ok: true, count }

@@ -20,7 +20,20 @@ import {
 import { requireCredits } from './lib/billing/credits'
 import { enforceGenerationRateLimit, recordGenerationUsage } from './products'
 
-export const workflow = new WorkflowManager(components.workflow)
+// Global cap on how many generation workflow steps run concurrently. This is
+// what bounds simultaneous fal.ai calls (and blocking Convex actions): when more
+// generations are started than this, the extras wait in the workflow pool's
+// queue with status 'queued' instead of all running at once — which is what makes
+// the "queued vs generating" UI accurate AND prevents a burst from exhausting
+// Convex's action concurrency limit.
+//
+// Tune toward your fal.ai account's concurrency limit (self-serve 2→40) so a
+// 'running' row reflects work fal is actually processing rather than work queued
+// at fal. Start conservative; raise once the fal limit is confirmed.
+const GENERATION_MAX_PARALLELISM = 8
+export const workflow = new WorkflowManager(components.workflow, {
+  workpoolOptions: { maxParallelism: GENERATION_MAX_PARALLELISM },
+})
 export const imageGenPool = new Workpool(components.imageGenPool, {
   maxParallelism: 5,
   retryActionsByDefault: true,
@@ -438,13 +451,13 @@ export const retryGeneration = mutation({
       await ctx.db.patch(gen.adTestId, { status: 'generating', updatedAt: Date.now() })
     }
     if (gen.variationSource) {
-      await workflow.start(ctx, internal.studio.generateVariationWorkflow, { generationId })
+      await workflow.start(ctx, internal.studio.generateVariationWorkflow, { generationId }, { startAsync: true })
     } else if (gen.mode === 'prompt') {
-      await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, { generationId })
+      await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, { generationId }, { startAsync: true })
     } else if (gen.mode === 'angle') {
-      await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, { generationId })
+      await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, { generationId }, { startAsync: true })
     } else {
-      await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, { generationId })
+      await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, { generationId }, { startAsync: true })
     }
   },
 })
