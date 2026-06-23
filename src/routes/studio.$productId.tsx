@@ -507,7 +507,7 @@ function ProductWorkspacePage() {
           legacyImageUrl={product?.imageUrl}
           completedGenerations={completedGenerations}
           pendingGenerations={pendingGenerations}
-          onGenerateMore={() => setView('generate')}
+          onGenerateMore={handleNewAdTest}
           creditsExhausted={creditsExhausted}
           activeAdId={
             (search.ad ?? null) as Id<'templateGenerations'> | null
@@ -1040,18 +1040,10 @@ function ProductHeader({
         </Paper>
       </Tabs>
 
-      {/* "New ad" stays below the tabs so it's always reachable. */}
-      <Group justify="flex-end" gap="sm" mt="md" mb="xl">
-        <Button
-          color="brand"
-          size="md"
-          leftSection={<IconPlus size={16} />}
-          disabled={creditsExhausted || product.status !== 'ready'}
-          onClick={onNewAd}
-        >
-          New ad
-        </Button>
-      </Group>
+      {/* Generation is ad-test-centric now: the "Ad tests" section below is the
+          single entry point ("New ad test"). The old standalone "New ad" button
+          was removed to avoid a competing "generate ad" vs "generate ad test"
+          CTA on the same page. */}
 
       <ImageEnhancerModal
         opened={activeImage !== null}
@@ -2374,7 +2366,8 @@ function GalleryView({
               <IconSparkles size={48} style={{ color: 'var(--mantine-color-brand-5)', marginBottom: 16 }} />
               <Title order={3} fz="lg" fw={600} c="white" mb={8}>Ready when you are</Title>
               <Text c="dark.2" mb="xl" maw={400} mx="auto">
-                Pick ad templates above, hit <strong>Generate Ads</strong>, and new variations will appear here in under a minute.
+                Start an ad test, pick a few templates, and your creatives will
+                appear here in under a minute.
               </Text>
               <Button
                 onClick={onGenerateMore}
@@ -2389,7 +2382,7 @@ function GalleryView({
                   },
                 }}
               >
-                Generate Ads
+                New ad test
               </Button>
             </>
           )}
@@ -3720,7 +3713,9 @@ function GenerateWizard({
               Back
             </Group>
           </Anchor>
-          <Text fw={600} size="lg" c="white">Create ad</Text>
+          <Text fw={600} size="lg" c="white">
+            {adTestId ? 'Generate creatives' : 'Create ad'}
+          </Text>
         </Group>
         <Group gap="xs" wrap="wrap">
           {hasTemplates && (
