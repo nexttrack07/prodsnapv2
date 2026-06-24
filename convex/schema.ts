@@ -192,6 +192,62 @@ const schema = defineSchema({
     sceneDescription: v.optional(v.string()),
     embedding: v.optional(v.array(v.float64())), // @deprecated - not used, kept for existing data
     aiTagsRaw: v.optional(v.any()),
+    // ─── Template Intelligence (deep extraction) ──────────────────────────
+    // One nested object populated by the ingest workflow (Passes A/B/C). The
+    // flat tag fields above are kept for back-compat + filtering; this holds
+    // the richer media-buyer analysis used by the recommendation/compose
+    // layers. Optional + best-effort: a row can be published with flat tags
+    // even if this is absent (a flaky reasoning-model call must not block the
+    // library).
+    intelligence: v.optional(
+      v.object({
+        look: v.object({
+          visibleText: v.object({
+            headline: v.optional(v.string()),
+            subheadline: v.optional(v.string()),
+            body: v.optional(v.string()),
+            badge: v.optional(v.string()),
+            cta: v.optional(v.string()),
+          }),
+          productPlacement: v.optional(v.string()),
+          humanPresence: v.optional(v.string()),
+          negativeSpace: v.optional(v.string()),
+          safeZones: v.optional(v.array(v.string())),
+        }),
+        strategy: v.object({
+          angle: v.object({
+            title: v.string(),
+            insight: v.string(),
+            angleType: v.optional(v.string()),
+          }),
+          hook: v.string(),
+          creativeConcept: v.string(),
+          targetBuyer: v.string(),
+          claims: v.array(v.string()),
+          cta: v.optional(v.string()),
+          proofType: v.optional(v.string()),
+          emotionalDriver: v.optional(v.string()),
+          funnelStage: v.optional(v.string()),
+          buyerAwareness: v.optional(v.string()),
+          bestFor: v.object({
+            productCategories: v.array(v.string()),
+            badFitCategories: v.array(v.string()),
+            neededAssets: v.array(v.string()),
+          }),
+        }),
+        adaptation: v.object({
+          creativeArchetype: v.string(),
+          coreMechanic: v.string(),
+          adaptationInstructions: v.string(),
+          productSubstitutionRules: v.array(v.string()),
+          preserve: v.array(v.string()),
+          avoid: v.array(v.string()),
+        }),
+        reverseEngineeredPrompt: v.string(),
+        extractedAt: v.number(),
+        modelVersion: v.optional(v.string()),
+      }),
+    ),
     ingestError: v.optional(v.string()),
     // ─── Custom (user-uploaded) templates ─────────────────────────────────
     // Curated library rows leave ownerUserId undefined. When set, the row is a

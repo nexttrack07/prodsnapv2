@@ -33,10 +33,32 @@ export type TemplateContext = {
   moods?: string[]
   sceneDescription?: string
   aspectRatio?: '1:1' | '4:5' | '9:16' | '16:9'
+  // ─── Template Intelligence (Phase 5: folded into the composed prompt) ──────
+  // Surfaced straight off the adTemplates doc (getGenerationContextInternal
+  // returns the full row via ctx.db.get, so no projection change is needed in
+  // studio.ts). Optional + back-compatible: older templates and angle-only
+  // generations have no `intelligence`, in which case composePrompt behaves
+  // exactly as before. Only the sub-fields the composer actually reads are
+  // typed here (the adaptation block + the reverse-engineered prompt); the rest
+  // of the schema's `intelligence` object is intentionally omitted.
+  intelligence?: {
+    adaptation?: {
+      creativeArchetype: string
+      coreMechanic: string
+      adaptationInstructions: string
+      productSubstitutionRules: string[]
+      preserve: string[]
+      avoid: string[]
+    }
+    reverseEngineeredPrompt?: string
+  }
 }
 
 // Model constants
 const VISION_MODEL = 'google/gemini-2.5-flash'
+// Higher-reasoning model for the strategy + adaptation passes (a senior
+// media-buyer analysis that needs more reasoning than the visual classifier).
+const REASONING_MODEL = 'google/gemini-2.5-pro'
 
 // ─── Structured Tag Taxonomy ──────────────────────────────────────────────
 // Each category requires exactly ONE selection - enables structured filtering
@@ -138,10 +160,11 @@ async function callVision(opts: {
   imageUrls: string[]
   prompt: string
   systemPrompt?: string
+  model?: string
 }): Promise<string> {
   const result = await fal.subscribe('openrouter/router/vision', {
     input: {
-      model: VISION_MODEL,
+      model: opts.model ?? VISION_MODEL,
       image_urls: opts.imageUrls,
       prompt: opts.prompt,
       system_prompt: opts.systemPrompt,
@@ -158,10 +181,11 @@ async function callVision(opts: {
 async function callText(opts: {
   prompt: string
   systemPrompt?: string
+  model?: string
 }): Promise<string> {
   const result = await fal.subscribe('openrouter/router', {
     input: {
-      model: VISION_MODEL,
+      model: opts.model ?? VISION_MODEL,
       prompt: opts.prompt,
       system_prompt: opts.systemPrompt,
       temperature: 0.3,
@@ -189,7 +213,10 @@ export const callTextInternal = internalAction({
 })
 
 // ─── Helper: Parse JSON from LLM response ──────────────────────────────────
-function parseJsonFromResponse<T>(response: string, schema: z.ZodType<T>): T {
+function parseJsonFromResponse<S extends z.ZodTypeAny>(
+  response: string,
+  schema: S,
+): z.infer<S> {
   // Try to extract JSON from markdown code blocks or raw JSON
   let jsonStr = response.trim()
 
@@ -712,6 +739,31 @@ const structuredTagsSchema = z.object({
   angleType: z.enum(ANGLE_TYPES).optional(),
   // Legacy fields for backward compatibility
   moods: z.array(z.enum(AD_MOODS)).min(1).max(3),
+  // ─── Template Intelligence: the "look" (Pass A, vision/Flash) ─────────────
+  // What is literally on the image: visible copy (read directly off the
+  // image, no separate OCR pass), where the product sits, whether a human is
+  // present, and where the negative space / safe zones are. Lenient: every
+  // sub-field optional so a partial read never fails the whole classification.
+  look: z
+    .object({
+      visibleText: z
+        .object({
+          headline: z.string().optional(),
+          subheadline: z.string().optional(),
+          body: z.string().optional(),
+          badge: z.string().optional(),
+          cta: z.string().optional(),
+        })
+        .default({}),
+      productPlacement: z.string().optional(),
+      humanPresence: z.string().optional(),
+      negativeSpace: z.string().optional(),
+      safeZones: z.array(z.string()).optional(),
+    })
+    // Defaults a missing "look" to a concrete object so the parsed output is
+    // always present (not optional) — the workflow always has a `tags.look` to
+    // read from, even if the model omitted it.
+    .default({ visibleText: {} }),
 })
 
 export const computeTemplateTags = internalAction({
@@ -730,6 +782,18 @@ export const computeTemplateTags = internalAction({
         subcategory: 'test-product',
         sceneDescription: 'A clean studio shot with soft lighting and minimal props for testing purposes.',
         moods: ['minimal' as const],
+        look: {
+          visibleText: {
+            headline: 'Test Headline',
+            subheadline: 'Test subheadline',
+            badge: 'NEW',
+            cta: 'Shop Now',
+          },
+          productPlacement: 'centered, lower third',
+          humanPresence: 'none',
+          negativeSpace: 'top half is open',
+          safeZones: ['top-center for headline'],
+        },
       }
     }
 
@@ -749,10 +813,25 @@ Return a JSON object with these EXACT fields:
   "subcategory": "<specific product type like 'serum', 'protein powder', or null>",
   "sceneDescription": "<2-3 SHORT sentences about lighting, props, and framing - max 100 words>",
   "angleType": "<optional — one of: comparison, curiosity-narrative, social-proof, problem-callout — only include if you are confident this template clearly aligns with one of these high-converting angle types>",
-  "moods": ["<1-3 moods from: ${AD_MOODS.join(', ')}>"]
+  "moods": ["<1-3 moods from: ${AD_MOODS.join(', ')}>"],
+  "look": {
+    "visibleText": {
+      "headline": "<the largest/primary text rendered ON the image, verbatim, or omit if none>",
+      "subheadline": "<secondary supporting line of text, verbatim, or omit>",
+      "body": "<smaller body/benefit copy or feature bullets, verbatim, or omit>",
+      "badge": "<any badge/sticker/flag text e.g. 'NEW', '50% OFF', 'BESTSELLER', or omit>",
+      "cta": "<any call-to-action button/label text e.g. 'Shop Now', or omit>"
+    },
+    "productPlacement": "<where the product sits in the frame, e.g. 'centered, lower third' or omit>",
+    "humanPresence": "<describe any person/hands/face shown, or 'none'>",
+    "negativeSpace": "<where the empty/low-detail areas are, e.g. 'top half is open' or omit>",
+    "safeZones": ["<regions where new text/product could be placed without clutter, e.g. 'top-center for headline'>"]
+  }
 }
 
-CRITICAL: Pick EXACTLY ONE value from each category. angleType is optional — omit it rather than guess. Return ONLY the JSON object.`,
+Read any text DIRECTLY off the image for the "look.visibleText" fields — transcribe it verbatim, do not summarize. Omit a sub-field entirely if that text is not present (do not invent it).
+
+CRITICAL: Pick EXACTLY ONE value from each enum category. angleType is optional — omit it rather than guess. Return ONLY the JSON object.`,
       systemPrompt: `You are a visual ad classifier for product photography templates. Your job is to categorize ad images with STRUCTURED tags that enable filtering and search.
 
 CRITICAL RULES:
@@ -772,6 +851,195 @@ For example: A collage IS an imageStyle. The composition of a collage might be "
     })
 
     return parseJsonFromResponse(response, structuredTagsSchema)
+  },
+})
+
+// ─── Template Intelligence: Pass B — strategy (reasoning model) ─────────────
+// A "senior media buyer reviewing this ad" extraction: WHY this creative was
+// built the way it is and who it's for. Lenient schema so a slightly-off LLM
+// response doesn't fail the whole (best-effort) pass.
+const templateStrategySchema = z.object({
+  angle: z.object({
+    title: z.string().min(1),
+    insight: z.string().min(1),
+    angleType: z.string().optional(),
+  }),
+  hook: z.string().min(1),
+  creativeConcept: z.string().min(1),
+  targetBuyer: z.string().min(1),
+  // Arrays default to [] when the LLM omits them; parsed output is always a
+  // concrete string[] (matches the required Convex validator).
+  claims: z.array(z.string()).default([]),
+  cta: z.string().optional(),
+  proofType: z.string().optional(),
+  emotionalDriver: z.string().optional(),
+  funnelStage: z.string().optional(),
+  buyerAwareness: z.string().optional(),
+  bestFor: z.object({
+    productCategories: z.array(z.string()).default([]),
+    badFitCategories: z.array(z.string()).default([]),
+    neededAssets: z.array(z.string()).default([]),
+  }),
+})
+
+export type TemplateStrategy = z.infer<typeof templateStrategySchema>
+
+export const computeTemplateStrategy = internalAction({
+  args: { imageUrl: v.string() },
+  handler: async (_ctx, { imageUrl }): Promise<TemplateStrategy> => {
+    if (isTestMode()) {
+      await mockDelay()
+      return {
+        angle: {
+          title: 'Premium without the price tag',
+          insight:
+            'Targets value-conscious buyers who still want a premium feel; reframes price as smart-money, not cheap.',
+          angleType: 'comparison',
+        },
+        hook: 'Premium feel, mid-range price — the version people in the know switched to.',
+        creativeConcept:
+          'Clean hero shot pairs the product with a bold value claim and a small badge to anchor credibility.',
+        targetBuyer: 'Budget-aware shoppers who research before buying and resent overpaying for branding.',
+        claims: ['Premium quality', 'Better price than name brands'],
+        cta: 'Shop Now',
+        proofType: 'comparison',
+        emotionalDriver: 'smart-shopper pride',
+        funnelStage: 'consideration',
+        buyerAwareness: 'product-aware',
+        bestFor: {
+          productCategories: ['electronics', 'home', 'beauty'],
+          badFitCategories: ['luxury', 'baby'],
+          neededAssets: ['clean product photo', 'a value claim'],
+        },
+      }
+    }
+
+    const response = await callVision({
+      model: REASONING_MODEL,
+      imageUrls: [imageUrl],
+      prompt: `You are reviewing this ad creative as a senior media buyer. Reverse-engineer the STRATEGY behind it — not what it looks like, but why it was built this way and who it converts.
+
+Return a JSON object with these EXACT fields:
+
+{
+  "angle": {
+    "title": "<short label for the core marketing angle, 3-6 words>",
+    "insight": "<1-2 sentences: the buyer insight / psychological lever this angle pulls and why it works>",
+    "angleType": "<optional — one of: comparison, curiosity-narrative, social-proof, problem-callout — omit if unclear>"
+  },
+  "hook": "<the single strongest hook this ad uses (or implies) to stop the scroll>",
+  "creativeConcept": "<1-2 sentences naming the creative concept/format and how it carries the angle>",
+  "targetBuyer": "<who this ad is built to convert — their situation, motivation, objection>",
+  "claims": ["<each distinct claim/promise the ad makes, as a short phrase>"],
+  "cta": "<the call to action, or omit>",
+  "proofType": "<what kind of proof it leans on: social-proof, comparison, demonstration, authority, none, etc. — or omit>",
+  "emotionalDriver": "<the dominant emotion it taps: fear-of-missing-out, status, relief, pride, curiosity, etc. — or omit>",
+  "funnelStage": "<top / consideration / conversion — or omit>",
+  "buyerAwareness": "<unaware / problem-aware / solution-aware / product-aware / most-aware — or omit>",
+  "bestFor": {
+    "productCategories": ["<product categories this template's strategy fits well>"],
+    "badFitCategories": ["<categories where this strategy would NOT translate>"],
+    "neededAssets": ["<what a user would need to reuse this strategy, e.g. 'a before/after pair', 'a customer quote', 'a clean product cutout'>"]
+  }
+}
+
+Be concrete and specific. Ground everything in what you can actually infer from THIS creative. Return ONLY the JSON object, no other text.`,
+      systemPrompt:
+        'You are a senior DTC media buyer who has launched thousands of Meta ad creatives. You can look at any ad and reverse-engineer the strategic intent: the angle, the hook, the buyer, the objection it overcomes, and the proof it uses. You think in terms of what makes an ad convert, not what it looks like. Return strict JSON only.',
+    })
+
+    return parseJsonFromResponse(response, templateStrategySchema)
+  },
+})
+
+// ─── Template Intelligence: Pass C — adaptation (reasoning model) ───────────
+// The most important pass. Takes Pass A (look) + Pass B (strategy) as text
+// context so it reasons coherently about HOW to reuse this template for a
+// DIFFERENT product while preserving WHY it converts (the core mechanic).
+const templateAdaptationSchema = z.object({
+  adaptation: z.object({
+    creativeArchetype: z.string().min(1),
+    coreMechanic: z.string().min(1),
+    adaptationInstructions: z.string().min(1),
+    productSubstitutionRules: z.array(z.string()).default([]),
+    preserve: z.array(z.string()).default([]),
+    avoid: z.array(z.string()).default([]),
+  }),
+  reverseEngineeredPrompt: z.string().min(1),
+})
+
+export type TemplateAdaptation = z.infer<typeof templateAdaptationSchema>
+
+export const computeTemplateAdaptation = internalAction({
+  args: {
+    imageUrl: v.string(),
+    strategyJson: v.string(),
+    lookJson: v.string(),
+  },
+  handler: async (
+    _ctx,
+    { imageUrl, strategyJson, lookJson },
+  ): Promise<TemplateAdaptation> => {
+    if (isTestMode()) {
+      await mockDelay()
+      return {
+        adaptation: {
+          creativeArchetype: 'value-comparison hero',
+          coreMechanic:
+            'It converts by reframing price as a smart trade-off: the buyer feels clever for getting premium quality without overpaying. That framing — not the specific product — is what must survive when reused.',
+          adaptationInstructions:
+            'Swap in the user\'s product as the hero. Keep the value-claim badge and the clean composition. Rewrite the headline to make the same smart-money promise about the user\'s product category.',
+          productSubstitutionRules: [
+            "Replace the hero product with the user's product, matched to the same camera angle and lighting.",
+            'If a generic-competitor element is shown, make it a GENERIC version of the USER\'s own product category, not the source template\'s category.',
+          ],
+          preserve: ['the value-claim badge', 'the clean centered composition', 'the smart-money framing'],
+          avoid: ['inventing fake discounts', 'cluttering the open negative space', 'changing the core smart-shopper angle'],
+        },
+        reverseEngineeredPrompt:
+          'A clean studio hero shot of {PRODUCT}, centered in the lower third, with a bold value-claim badge top-right and a short smart-money headline in the open top half, soft diffused lighting, premium-but-affordable mood.',
+      }
+    }
+
+    const response = await callVision({
+      model: REASONING_MODEL,
+      imageUrls: [imageUrl],
+      prompt: `You are reverse-engineering this ad template so it can be REUSED for a DIFFERENT product while keeping the reason it converts intact.
+
+You have two prior analyses of THIS template:
+
+--- LOOK (what is literally on the image) ---
+${lookJson}
+
+--- STRATEGY (why it converts, who for) ---
+${strategyJson}
+
+Return a JSON object with these EXACT fields:
+
+{
+  "adaptation": {
+    "creativeArchetype": "<a reusable name for this template's pattern, e.g. 'value-comparison hero', 'before/after split', 'testimonial card', 'feature-callout infographic'>",
+    "coreMechanic": "<THE most important field. In 2-3 sentences, explain WHY this ad converts — the strategic mechanism that MUST survive when the template is adapted to a different product. This is the part that is product-agnostic.>",
+    "adaptationInstructions": "<concrete step-by-step guidance for adapting this template to an arbitrary new product while preserving the core mechanic>",
+    "productSubstitutionRules": ["<rules for swapping the source product out for the user's product — see the comparison-table rule below>"],
+    "preserve": ["<elements that MUST be kept for the mechanic to work>"],
+    "avoid": ["<mistakes that would break the template's effectiveness>"]
+  },
+  "reverseEngineeredPrompt": "<a single image-generation prompt that recreates this template's structure with the product as a {PRODUCT} placeholder, so it can be re-rendered for any product>"
+}
+
+CRITICAL — productSubstitutionRules must handle relative/comparison elements correctly:
+- A "generic competitor" or "other brand" element in the template must become a GENERIC version of the USER's OWN product category, NOT the source template's category.
+  Example 1 (comparison table): source template compares a branded skincare cream vs a dull generic cream. If the user sells vitamin gummies, the rule must say: "the generic-competitor column becomes generic vitamin gummies (the user's category), and the hero column becomes the user's branded gummies" — it must NOT keep skincare cream on either side.
+  Example 2 (before/after): source shows messy hair → sleek hair. If the user sells a desk organizer, the before/after must become cluttered desk → organized desk, transforming the SAME mechanic (visible problem → visible result) onto the user's category.
+- Always anchor substitutions to the USER's product category, never the source template's category.
+
+Return ONLY the JSON object, no other text.`,
+      systemPrompt:
+        'You are a creative strategist who specializes in turning winning ad creatives into reusable, product-agnostic templates. You can isolate the strategic mechanism that makes an ad convert (the "core mechanic") from the specific product shown, and write precise rules for swapping in a new product — including correctly remapping any comparison or before/after elements to the new product\'s own category. Return strict JSON only.',
+    })
+
+    return parseJsonFromResponse(response, templateAdaptationSchema)
   },
 })
 
@@ -842,6 +1110,45 @@ export const composePrompt = internalAction({
         ].join('\n')
       : ''
 
+    // ─── Template Intelligence → adaptation guidance (Phase 5) ────────────────
+    // v1, deliberately LIVE: we read `template.intelligence` straight off the
+    // current template doc here in the composer rather than snapshotting it onto
+    // the generation row. This keeps the schema unchanged and means a re-run
+    // always uses the latest intelligence. (If template edits happening *during*
+    // an in-flight generation ever cause confusing drift, snapshotting the
+    // adaptation onto the generation row at enqueue time is the follow-up.)
+    //
+    // Additive + back-compatible: when a template has no intelligence (older
+    // rows, custom uploads, angle-only generations) `adaptation` is undefined and
+    // `adaptationContext` stays '', so the composed prompt is byte-for-byte
+    // identical to the pre-Phase-5 behavior.
+    const adaptation = template.intelligence?.adaptation
+    const adaptationContext = adaptation
+      ? [
+          'TEMPLATE ADAPTATION DIRECTIVE — this is the most important instruction. Do NOT blindly copy the template; ADAPT its proven mechanic to the user\'s actual product.',
+          '',
+          `Creative archetype: ${adaptation.creativeArchetype}`,
+          `Core mechanic (the strategic reason this ad converts — this MUST survive the adaptation, even as the product changes): ${adaptation.coreMechanic}`,
+          '',
+          `How to adapt: ${adaptation.adaptationInstructions}`,
+          adaptation.productSubstitutionRules.length
+            ? [
+                'Product substitution rules (apply ALL — these define how to swap the user\'s product into the template):',
+                ...adaptation.productSubstitutionRules.map((r) => `- ${r}`),
+                'IMPORTANT for comparison / before-after / "vs generic" archetypes: any generic or competitor element must become a GENERIC version of the USER\'s OWN product category — never the source template\'s category. The user\'s real product is always the hero/winning side.',
+              ].join('\n')
+            : null,
+          adaptation.preserve.length
+            ? ['PRESERVE exactly (do not alter — these carry the mechanic):', ...adaptation.preserve.map((p) => `- ${p}`)].join('\n')
+            : null,
+          adaptation.avoid.length
+            ? ['AVOID (do not do any of these):', ...adaptation.avoid.map((a) => `- ${a}`)].join('\n')
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : ''
+
     // Brand kit feeds the template path too, so a product tagged with a brand
     // gets its colors/voice/offer applied on every generation — not just in the
     // angle/prompt composers. (Keeps the "brand kit on every gen" promise true.)
@@ -869,6 +1176,11 @@ export const composePrompt = internalAction({
       '',
       templateContext || '(no template tags available)',
       '',
+      // Spread so that when the template has NO intelligence the array gets zero
+      // extra elements — the composed prompt is then byte-for-byte identical to
+      // the pre-Phase-5 output. When intelligence IS present we insert the
+      // directive block plus its own trailing blank-line separator.
+      ...(adaptationContext ? [adaptationContext, ''] : []),
       strategyContext
         ? `User-selected strategy context:\n${strategyContext}`
         : '(no selected angle or creative concept)',
