@@ -85,6 +85,20 @@ export function upgradeToHighResImageUrl(rawUrl: string): string {
     )
   }
 
+  // ── Amazon (media-amazon.com) ──────────────────────────────────────────
+  // Amazon encodes the requested size as a token between the image id and the
+  // extension: <id>._AC_SL1500_.jpg, <id>._SX466_.jpg, <id>._CR0,0,300,300_.jpg
+  // Stripping that token yields the original full-resolution image AND collapses
+  // the same photo served at many sizes into one URL, so size-variants stop
+  // eating candidate slots. The token always begins with "._" and never appears
+  // in the image id itself.
+  if (host === 'm.media-amazon.com' || host.endsWith('.media-amazon.com')) {
+    parsed.pathname = parsed.pathname.replace(
+      /\._[A-Za-z0-9_,-]+(?=\.[a-z]{2,4}$)/i,
+      '',
+    )
+  }
+
   // ── Cloudinary ─────────────────────────────────────────────────────────
   // Resize transform segments like /w_120,h_120,c_fill/ between path parts.
   // Host-scoped — these tokens are common enough (esp. w_/h_) that an

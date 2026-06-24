@@ -64,6 +64,11 @@ async function headSize(url: string): Promise<number | null> {
 // and let the picker show borderline candidates rather than guessing them away.
 const MIN_IMAGE_BYTES = 6_000
 
+// When trusted sources (gallery JSON + LLM + og:image) yield at least this many
+// images we skip the raw-HTML firehose entirely. Below it we fall back to the
+// firehose for recall — except on marketplaces, where the firehose is noise.
+const MIN_TRUSTED_IMAGES = 3
+
 type FirecrawlExtractedJson = {
   productName?: string
   productDescription?: string
@@ -282,36 +287,64 @@ export const runUrlImport = internalAction({
         const markdownImages = extractMarkdownImageUrls(scrapePayload.data.markdown ?? '')
         const htmlImages = extractHtmlImageUrls(scrapePayload.data.html ?? '')
         const shopifyImages = await fetchShopifyImages(importRow.sourceUrl)
+        const amazonImages = extractAmazonGalleryImages(scrapePayload.data.html ?? '')
 
-        // Order matters — we prioritize high-precision sources (Shopify API, LLM, og:image)
-        // then fall back to HTML-extracted candidates. uniqueValidImages
-        // handles the heavy lifting of ranking, deduping, and SVG cleanup.
-        const rawImageUrls = [
+        // Trusted sources understand page structure, so they return the real
+        // gallery without the page's related/sponsored/also-bought noise:
+        //   - Shopify .js + Amazon gallery JSON (deterministic, gallery-only)
+        //   - Firecrawl LLM extraction (instructed to skip nav/related)
+        //   - og:image (the page's declared hero)
+        const trusted = uniqueValidImages([
           ...shopifyImages,
+          ...amazonImages,
           ...(extracted.productImageUrls ?? []),
           ...(fallbackImage ? [fallbackImage] : []),
-          ...htmlImages,
-          ...markdownImages,
-        ]
-        const candidateImages = uniqueValidImages(rawImageUrls).slice(0, 12)
+        ])
+
+        // The raw-HTML/markdown firehose has the highest recall but also pulls
+        // in every unrelated image on the page. On a normal store we reach for
+        // it when trusted sources are thin; on a marketplace we reach for it
+        // ONLY if precise sources found nothing (otherwise it's pure related-
+        // product noise), and we strip known non-product namespaces.
+        const marketplace = isMarketplaceHost(importRow.sourceUrl)
+        const useRecall = marketplace
+          ? trusted.length === 0
+          : trusted.length < MIN_TRUSTED_IMAGES
+        const recall = useRecall
+          ? uniqueValidImages([...htmlImages, ...markdownImages]).filter(
+              (u) => !trusted.includes(u) && isLikelyProductImage(u),
+            )
+          : []
+
+        const candidateImages = [...trusted, ...recall].slice(0, 12)
+        // How many of the (capped) candidates are trusted. The picker
+        // pre-selects exactly these, so recall/noise candidates stay opt-in.
+        const trustedCandidateCount = Math.min(trusted.length, candidateImages.length)
         if (process.env.DEBUG_AI === 'true') {
           console.log(
-            `[urlImport ${importId}] image urls: raw=${rawImageUrls.length} ` +
-              `(llm=${(extracted.productImageUrls ?? []).length} ` +
-              `og=${fallbackImage ? 1 : 0} ` +
-              `markdown=${markdownImages.length} ` +
-              `html=${htmlImages.length}) ` +
-              `valid=${candidateImages.length} ` +
-              `rejected=${rawImageUrls.length - candidateImages.length}`,
+            `[urlImport ${importId}] image urls: ` +
+              `trusted=${trusted.length} (shopify=${shopifyImages.length} ` +
+              `amazon=${amazonImages.length} llm=${(extracted.productImageUrls ?? []).length} ` +
+              `og=${fallbackImage ? 1 : 0}) ` +
+              `recall=${recall.length} (used=${useRecall} marketplace=${marketplace}) ` +
+              `candidates=${candidateImages.length}`,
           )
         }
 
         if (candidateImages.length === 0) {
           // Surface the raw URLs we got so the user knows whether Firecrawl
           // returned page links instead of image links.
-          const sample = rawImageUrls.slice(0, 3).join(' | ')
+          const rawSeen = [
+            ...shopifyImages,
+            ...amazonImages,
+            ...(extracted.productImageUrls ?? []),
+            ...(fallbackImage ? [fallbackImage] : []),
+            ...htmlImages,
+            ...markdownImages,
+          ]
+          const sample = rawSeen.slice(0, 3).join(' | ')
           throw new Error(
-            rawImageUrls.length > 0
+            rawSeen.length > 0
               ? `No image URLs extracted — got page links instead of image files: ${sample}`
               : 'No product images could be extracted from this page',
           )
@@ -326,6 +359,10 @@ export const runUrlImport = internalAction({
         const uploadedUrls: string[] = []
         const uploadedKeys: string[] = []
         const uploadErrors: string[] = []
+        // Track how many SUCCESSFULLY-uploaded images were trusted. candidates
+        // are ordered trusted-first, so this is the count of uploaded URLs the
+        // picker should pre-select. (Skips/failures shrink it accordingly.)
+        let uploadedTrustedCount = 0
         for (let i = 0; i < candidateImages.length; i++) {
           const sourceUrl = candidateImages[i]
           // Quality floor: HEAD first; reject anything below MIN_IMAGE_BYTES
@@ -343,6 +380,7 @@ export const runUrlImport = internalAction({
             uploadedUrls.push(url)
             uploadedKeys.push(key)
             uploadedR2Keys.push(key)
+            if (i < trustedCandidateCount) uploadedTrustedCount++
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             uploadErrors.push(message)
@@ -416,6 +454,7 @@ export const runUrlImport = internalAction({
           distilledName: productName,
           uploadedImageUrls: uploadedUrls,
           uploadedImageKeys: uploadedKeys,
+          trustedImageCount: uploadedTrustedCount,
           ...(productReviewSnippets ? { distilledReviewSnippets: productReviewSnippets } : {}),
           ...(distilled.description ? { distilledDescription: distilled.description } : {}),
           ...(cleanPrice != null ? { distilledPrice: cleanPrice } : {}),
@@ -723,6 +762,64 @@ async function fetchShopifyImages(url: string): Promise<string[]> {
     /* ignore */
   }
   return []
+}
+
+// Marketplaces render dozens of unrelated product images (related items,
+// sponsored, "customers also bought", review photos) on the SAME image CDN as
+// the real gallery, with opaque hash URLs the firehose can't tell apart. For
+// these hosts we trust only high-precision sources and skip the firehose.
+const MARKETPLACE_HOST_RE =
+  /(^|\.)(amazon\.|amzn\.|ebay\.|etsy\.com|walmart\.com|aliexpress\.|temu\.com|target\.com|bestbuy\.com)/i
+
+function isMarketplaceHost(url: string): boolean {
+  try {
+    return MARKETPLACE_HOST_RE.test(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
+
+// Filters out marketplace chrome from a firehose fallback. Amazon serves
+// product photos under /images/I/ and nav/sprite/marketing assets under
+// /images/G/ — drop the latter. Non-Amazon URLs pass through unchanged.
+function isLikelyProductImage(url: string): boolean {
+  if (/\/images\/G\//.test(url)) return false
+  return true
+}
+
+// Amazon's main product gallery lives in `data-a-dynamic-image` attributes,
+// whose value is entity-encoded JSON mapping each size-variant URL → [w,h].
+// These attributes hold ONLY the primary product's gallery — related /
+// sponsored / "also-bought" carousels use plain <img> tags elsewhere — so
+// this is the Amazon equivalent of the Shopify .js trick: a high-precision,
+// gallery-only source needing no LLM. The shared size-token normalizer
+// (upgradeToHighResImageUrl) later collapses the size variants to one URL
+// per photo.
+//
+// NOTE: Firecrawl returns the HTML entity-encoded (quotes are &quot;), so we
+// match the product-image namespace (/images/I/) inside each attribute value
+// rather than trying to JSON-parse it.
+function extractAmazonGalleryImages(html: string): string[] {
+  if (!html) return []
+  const out: string[] = []
+  // Product-image URLs: media-amazon.com/images/I/<id>...<.ext>. Stop at the
+  // entity/quote/whitespace delimiters that bound a URL in the encoded JSON.
+  const urlRe =
+    /https:\/\/[a-z0-9.-]*media-amazon\.com\/images\/I\/[^"'&\\\s]+\.(?:jpg|jpeg|png|webp)/gi
+  const attrRe = /data-a-dynamic-image=(?:"([^"]*)"|'([^']*)')/gi
+  let m: RegExpExecArray | null
+  while ((m = attrRe.exec(html)) !== null) {
+    const value = m[1] || m[2] || ''
+    const urls = value.match(urlRe)
+    if (urls) out.push(...urls)
+  }
+  // Fallback: hiRes URLs from the legacy image-block JSON (also entity-encoded),
+  // skipping *VideoImageUrl keys, in case a layout omits data-a-dynamic-image.
+  if (out.length === 0) {
+    const hiResRe = /&quot;hiRes&quot;\s*:\s*&quot;(https?:[^&]+)&quot;/gi
+    while ((m = hiResRe.exec(html)) !== null) out.push(m[1])
+  }
+  return out
 }
 
 // ─── LLM distillation ─────────────────────────────────────────────────────
