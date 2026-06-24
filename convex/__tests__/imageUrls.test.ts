@@ -85,6 +85,47 @@ describe('upgradeToHighResImageUrl', () => {
     })
   })
 
+  describe('Amazon (media-amazon.com)', () => {
+    it('strips the _AC_SL1500_ size token', () => {
+      expect(
+        upgradeToHighResImageUrl(
+          'https://m.media-amazon.com/images/I/71AbC123._AC_SL1500_.jpg',
+        ),
+      ).toBe('https://m.media-amazon.com/images/I/71AbC123.jpg')
+    })
+
+    it('strips an _SX466_ token', () => {
+      expect(
+        upgradeToHighResImageUrl(
+          'https://m.media-amazon.com/images/I/61XyZ987._SX466_.jpg',
+        ),
+      ).toBe('https://m.media-amazon.com/images/I/61XyZ987.jpg')
+    })
+
+    it('strips a _CR0,0,300,300_ crop token (with commas)', () => {
+      expect(
+        upgradeToHighResImageUrl(
+          'https://m.media-amazon.com/images/I/71AbC123._CR0,0,300,300_.jpg',
+        ),
+      ).toBe('https://m.media-amazon.com/images/I/71AbC123.jpg')
+    })
+
+    it('collapses size-variants of the same photo to one URL (dedup)', () => {
+      const a = upgradeToHighResImageUrl(
+        'https://m.media-amazon.com/images/I/71AbC123._AC_SL1500_.jpg',
+      )
+      const b = upgradeToHighResImageUrl(
+        'https://m.media-amazon.com/images/I/71AbC123._AC_SX679_.jpg',
+      )
+      expect(a).toBe(b)
+    })
+
+    it('leaves a token-free Amazon URL unchanged', () => {
+      const input = 'https://m.media-amazon.com/images/I/71AbC123.jpg'
+      expect(upgradeToHighResImageUrl(input)).toBe(input)
+    })
+  })
+
   describe('Cloudinary', () => {
     it('strips resize transform segments (upload mode)', () => {
       expect(

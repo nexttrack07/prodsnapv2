@@ -671,6 +671,11 @@ const schema = defineSchema({
     distilledCurrency: v.optional(v.string()),
     distilledReviewSnippets: v.optional(v.array(v.string())),
     uploadedImageUrls: v.optional(v.array(v.string())), // R2 URLs after upload
+    // How many of the leading uploadedImageUrls came from high-trust sources
+    // (Amazon/Shopify gallery JSON, LLM extraction, og:image) rather than the
+    // raw-HTML firehose. The picker pre-selects this many so noisy candidates
+    // appear unchecked / opt-in.
+    trustedImageCount: v.optional(v.number()),
     // R2 storage keys for everything we uploaded under this import. Used by
     // discardUrlImport to clean up R2 objects when the user cancels without
     // saving. Includes both product images and the optional brand logo.

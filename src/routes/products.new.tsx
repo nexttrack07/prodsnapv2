@@ -16,7 +16,7 @@
  */
 
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAction, useQuery } from 'convex/react'
 import { useConvexMutation } from '@convex-dev/react-query'
 import { useMutation } from '@tanstack/react-query'
@@ -114,7 +114,11 @@ function NewProductPage() {
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [name, setName] = useState('')
+  // imageUrls = the images attached to the product (what Save commits).
+  // candidateUrls = every image scraped from the import; the ones not in
+  // imageUrls are offered in the "More photos" strip for the user to opt into.
   const [imageUrls, setImageUrls] = useState<string[]>([])
+  const [candidateUrls, setCandidateUrls] = useState<string[]>([])
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<string | null>(null)
   const [price, setPrice] = useState<number | string>('')
@@ -145,6 +149,10 @@ function NewProductPage() {
   ]
 
   // ── React to URL import status + autofill form from distilled fields ──────
+  // The autofill runs exactly once (autofilledRef) so it never clobbers edits
+  // the user makes afterwards (removing an image, adding one from the "More
+  // photos" strip) when the import row re-queries.
+  const autofilledRef = useRef(false)
   useEffect(() => {
     if (!importRow) return
 
@@ -155,6 +163,8 @@ function NewProductPage() {
     }
 
     if (importRow.status !== 'done') return
+    if (autofilledRef.current) return
+    autofilledRef.current = true
 
     // Autofill form from distilled fields stored on the import row
     if (importRow.distilledName) setName(importRow.distilledName)
@@ -167,7 +177,14 @@ function NewProductPage() {
     }
     if (importRow.distilledAiNotes) setAiNotes(importRow.distilledAiNotes)
     if (Array.isArray(importRow.uploadedImageUrls) && importRow.uploadedImageUrls.length > 0) {
-      setImageUrls(importRow.uploadedImageUrls)
+      const all = importRow.uploadedImageUrls
+      setCandidateUrls(all)
+      // Pre-select only the high-trust images (gallery JSON / LLM / og:image).
+      // Recall-firehose candidates stay unselected in the "More photos" strip
+      // so unrelated images are opt-in, not auto-attached. When the backend
+      // didn't record a count (older imports), fall back to keeping all.
+      const trusted = importRow.trustedImageCount ?? all.length
+      setImageUrls(all.slice(0, Math.max(0, Math.min(trusted, all.length))))
     }
   }, [importRow])
 
@@ -284,6 +301,10 @@ function NewProductPage() {
   const canSubmit = name.trim().length > 0 && imageUrls.length > 0 && brandChosen
   const fieldsDisabled = isImporting
 
+  // Scraped images we deliberately left unselected (recall-firehose candidates
+  // on non-marketplace pages). Offered as opt-in tiles below the main grid.
+  const moreCandidates = candidateUrls.filter((u) => !imageUrls.includes(u))
+
   return (
     <Container size="md" py="xl">
       <Stack gap="xl">
@@ -375,7 +396,11 @@ function NewProductPage() {
 
             {importRow?.status === 'done' && (
               <Alert color="green" title="Import complete" radius="md">
-                <Text size="sm">Fields filled from the imported page — review and click Save.</Text>
+                <Text size="sm">
+                  Fields filled from the imported page. We pre-selected the product
+                  photos we're confident about — review them, remove any you don't
+                  want, and add more below if needed.
+                </Text>
               </Alert>
             )}
           </Stack>
@@ -537,6 +562,50 @@ function NewProductPage() {
               </Dropzone>
             </Group>
           </Stack>
+
+          {/* More photos from this page — recall candidates we left out to
+              avoid pulling in unrelated images. Tap to add to the product. */}
+          {moreCandidates.length > 0 && (
+            <Stack gap="xs">
+              <Text size="sm" fw={500} c="white">
+                More photos from this page{' '}
+                <Text span size="xs" c="dark.2">
+                  (we left these out to avoid unrelated images — tap to add)
+                </Text>
+              </Text>
+              <Group gap="sm" wrap="wrap" align="flex-start">
+                {moreCandidates.map((url) => (
+                  <Box
+                    key={url}
+                    onClick={() => setImageUrls((prev) => [...prev, url])}
+                    style={{
+                      position: 'relative',
+                      width: 88,
+                      height: 88,
+                      borderRadius: 'var(--mantine-radius-md)',
+                      overflow: 'hidden',
+                      border: '2px dashed var(--mantine-color-dark-4)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Image
+                      src={url}
+                      alt="Additional scraped image"
+                      w={88}
+                      h={88}
+                      fit="cover"
+                      style={{ opacity: 0.55 }}
+                    />
+                    <Box style={{ position: 'absolute', top: 4, right: 4 }}>
+                      <ThemeIcon size={20} radius="sm" color="brand" variant="filled" style={{ opacity: 0.9 }}>
+                        <IconPlus size={11} />
+                      </ThemeIcon>
+                    </Box>
+                  </Box>
+                ))}
+              </Group>
+            </Stack>
+          )}
 
           {/* Brand — explicit choice required at creation when the user has
               brands. Determines whose colors / voice every ad for this product

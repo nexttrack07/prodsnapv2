@@ -224,6 +224,7 @@ export const saveDistilledResults = internalMutation({
     distilledReviewSnippets: v.optional(v.array(v.string())),
     uploadedImageUrls: v.array(v.string()),
     uploadedImageKeys: v.optional(v.array(v.string())),
+    trustedImageCount: v.optional(v.number()),
   },
   handler: async (ctx, { importId, ...patch }) => {
     await ctx.db.patch(importId, patch)
