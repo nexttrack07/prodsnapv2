@@ -6,10 +6,16 @@ import {
   query,
 } from './_generated/server'
 import { components, internal } from './_generated/api'
+import type { TemplateStrategy, TemplateAdaptation } from './ai'
 import { WorkflowManager } from '@convex-dev/workflow'
 import { logAdminAction, requireAdminIdentity } from './lib/admin/requireAdmin'
 
 export const workflow = new WorkflowManager(components.workflow)
+
+// Mirrors REASONING_MODEL in ai.ts. Duplicated (not imported) because ai.ts is
+// a `'use node'` module and importing from it into this (default-runtime)
+// mutations file would drag the Node action runtime in. Keep in sync.
+const REASONING_MODEL_VERSION = 'google/gemini-2.5-pro'
 
 // ─── Writes used by the ingestion workflow ────────────────────────────────
 export const markIngesting = internalMutation({
@@ -51,6 +57,68 @@ export const saveTemplateAnalysis = internalMutation({
   },
 })
 
+// Validator for the nested Template Intelligence object. Kept here next to the
+// mutation that writes it; mirrors the `adTemplates.intelligence` shape in
+// schema.ts. `extractedAt` is stamped by the caller (workflow handler).
+const intelligenceValidator = v.object({
+  look: v.object({
+    visibleText: v.object({
+      headline: v.optional(v.string()),
+      subheadline: v.optional(v.string()),
+      body: v.optional(v.string()),
+      badge: v.optional(v.string()),
+      cta: v.optional(v.string()),
+    }),
+    productPlacement: v.optional(v.string()),
+    humanPresence: v.optional(v.string()),
+    negativeSpace: v.optional(v.string()),
+    safeZones: v.optional(v.array(v.string())),
+  }),
+  strategy: v.object({
+    angle: v.object({
+      title: v.string(),
+      insight: v.string(),
+      angleType: v.optional(v.string()),
+    }),
+    hook: v.string(),
+    creativeConcept: v.string(),
+    targetBuyer: v.string(),
+    claims: v.array(v.string()),
+    cta: v.optional(v.string()),
+    proofType: v.optional(v.string()),
+    emotionalDriver: v.optional(v.string()),
+    funnelStage: v.optional(v.string()),
+    buyerAwareness: v.optional(v.string()),
+    bestFor: v.object({
+      productCategories: v.array(v.string()),
+      badFitCategories: v.array(v.string()),
+      neededAssets: v.array(v.string()),
+    }),
+  }),
+  adaptation: v.object({
+    creativeArchetype: v.string(),
+    coreMechanic: v.string(),
+    adaptationInstructions: v.string(),
+    productSubstitutionRules: v.array(v.string()),
+    preserve: v.array(v.string()),
+    avoid: v.array(v.string()),
+  }),
+  reverseEngineeredPrompt: v.string(),
+  extractedAt: v.number(),
+  modelVersion: v.optional(v.string()),
+})
+
+export const saveTemplateIntelligence = internalMutation({
+  args: {
+    templateId: v.id('adTemplates'),
+    intelligence: intelligenceValidator,
+  },
+  handler: async (ctx, { templateId, intelligence }) => {
+    if (!(await ctx.db.get(templateId))) return
+    await ctx.db.patch(templateId, { intelligence })
+  },
+})
+
 export const markIngestFailed = internalMutation({
   args: { templateId: v.id('adTemplates'), error: v.string() },
   handler: async (ctx, { templateId, error }) => {
@@ -65,7 +133,45 @@ export const ingestTemplateWorkflow = workflow.define({
   handler: async (step, { templateId, imageUrl }) => {
     await step.runMutation(internal.templates.markIngesting, { templateId })
     try {
+      // ─── Pass A (vision/Flash): flat visual tags + the on-image "look".
+      // Required: if this fails, the template can't be classified at all, so
+      // we fall through to markIngestFailed (current behavior).
       const tags = await step.runAction(internal.ai.computeTemplateTags, { imageUrl })
+
+      // ─── Passes B + C (reasoning model): best-effort. A flaky Pro call must
+      // NOT block the library — we still publish with flat tags below. We only
+      // write the `intelligence` object when BOTH strategy (B) and adaptation
+      // (C) succeed, because the schema requires both. Pass C is also gated on
+      // B succeeding, since it reasons over B's output.
+      let strategy: TemplateStrategy | null = null
+      try {
+        strategy = await step.runAction(internal.ai.computeTemplateStrategy, { imageUrl })
+      } catch (err) {
+        console.error(
+          `[ingestTemplateWorkflow] template ${templateId}: strategy pass (B) failed, publishing with flat tags only: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
+      }
+
+      let adaptation: TemplateAdaptation | null = null
+      if (strategy) {
+        try {
+          adaptation = await step.runAction(internal.ai.computeTemplateAdaptation, {
+            imageUrl,
+            strategyJson: JSON.stringify(strategy),
+            lookJson: JSON.stringify(tags.look),
+          })
+        } catch (err) {
+          console.error(
+            `[ingestTemplateWorkflow] template ${templateId}: adaptation pass (C) failed, publishing with flat tags only: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          )
+        }
+      }
+
+      // Always save flat tags + publish (back-compat, library availability).
       await step.runMutation(internal.templates.saveTemplateAnalysis, {
         templateId,
         // Structured tags (exactly ONE per category)
@@ -82,6 +188,41 @@ export const ingestTemplateWorkflow = workflow.define({
         moods: [...tags.moods],
         aiTagsRaw: tags,
       })
+
+      // Store the deep intelligence only when both reasoning passes landed
+      // (the schema requires strategy + adaptation). If either failed we skip
+      // this write — the template is still published with flat tags above.
+      if (strategy && adaptation) {
+        await step.runMutation(internal.templates.saveTemplateIntelligence, {
+          templateId,
+          intelligence: {
+            look: {
+              visibleText: {
+                headline: tags.look.visibleText?.headline,
+                subheadline: tags.look.visibleText?.subheadline,
+                body: tags.look.visibleText?.body,
+                badge: tags.look.visibleText?.badge,
+                cta: tags.look.visibleText?.cta,
+              },
+              productPlacement: tags.look.productPlacement,
+              humanPresence: tags.look.humanPresence,
+              negativeSpace: tags.look.negativeSpace,
+              safeZones: tags.look.safeZones,
+            },
+            strategy,
+            adaptation: adaptation.adaptation,
+            reverseEngineeredPrompt: adaptation.reverseEngineeredPrompt,
+            // Date.now() is fine here: this is a workflow.define handler running
+            // server-side (not a Workflow *script*), so it's allowed.
+            extractedAt: Date.now(),
+            modelVersion: REASONING_MODEL_VERSION,
+          },
+        })
+      } else {
+        console.warn(
+          `[ingestTemplateWorkflow] template ${templateId}: published with flat tags but WITHOUT intelligence (strategy=${!!strategy}, adaptation=${!!adaptation}).`,
+        )
+      }
     } catch (err) {
       await step.runMutation(internal.templates.markIngestFailed, {
         templateId,
@@ -92,6 +233,148 @@ export const ingestTemplateWorkflow = workflow.define({
 })
 
 // ─── Public entry points ──────────────────────────────────────────────────
+
+// Partial validator for updateTemplateIntelligence — all sub-objects and leaf
+// fields are optional so the admin can patch individual fields without
+// resubmitting the full intelligence object.
+const partialIntelligenceValidator = v.object({
+  look: v.optional(
+    v.object({
+      visibleText: v.optional(
+        v.object({
+          headline: v.optional(v.string()),
+          subheadline: v.optional(v.string()),
+          body: v.optional(v.string()),
+          badge: v.optional(v.string()),
+          cta: v.optional(v.string()),
+        }),
+      ),
+      productPlacement: v.optional(v.string()),
+      humanPresence: v.optional(v.string()),
+      negativeSpace: v.optional(v.string()),
+      safeZones: v.optional(v.array(v.string())),
+    }),
+  ),
+  strategy: v.optional(
+    v.object({
+      angle: v.optional(
+        v.object({
+          title: v.optional(v.string()),
+          insight: v.optional(v.string()),
+          angleType: v.optional(v.string()),
+        }),
+      ),
+      hook: v.optional(v.string()),
+      creativeConcept: v.optional(v.string()),
+      targetBuyer: v.optional(v.string()),
+      claims: v.optional(v.array(v.string())),
+      cta: v.optional(v.string()),
+      proofType: v.optional(v.string()),
+      emotionalDriver: v.optional(v.string()),
+      funnelStage: v.optional(v.string()),
+      buyerAwareness: v.optional(v.string()),
+      bestFor: v.optional(
+        v.object({
+          productCategories: v.optional(v.array(v.string())),
+          badFitCategories: v.optional(v.array(v.string())),
+          neededAssets: v.optional(v.array(v.string())),
+        }),
+      ),
+    }),
+  ),
+  adaptation: v.optional(
+    v.object({
+      creativeArchetype: v.optional(v.string()),
+      coreMechanic: v.optional(v.string()),
+      adaptationInstructions: v.optional(v.string()),
+      productSubstitutionRules: v.optional(v.array(v.string())),
+      preserve: v.optional(v.array(v.string())),
+      avoid: v.optional(v.array(v.string())),
+    }),
+  ),
+  reverseEngineeredPrompt: v.optional(v.string()),
+})
+
+/**
+ * Admin mutation to partially update a template's intelligence object.
+ * Deep-merges the provided partial intelligence over the existing value so
+ * the admin can edit individual fields without resubmitting everything.
+ */
+export const updateTemplateIntelligence = mutation({
+  args: {
+    templateId: v.id('adTemplates'),
+    intelligence: partialIntelligenceValidator,
+  },
+  handler: async (ctx, { templateId, intelligence }) => {
+    const adminUserId = await requireAdminIdentity(ctx)
+    const existing = await ctx.db.get(templateId)
+    if (!existing) throw new Error('Template not found')
+
+    const base = existing.intelligence
+    // The schema requires a full intelligence object (look/strategy/adaptation/
+    // reverseEngineeredPrompt/extractedAt all present). This partial-edit path
+    // only ever produces a valid object by spreading an existing `base`; with no
+    // base, `merged` would be missing required fields (e.g. extractedAt) and the
+    // patch would throw. Editing requires intelligence to exist first.
+    if (!base) {
+      throw new Error(
+        'Template has no intelligence to edit yet — run Re-analyze first.',
+      )
+    }
+
+    // Deep-merge: each top-level section (look, strategy, adaptation) is
+    // merged individually so a partial update to strategy.angle doesn't wipe
+    // strategy.hook, and so on.
+    const merged = {
+      ...base,
+      ...(intelligence.look !== undefined
+        ? {
+            look: {
+              ...base?.look,
+              ...intelligence.look,
+              visibleText: {
+                ...base?.look?.visibleText,
+                ...intelligence.look.visibleText,
+              },
+            },
+          }
+        : {}),
+      ...(intelligence.strategy !== undefined
+        ? {
+            strategy: {
+              ...base?.strategy,
+              ...intelligence.strategy,
+              angle: {
+                ...base?.strategy?.angle,
+                ...intelligence.strategy.angle,
+              },
+              bestFor: {
+                ...base?.strategy?.bestFor,
+                ...intelligence.strategy.bestFor,
+              },
+            },
+          }
+        : {}),
+      ...(intelligence.adaptation !== undefined
+        ? {
+            adaptation: {
+              ...base?.adaptation,
+              ...intelligence.adaptation,
+            },
+          }
+        : {}),
+      ...(intelligence.reverseEngineeredPrompt !== undefined
+        ? { reverseEngineeredPrompt: intelligence.reverseEngineeredPrompt }
+        : {}),
+    }
+
+    await ctx.db.patch(templateId, { intelligence: merged as typeof existing.intelligence })
+    await logAdminAction(ctx, adminUserId, {
+      action: 'template.updateIntelligence',
+      targetId: templateId,
+    })
+  },
+})
 
 /**
  * Adds a single template to the library and kicks off ingestion (embed + tag).

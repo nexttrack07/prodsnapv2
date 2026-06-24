@@ -62,6 +62,7 @@ import type * as prompts from "../prompts.js";
 import type * as r2 from "../r2.js";
 import type * as studio from "../studio.js";
 import type * as templateGenerations from "../templateGenerations.js";
+import type * as templateRecommendations from "../templateRecommendations.js";
 import type * as templates from "../templates.js";
 import type * as testMocks from "../testMocks.js";
 import type * as testing_cleanup from "../testing/cleanup.js";
@@ -131,6 +132,7 @@ declare const fullApi: ApiFromModules<{
   r2: typeof r2;
   studio: typeof studio;
   templateGenerations: typeof templateGenerations;
+  templateRecommendations: typeof templateRecommendations;
   templates: typeof templates;
   testMocks: typeof testMocks;
   "testing/cleanup": typeof testing_cleanup;

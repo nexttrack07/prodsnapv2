@@ -1028,6 +1028,14 @@ type CreativeConcept = {
   opening: string
 }
 
+type RecommendedTemplateResult = {
+  templateId: Id<'adTemplates'>
+  reason: string
+  thumbnailUrl: string
+  imageUrl: string
+  aspectRatio: '1:1' | '4:5' | '9:16' | '16:9'
+}
+
 function buildCreativeConcepts(angle: RecommendedAngle): CreativeConcept[] {
   const style = angle.suggestedAdStyle || 'UGC-style product ad'
   const hook = angle.hook || `Why this ${angle.title.toLowerCase()} angle matters`
@@ -1075,12 +1083,57 @@ function RecommendedAnglesPanel({
   const selectedAngle = angles[selectedIndex] ?? angles[0]
   const concepts = selectedAngle ? buildCreativeConcepts(selectedAngle) : []
 
+  // ── Recommended templates (LLM action, computed on demand per angle) ──────
+  const recommendTemplates = useAction(api.templateRecommendations.recommendTemplatesForAngle)
+  const [recs, setRecs] = useState<RecommendedTemplateResult[]>([])
+  const [recsLoading, setRecsLoading] = useState(false)
+  const [recsError, setRecsError] = useState<string | null>(null)
+  const [recsTriedIndex, setRecsTriedIndex] = useState<number | null>(null)
+  // Guards against a stale response overwriting a newer angle's results.
+  const recsRequestRef = useRef(0)
+
+  const loadRecommendations = useCallback(
+    async (angleIndex: number) => {
+      if (angles.length === 0) return
+      const reqId = ++recsRequestRef.current
+      setRecsLoading(true)
+      setRecsError(null)
+      setRecsTriedIndex(angleIndex)
+      try {
+        const result = await recommendTemplates({ productId, angleIndex })
+        if (recsRequestRef.current !== reqId) return
+        setRecs(result)
+      } catch (err) {
+        if (recsRequestRef.current !== reqId) return
+        const info = mapGenerationError(err)
+        setRecsError(info.message)
+        setRecs([])
+      } finally {
+        if (recsRequestRef.current === reqId) setRecsLoading(false)
+      }
+    },
+    [angles.length, productId, recommendTemplates],
+  )
+
+  // Auto-run on angle select (and on first mount once angles exist).
+  useEffect(() => {
+    if (status !== 'ready') return
+    if (angles.length === 0) return
+    if (selectedIndex >= angles.length) return
+    loadRecommendations(selectedIndex)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIndex, status, angles.length])
+
   useEffect(() => {
     if (selectedIndex >= angles.length) setSelectedIndex(0)
   }, [angles.length, selectedIndex])
 
-  async function handleChooseTemplates(concept: CreativeConcept, conceptIndex: number) {
-    const key = `${selectedIndex}-${conceptIndex}`
+  async function handleChooseTemplates(
+    concept: CreativeConcept,
+    conceptIndex: number,
+    opts?: { templateId?: Id<'adTemplates'>; key?: string },
+  ) {
+    const key = opts?.key ?? `${selectedIndex}-${conceptIndex}`
     setCreatingKey(key)
     try {
       const adTestId = await createConceptTestMutation.mutateAsync({
@@ -1107,6 +1160,8 @@ function RecommendedAnglesPanel({
           compose: 'true',
           angle: String(selectedIndex),
           concept: String(conceptIndex),
+          // Deep-link the recommended template so GenerateView preselects it.
+          ...(opts?.templateId ? { template: opts.templateId as string } : {}),
         },
       })
     } catch (err) {
@@ -1122,6 +1177,17 @@ function RecommendedAnglesPanel({
     } finally {
       setCreatingKey(null)
     }
+  }
+
+  // Recommended template → same compose flow, with the template deep-linked.
+  // Uses the first creative concept for the angle context carried into the test.
+  async function handleChooseRecommendedTemplate(templateId: Id<'adTemplates'>) {
+    const concept = concepts[0]
+    if (!concept) return
+    await handleChooseTemplates(concept, 0, {
+      templateId,
+      key: `rec-${templateId}`,
+    })
   }
 
   if (status === 'analyzing') {
@@ -1327,6 +1393,131 @@ function RecommendedAnglesPanel({
                 </Paper>
               ))}
             </SimpleGrid>
+
+            {/* ── Recommended templates for this angle ──────────────────── */}
+            <Box>
+              <Group justify="space-between" align="center" mb="sm">
+                <Box>
+                  <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={4}>
+                    Recommended templates for this angle
+                  </Text>
+                  <Text size="xs" c="dark.2">
+                    AI-matched from the library based on this angle's strategy.
+                  </Text>
+                </Box>
+                {!recsLoading && recsTriedIndex === selectedIndex && (
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="gray"
+                    leftSection={<IconRefresh size={13} />}
+                    onClick={() => loadRecommendations(selectedIndex)}
+                  >
+                    Refresh
+                  </Button>
+                )}
+              </Group>
+
+              {recsLoading ? (
+                <SimpleGrid cols={{ base: 2, sm: 3, lg: 4 }} spacing="sm">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Stack key={i} gap={6}>
+                      <Skeleton radius="md" h={120} />
+                      <Skeleton radius="sm" h={10} w="80%" />
+                    </Stack>
+                  ))}
+                </SimpleGrid>
+              ) : recsError ? (
+                <Alert
+                  color="red"
+                  variant="light"
+                  icon={<IconAlertTriangle size={16} />}
+                >
+                  <Group justify="space-between" align="center" gap="sm">
+                    <Text size="sm">
+                      Couldn't load recommendations. {recsError}
+                    </Text>
+                    <Button
+                      size="compact-xs"
+                      variant="light"
+                      color="red"
+                      onClick={() => loadRecommendations(selectedIndex)}
+                    >
+                      Retry
+                    </Button>
+                  </Group>
+                </Alert>
+              ) : recs.length === 0 ? (
+                <Paper
+                  withBorder
+                  radius="md"
+                  p="md"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    borderColor: 'var(--mantine-color-dark-6)',
+                  }}
+                >
+                  <Text size="sm" c="dark.1">
+                    No template matches for this angle yet. Browse the full
+                    library from a concept above.
+                  </Text>
+                </Paper>
+              ) : (
+                <SimpleGrid cols={{ base: 2, sm: 3, lg: 4 }} spacing="sm">
+                  {recs.map((rec) => (
+                    <UnstyledButton
+                      key={rec.templateId as string}
+                      onClick={() => handleChooseRecommendedTemplate(rec.templateId)}
+                      disabled={creditsExhausted || creatingKey === `rec-${rec.templateId}`}
+                      style={{ height: '100%' }}
+                    >
+                      <Paper
+                        withBorder
+                        radius="md"
+                        p={0}
+                        h="100%"
+                        style={{
+                          overflow: 'hidden',
+                          background: 'rgba(255, 255, 255, 0.025)',
+                          borderColor: 'var(--mantine-color-dark-6)',
+                          opacity:
+                            creatingKey && creatingKey !== `rec-${rec.templateId}`
+                              ? 0.6
+                              : 1,
+                          transition: 'border-color 120ms ease',
+                        }}
+                      >
+                        <Box style={{ position: 'relative' }}>
+                          <AspectRatio ratio={1}>
+                            <Image
+                              src={rec.thumbnailUrl || rec.imageUrl}
+                              alt="Recommended template"
+                              fit="cover"
+                            />
+                          </AspectRatio>
+                          {creatingKey === `rec-${rec.templateId}` && (
+                            <Center
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                background: 'rgba(0,0,0,0.45)',
+                              }}
+                            >
+                              <Loader size="sm" color="brand" />
+                            </Center>
+                          )}
+                        </Box>
+                        <Box p="xs">
+                          <Text size="xs" c="dark.0" lh={1.4} lineClamp={3}>
+                            {rec.reason}
+                          </Text>
+                        </Box>
+                      </Paper>
+                    </UnstyledButton>
+                  ))}
+                </SimpleGrid>
+              )}
+            </Box>
           </Stack>
         </Paper>
       )}

@@ -22,9 +22,13 @@ import {
   Checkbox,
   Tooltip,
   Modal,
+  Textarea,
+  Divider,
+  Stack,
+  Collapse,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconUpload, IconRefresh, IconTrash, IconX, IconLoader2, IconCheck, IconAlertTriangle, IconClock } from '@tabler/icons-react'
+import { IconUpload, IconRefresh, IconTrash, IconX, IconLoader2, IconCheck, IconAlertTriangle, IconClock, IconChevronDown, IconChevronUp, IconDeviceFloppy } from '@tabler/icons-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { MAX_TEMPLATE_IMAGE_SIZE, getAspectRatioValue } from '../utils/constants'
@@ -41,6 +45,54 @@ const THUMBNAIL_MAX_EDGE = 512
 export const Route = createFileRoute('/admin/templates')({
   component: AdminTemplatesPage,
 })
+
+interface TemplateIntelligence {
+  look: {
+    visibleText: {
+      headline?: string
+      subheadline?: string
+      body?: string
+      badge?: string
+      cta?: string
+    }
+    productPlacement?: string
+    humanPresence?: string
+    negativeSpace?: string
+    safeZones?: string[]
+  }
+  strategy: {
+    angle: {
+      title: string
+      insight: string
+      angleType?: string
+    }
+    hook: string
+    creativeConcept: string
+    targetBuyer: string
+    claims: string[]
+    cta?: string
+    proofType?: string
+    emotionalDriver?: string
+    funnelStage?: string
+    buyerAwareness?: string
+    bestFor: {
+      productCategories: string[]
+      badFitCategories: string[]
+      neededAssets: string[]
+    }
+  }
+  adaptation: {
+    creativeArchetype: string
+    coreMechanic: string
+    adaptationInstructions: string
+    productSubstitutionRules: string[]
+    preserve: string[]
+    avoid: string[]
+  }
+  reverseEngineeredPrompt: string
+  extractedAt: number
+  modelVersion?: string
+}
 
 interface TemplateRow {
   _id: Id<'adTemplates'>
@@ -64,6 +116,8 @@ interface TemplateRow {
   sceneTypes?: string[]
   moods?: string[]
   ingestError?: string
+  // Template Intelligence (deep extraction)
+  intelligence?: TemplateIntelligence
 }
 
 // Tag category colors for visual organization
@@ -748,6 +802,7 @@ function TemplatesTable({
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<Id<'adTemplates'>>>(new Set())
   const [isRetagging, setIsRetagging] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<Id<'adTemplates'>>>(new Set())
   const [bulkDeleteModalOpened, { open: openBulkDeleteModal, close: closeBulkDeleteModal }] = useDisclosure(false)
   const [deleteModalOpened, { open: openDeleteModal, close: closeDeleteModal }] = useDisclosure(false)
   const [templateToDelete, setTemplateToDelete] = useState<Id<'adTemplates'> | null>(null)
@@ -861,6 +916,18 @@ function TemplatesTable({
       })
     }
   }, [rows, retaggingIds])
+
+  function toggleExpanded(id: Id<'adTemplates'>) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
 
   function toggleSelect(id: Id<'adTemplates'>) {
     setSelectedIds((prev) => {
@@ -1066,7 +1133,7 @@ function TemplatesTable({
                 onClick={retagSelected}
                 loading={isRetagging}
               >
-                Re-tag Selected
+                Re-analyze Selected
               </Button>
               <Button
                 size="xs"
@@ -1224,56 +1291,86 @@ function TemplatesTable({
                 {/* Show placeholder text for templates without tags */}
                 {t.status === 'failed' && !hasStructuredTags(t) && !hasLegacyTags(t) && (
                   <Text size="xs" c="dark.4" fs="italic" mb={8}>
-                    Tagging failed — click Re-tag to retry
+                    Analysis failed — click Re-analyze to retry
                   </Text>
                 )}
                 {t.status === 'published' && !hasStructuredTags(t) && hasLegacyTags(t) && (
                   <Text size="xs" c="dark.4" fs="italic" mb={8}>
-                    Legacy tags — re-tag for structured categories
+                    Legacy tags — re-analyze for structured categories and intelligence
                   </Text>
                 )}
-                <Group justify="flex-end" gap={8} mt={4}>
+                <Group justify="space-between" gap={8} mt={4}>
+                  {/* Intelligence toggle */}
                   <Button
                     size="xs"
-                    variant="light"
-                    color="gray"
-                    leftSection={<IconRefresh size={14} />}
-                    onClick={() =>
-                      retryMutation.mutate(
-                        { id: t._id },
-                        {
-                          onSuccess: (result) => {
-                            if (result?.skipped) {
-                              notifications.show({
-                                title: 'Already running',
-                                message:
-                                  'This template is already being analyzed — re-tag skipped.',
-                                color: 'yellow',
-                                autoClose: 3000,
-                              })
-                            }
-                          },
-                        },
-                      )
+                    variant="subtle"
+                    color="brand"
+                    leftSection={
+                      expandedIds.has(t._id)
+                        ? <IconChevronUp size={13} />
+                        : <IconChevronDown size={13} />
                     }
-                    loading={retryMutation.isPending}
+                    onClick={() => toggleExpanded(t._id)}
                   >
-                    Re-tag
+                    {expandedIds.has(t._id) ? 'Hide intelligence' : 'View intelligence'}
                   </Button>
-                  <Button
-                    size="xs"
-                    variant="light"
-                    color="red"
-                    leftSection={<IconTrash size={14} />}
-                    onClick={() => {
-                      setTemplateToDelete(t._id)
-                      openDeleteModal()
-                    }}
-                    loading={deleteMutation.isPending}
-                  >
-                    Delete
-                  </Button>
+                  <Group gap={8}>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="gray"
+                      leftSection={<IconRefresh size={14} />}
+                      onClick={() =>
+                        retryMutation.mutate(
+                          { id: t._id },
+                          {
+                            onSuccess: (result) => {
+                              if (result?.skipped) {
+                                notifications.show({
+                                  title: 'Already running',
+                                  message:
+                                    'This template is already being analyzed — re-analyze skipped.',
+                                  color: 'yellow',
+                                  autoClose: 3000,
+                                })
+                              }
+                            },
+                          },
+                        )
+                      }
+                      loading={retryMutation.isPending}
+                    >
+                      Re-analyze
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="red"
+                      leftSection={<IconTrash size={14} />}
+                      onClick={() => {
+                        setTemplateToDelete(t._id)
+                        openDeleteModal()
+                      }}
+                      loading={deleteMutation.isPending}
+                    >
+                      Delete
+                    </Button>
+                  </Group>
                 </Group>
+                {/* Intelligence panel (collapsible) */}
+                <Collapse expanded={expandedIds.has(t._id)}>
+                  {/* key includes the intelligence version (extractedAt) so the
+                      panel REMOUNTS when intelligence first arrives or changes
+                      (e.g. Re-analyze completes while expanded). Collapse keeps
+                      children mounted, so without this the editable useState
+                      fields would stay stale-empty and a save could overwrite
+                      real data with '' . */}
+                  <IntelligencePanel
+                    key={`${t._id}:${t.intelligence?.extractedAt ?? 'none'}`}
+                    templateId={t._id}
+                    intelligence={t.intelligence}
+                  />
+                </Collapse>
               </Box>
             </Paper>
           )
@@ -1293,6 +1390,338 @@ function TemplatesTable({
       )}
     </Box>
     </>
+  )
+}
+
+/**
+ * Intelligence panel for a single template card. Displays look / strategy /
+ * adaptation sections and allows inline editing of the highest-value fields.
+ */
+function IntelligencePanel({
+  templateId,
+  intelligence,
+}: {
+  templateId: Id<'adTemplates'>
+  intelligence: TemplateIntelligence | undefined
+}) {
+  const updateMutation = useMutation({
+    mutationFn: useConvexMutation(api.templates.updateTemplateIntelligence),
+  })
+
+  // Local editable state for the high-value fields (only populated once, from
+  // the current intelligence value so the textarea starts with real content).
+  const [angleTitle, setAngleTitle] = useState(intelligence?.strategy?.angle?.title ?? '')
+  const [angleInsight, setAngleInsight] = useState(intelligence?.strategy?.angle?.insight ?? '')
+  const [hook, setHook] = useState(intelligence?.strategy?.hook ?? '')
+  const [creativeConcept, setCreativeConcept] = useState(intelligence?.strategy?.creativeConcept ?? '')
+  const [coreMechanic, setCoreMechanic] = useState(intelligence?.adaptation?.coreMechanic ?? '')
+  const [adaptationInstructions, setAdaptationInstructions] = useState(
+    intelligence?.adaptation?.adaptationInstructions ?? '',
+  )
+  const [reverseEngineeredPrompt, setReverseEngineeredPrompt] = useState(
+    intelligence?.reverseEngineeredPrompt ?? '',
+  )
+  const [isSaving, setIsSaving] = useState(false)
+
+  async function handleSave() {
+    setIsSaving(true)
+    try {
+      await updateMutation.mutateAsync({
+        templateId,
+        intelligence: {
+          strategy: {
+            angle: { title: angleTitle, insight: angleInsight },
+            hook,
+            creativeConcept,
+          },
+          adaptation: { coreMechanic, adaptationInstructions },
+          reverseEngineeredPrompt,
+        },
+      })
+      notifications.show({
+        title: 'Intelligence saved',
+        message: 'Template intelligence updated.',
+        color: 'teal',
+        autoClose: 3000,
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Save failed',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+        color: 'red',
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  if (!intelligence) {
+    return (
+      <Box
+        mt="sm"
+        p="sm"
+        style={{
+          borderRadius: 8,
+          border: '1px dashed var(--mantine-color-dark-4)',
+          backgroundColor: 'var(--mantine-color-dark-8)',
+        }}
+      >
+        <Text size="xs" c="dark.3" fs="italic">
+          No intelligence yet — click Re-analyze to extract strategy, hook, and adaptation data.
+        </Text>
+      </Box>
+    )
+  }
+
+  const extractedDate = new Date(intelligence.extractedAt).toLocaleDateString()
+
+  return (
+    <Box
+      mt="sm"
+      style={{
+        borderRadius: 8,
+        border: '1px solid var(--mantine-color-dark-5)',
+        backgroundColor: 'var(--mantine-color-dark-8)',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header */}
+      <Box px="sm" py={6} style={{ borderBottom: '1px solid var(--mantine-color-dark-6)' }}>
+        <Group justify="space-between">
+          <Text size="xs" fw={600} c="brand.4" tt="uppercase" style={{ letterSpacing: '0.05em' }}>
+            Intelligence
+          </Text>
+          <Text size="xs" c="dark.3">
+            {intelligence.modelVersion ?? 'unknown model'} · {extractedDate}
+          </Text>
+        </Group>
+      </Box>
+
+      <Stack gap={0} p="sm">
+        {/* ── Look ── */}
+        <Text size="xs" fw={600} c="dark.1" tt="uppercase" mb={4} style={{ letterSpacing: '0.04em' }}>
+          Look
+        </Text>
+        {intelligence.look.productPlacement && (
+          <InfoRow label="Product placement" value={intelligence.look.productPlacement} />
+        )}
+        {intelligence.look.humanPresence && (
+          <InfoRow label="Human presence" value={intelligence.look.humanPresence} />
+        )}
+        {intelligence.look.negativeSpace && (
+          <InfoRow label="Negative space" value={intelligence.look.negativeSpace} />
+        )}
+        {intelligence.look.safeZones && intelligence.look.safeZones.length > 0 && (
+          <InfoRow label="Safe zones" value={intelligence.look.safeZones.join(', ')} />
+        )}
+        {/* Visible text */}
+        {Object.values(intelligence.look.visibleText).some(Boolean) && (
+          <Box mb={6}>
+            <Text size="xs" c="dark.3" mb={2}>
+              Visible text
+            </Text>
+            <Box pl={8} style={{ borderLeft: '2px solid var(--mantine-color-dark-5)' }}>
+              {intelligence.look.visibleText.headline && (
+                <InfoRow label="Headline" value={intelligence.look.visibleText.headline} />
+              )}
+              {intelligence.look.visibleText.subheadline && (
+                <InfoRow label="Subheadline" value={intelligence.look.visibleText.subheadline} />
+              )}
+              {intelligence.look.visibleText.body && (
+                <InfoRow label="Body" value={intelligence.look.visibleText.body} />
+              )}
+              {intelligence.look.visibleText.badge && (
+                <InfoRow label="Badge" value={intelligence.look.visibleText.badge} />
+              )}
+              {intelligence.look.visibleText.cta && (
+                <InfoRow label="CTA" value={intelligence.look.visibleText.cta} />
+              )}
+            </Box>
+          </Box>
+        )}
+
+        <Divider my={6} color="dark.6" />
+
+        {/* ── Strategy ── */}
+        <Text size="xs" fw={600} c="dark.1" tt="uppercase" mb={4} style={{ letterSpacing: '0.04em' }}>
+          Strategy
+        </Text>
+        <EditField
+          label="Angle title"
+          value={angleTitle}
+          onChange={setAngleTitle}
+          minRows={1}
+        />
+        <EditField
+          label="Angle insight"
+          value={angleInsight}
+          onChange={setAngleInsight}
+          minRows={2}
+        />
+        <EditField
+          label="Hook"
+          value={hook}
+          onChange={setHook}
+          minRows={2}
+        />
+        <EditField
+          label="Creative concept"
+          value={creativeConcept}
+          onChange={setCreativeConcept}
+          minRows={2}
+        />
+        {intelligence.strategy.angle.angleType && (
+          <InfoRow label="Angle type" value={intelligence.strategy.angle.angleType} />
+        )}
+        {intelligence.strategy.targetBuyer && (
+          <InfoRow label="Target buyer" value={intelligence.strategy.targetBuyer} />
+        )}
+        {intelligence.strategy.emotionalDriver && (
+          <InfoRow label="Emotional driver" value={intelligence.strategy.emotionalDriver} />
+        )}
+        {intelligence.strategy.funnelStage && (
+          <InfoRow label="Funnel stage" value={intelligence.strategy.funnelStage} />
+        )}
+        {intelligence.strategy.buyerAwareness && (
+          <InfoRow label="Buyer awareness" value={intelligence.strategy.buyerAwareness} />
+        )}
+        {intelligence.strategy.proofType && (
+          <InfoRow label="Proof type" value={intelligence.strategy.proofType} />
+        )}
+        {intelligence.strategy.claims.length > 0 && (
+          <InfoRow label="Claims" value={intelligence.strategy.claims.join(' · ')} />
+        )}
+        {intelligence.strategy.bestFor.productCategories.length > 0 && (
+          <InfoRow
+            label="Best for"
+            value={intelligence.strategy.bestFor.productCategories.join(', ')}
+          />
+        )}
+        {intelligence.strategy.bestFor.badFitCategories.length > 0 && (
+          <InfoRow
+            label="Bad fit"
+            value={intelligence.strategy.bestFor.badFitCategories.join(', ')}
+          />
+        )}
+        {intelligence.strategy.bestFor.neededAssets.length > 0 && (
+          <InfoRow
+            label="Needed assets"
+            value={intelligence.strategy.bestFor.neededAssets.join(', ')}
+          />
+        )}
+
+        <Divider my={6} color="dark.6" />
+
+        {/* ── Adaptation ── */}
+        <Text size="xs" fw={600} c="dark.1" tt="uppercase" mb={4} style={{ letterSpacing: '0.04em' }}>
+          Adaptation
+        </Text>
+        {intelligence.adaptation.creativeArchetype && (
+          <InfoRow label="Creative archetype" value={intelligence.adaptation.creativeArchetype} />
+        )}
+        <EditField
+          label="Core mechanic"
+          value={coreMechanic}
+          onChange={setCoreMechanic}
+          minRows={2}
+        />
+        <EditField
+          label="Adaptation instructions"
+          value={adaptationInstructions}
+          onChange={setAdaptationInstructions}
+          minRows={3}
+        />
+        {intelligence.adaptation.preserve.length > 0 && (
+          <InfoRow label="Preserve" value={intelligence.adaptation.preserve.join(' · ')} />
+        )}
+        {intelligence.adaptation.avoid.length > 0 && (
+          <InfoRow label="Avoid" value={intelligence.adaptation.avoid.join(' · ')} />
+        )}
+        {intelligence.adaptation.productSubstitutionRules.length > 0 && (
+          <InfoRow
+            label="Substitution rules"
+            value={intelligence.adaptation.productSubstitutionRules.join(' · ')}
+          />
+        )}
+
+        <Divider my={6} color="dark.6" />
+
+        {/* ── Reverse-engineered prompt ── */}
+        <Text size="xs" fw={600} c="dark.1" tt="uppercase" mb={4} style={{ letterSpacing: '0.04em' }}>
+          Reverse-engineered prompt
+        </Text>
+        <EditField
+          label="Prompt"
+          value={reverseEngineeredPrompt}
+          onChange={setReverseEngineeredPrompt}
+          minRows={3}
+        />
+
+        {/* Save button */}
+        <Group justify="flex-end" mt={8}>
+          <Button
+            size="xs"
+            variant="light"
+            color="teal"
+            leftSection={<IconDeviceFloppy size={13} />}
+            onClick={handleSave}
+            loading={isSaving}
+          >
+            Save changes
+          </Button>
+        </Group>
+      </Stack>
+    </Box>
+  )
+}
+
+/** Read-only key-value row inside the intelligence panel */
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Group gap={6} mb={3} align="flex-start" wrap="nowrap">
+      <Text size="xs" c="dark.3" style={{ minWidth: 110, flexShrink: 0 }}>
+        {label}
+      </Text>
+      <Text size="xs" c="dark.1" style={{ wordBreak: 'break-word' }}>
+        {value}
+      </Text>
+    </Group>
+  )
+}
+
+/** Editable textarea field inside the intelligence panel */
+function EditField({
+  label,
+  value,
+  onChange,
+  minRows,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  minRows: number
+}) {
+  return (
+    <Box mb={6}>
+      <Text size="xs" c="dark.3" mb={2}>
+        {label}
+      </Text>
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        minRows={minRows}
+        autosize
+        size="xs"
+        styles={{
+          input: {
+            backgroundColor: 'var(--mantine-color-dark-7)',
+            borderColor: 'var(--mantine-color-dark-5)',
+            color: 'var(--mantine-color-dark-1)',
+            fontSize: 11,
+          },
+        }}
+      />
+    </Box>
   )
 }
 

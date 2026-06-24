@@ -241,14 +241,14 @@ function Hero() {
           maxWidth: 1100,
           paddingBottom: '0.15em',
         }} id="hero-title">
-          Save what's winning.<br />
-          <span style={{ color: T.textMuted, fontWeight: 400 }}>Generate ads that</span>{' '}
+          From product page<br />
+          <span style={{ color: T.textMuted, fontWeight: 400 }}>to a</span>{' '}
           <span style={{
             background: `linear-gradient(180deg, ${T.brandSoft}, ${T.brand})`,
             WebkitBackgroundClip: 'text',
             backgroundClip: 'text',
             color: 'transparent',
-          }}>rhyme with it.</span>
+          }}>tested ad.</span>
         </h1>
         <p style={{
           fontFamily: fontBody,
@@ -259,7 +259,7 @@ function Hero() {
           maxWidth: 'none',
           fontWeight: 400,
         }}>
-          Save winning ads to a swipe file. Generate 12 Meta-ready variants per batch — using those exact references.
+          Angles, creative, and copy — generated. Paste your product URL and ProdSnap turns it into a Meta-ready ad test.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 24 }}>
           <form
@@ -327,7 +327,7 @@ function Hero() {
             See plans &amp; pricing
           </Link>
           <a
-            href="#loop-title"
+            href="#workflow-title"
             style={{
               fontFamily: fontBody,
               fontSize: 13,
@@ -469,13 +469,13 @@ function LoopArrow() {
   )
 }
 
-function LoopSection() {
+function WorkflowSection() {
   const isMobile = useIsMobile()
   return (
-    <section aria-labelledby="loop-title" style={{ background: T.cream, color: T.ink, position: 'relative' }}>
+    <section aria-labelledby="workflow-title" style={{ background: T.cream, color: T.ink, position: 'relative' }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>the loop · 01</Eyebrow>
+          <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>the workflow · 01</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
             fontSize: isMobile ? 36 : 56,
@@ -486,13 +486,12 @@ function LoopSection() {
             color: T.ink,
             maxWidth: 900,
             paddingBottom: '0.18em',
-          }} id="loop-title">
-            Swipe feeds generation.{' '}
-            <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Generation feeds winners.</span>{' '}
-            <span style={{ color: T.brand }}>Winners feed swipe.</span>
+          }} id="workflow-title">
+            It works the way a media buyer does.{' '}
+            <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Angle first. Then the creative.</span>
           </h2>
-          <p style={{ fontFamily: fontBody, fontSize: 18, lineHeight: 1.55, color: T.textOnCreamMuted, margin: '24px auto 0', maxWidth: 680 }}>
-            Your brand kit, voice of customer, and extracted angles ride along by default. Pick a saved template or winner to seed each batch.
+          <p style={{ fontFamily: fontBody, fontSize: 18, lineHeight: 1.55, color: T.textOnCreamMuted, margin: '24px auto 0', maxWidth: 720 }}>
+            Paste a product URL. ProdSnap reverse-engineers the strategy — the angles worth testing, the concepts for each, and the templates that fit — then builds the ad test.
           </p>
         </div>
 
@@ -505,17 +504,110 @@ function LoopSection() {
           position: 'relative',
         }}>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 60px 1fr 60px 1fr', alignItems: 'stretch', gap: isMobile ? 16 : 0 }}>
-            {/* SWIPE */}
+
+            {/* STEP 01 — ANGLES */}
             <LoopCard
-              tag="step 01 · swipe"
-              title="Save references"
-              sub="Per-product. Bookmark templates, paste competitor URLs, drag images in."
+              tag="step 01 · angles"
+              title="Angles worth testing"
+              sub="Auto-extracted from your product page and reviews."
             >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Selected angle */}
+                <div style={{
+                  padding: '10px 12px',
+                  background: T.brand,
+                  border: `1px solid ${T.brand}`,
+                  borderRadius: 6,
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'flex-start',
+                }}>
+                  <div style={{
+                    width: 14, height: 14, marginTop: 2,
+                    borderRadius: 7,
+                    border: '1.5px solid #fff',
+                    background: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <div style={{ width: 6, height: 6, borderRadius: 3, background: T.brand }} />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: fontBody, fontSize: 13, fontWeight: 600, color: '#fff' }}>Stop waking up to tight skin</div>
+                    <div style={{ fontFamily: fontBody, fontSize: 12, fontStyle: 'italic', color: '#ffffffcc', marginTop: 2 }}>Buyers blame morning skin on bad sleep — not their night routine.</div>
+                  </div>
+                </div>
+                {/* Unselected angle */}
+                <div style={{
+                  padding: '10px 12px',
+                  background: '#fff',
+                  border: `1px solid ${T.borderCream}`,
+                  borderRadius: 6,
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'flex-start',
+                }}>
+                  <div style={{
+                    width: 14, height: 14, marginTop: 2,
+                    borderRadius: 7,
+                    border: `1.5px solid ${T.borderCream}`,
+                    background: 'transparent',
+                    flexShrink: 0,
+                  }} />
+                  <div>
+                    <div style={{ fontFamily: fontBody, fontSize: 13, fontWeight: 600, color: T.ink }}>The lotion you settled for</div>
+                    <div style={{ fontFamily: fontBody, fontSize: 12, fontStyle: 'italic', color: T.textOnCreamMuted, marginTop: 2 }}>Most switched from a drugstore tub that never absorbed.</div>
+                  </div>
+                </div>
+              </div>
+            </LoopCard>
+
+            {!isMobile && <LoopArrow />}
+
+            {/* STEP 02 — CONCEPTS (highlighted) */}
+            <LoopCard
+              tag="step 02 · concepts"
+              title="3 concepts per angle"
+              sub="How the angle should actually look as an ad."
+              highlighted
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { format: 'UGC testimonial', look: 'Bathroom-shelf selfie, morning light', frame: '"I thought I just slept badly."' },
+                  { format: 'Before / after', look: 'Tight, flaky skin → calm, hydrated', frame: 'Day 1 vs Day 14' },
+                  { format: 'Comparison', look: 'Your lotion vs the drugstore tub', frame: 'Why one actually absorbs' },
+                ].map(({ format, look, frame }, i) => (
+                  <div key={i} style={{
+                    background: T.bgElev,
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 6,
+                    padding: '10px 12px',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontFamily: fontMono, fontSize: 10, color: T.brandSoft, fontWeight: 600 }}>{format}</span>
+                    </div>
+                    <div style={{ fontFamily: fontBody, fontSize: 12, color: T.textMuted, lineHeight: 1.4 }}>{look}</div>
+                    <div style={{ fontFamily: fontBody, fontSize: 12, fontStyle: 'italic', color: T.textDim, marginTop: 3 }}>{frame}</div>
+                  </div>
+                ))}
+              </div>
+            </LoopCard>
+
+            {!isMobile && <LoopArrow />}
+
+            {/* STEP 03 — TEMPLATES → AD TEST */}
+            <LoopCard
+              tag="step 03 · templates → ad test"
+              title="Pick templates, get an ad test"
+              sub="Choose references you like; we generate the test."
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+                {[1, 2, 3, 4].map((i) => (
                   <img
                     key={i}
-                    src={`/landing/shots/ref-${i}.jpg`}
+                    src={`/landing/shots/template-${i}.jpg`}
                     alt=""
                     role="presentation"
                     loading="lazy"
@@ -531,112 +623,16 @@ function LoopSection() {
                   />
                 ))}
               </div>
-              <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Pill color={T.textOnCreamMuted} bg="#F1F3F5" style={{ borderColor: T.borderCream }}>17 saved</Pill>
-                <Pill color={T.textOnCreamMuted} bg="#F1F3F5" style={{ borderColor: T.borderCream }}>4 categories</Pill>
-              </div>
-            </LoopCard>
-
-            {!isMobile && <LoopArrow />}
-
-            {/* GENERATE */}
-            <LoopCard
-              tag="step 02 · generate"
-              title="Refs feed the prompt"
-              sub="Plus VOC, plus brand kit, plus angle. All auto-applied per product."
-              highlighted
-            >
-              <div style={{
-                background: T.bg,
-                borderRadius: 8,
-                padding: 14,
-                fontFamily: fontMono,
-                fontSize: 11,
-                color: T.textMuted,
-                lineHeight: 1.7,
-              }}>
-                <div><span style={{ color: T.brandSoft }}>prompt</span> "split-frame compare"</div>
-                <div><span style={{ color: T.teal }}>+ template</span> picked as seed</div>
-                <div><span style={{ color: T.teal }}>+ voc</span> "I bought this twice"</div>
-                <div><span style={{ color: T.teal }}>+ brand</span> harry's kit</div>
-                <div><span style={{ color: T.teal }}>+ angle</span> comparison</div>
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${T.border}`, color: T.text }}>→ 12 variants</div>
-              </div>
-            </LoopCard>
-
-            {!isMobile && <LoopArrow />}
-
-            {/* WINNERS */}
-            <LoopCard
-              tag="step 03 · winners loop"
-              title="Star → seed the next batch"
-              sub="Cross-product library. Filter by ★. Build on what works."
-            >
-              {/* CSS-columns masonry: variants are uniform 1024×1024 so
-                  the column flow renders cleanly without cropping. */}
-              <div style={{ columnCount: 2, columnGap: 6 }}>
-                {[
-                  { src: '/landing/shots/toiletry-1.png', star: true },
-                  { src: '/landing/shots/toiletry-2.png', star: false },
-                  { src: '/landing/shots/toiletry-3.png', star: true },
-                  { src: '/landing/shots/toiletry-4.png', star: false },
-                ].map(({ src, star }, i) => (
-                  <img
-                    key={i}
-                    src={src}
-                    alt=""
-                    role="presentation"
-                    loading="lazy"
-                    decoding="async"
-                    style={{
-                      width: '100%',
-                      marginBottom: 6,
-                      borderRadius: 4,
-                      border: `1px solid ${star ? T.brand : T.borderCream}`,
-                      display: 'block',
-                      breakInside: 'avoid',
-                    }}
-                  />
-                ))}
-              </div>
-              <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Pill color={T.teal} bg={T.tealTint} style={{ borderColor: T.teal + '55' }}>2 winners</Pill>
-                <Pill color={T.textOnCreamMuted} bg="#F1F3F5" style={{ borderColor: T.borderCream }}>cross-product</Pill>
+              <div style={{ marginTop: 12 }}>
+                <Pill color={T.teal} bg={T.tealTint} style={{ borderColor: T.teal + '55' }}>✓ ad test created</Pill>
               </div>
             </LoopCard>
           </div>
 
-          {/* Loopback arrow */}
-          {!isMobile && (
-            <div style={{ marginTop: 40, position: 'relative', height: 50 }}>
-              <svg width="100%" height="50" viewBox="0 0 1000 50" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
-                <defs>
-                  <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill={T.brand} />
-                  </marker>
-                </defs>
-                <path d="M 950 5 Q 500 80, 50 5" stroke={T.brand} strokeWidth="1.5" fill="none" strokeDasharray="6 4" markerEnd="url(#arrowhead)" />
-              </svg>
-              <div style={{
-                position: 'absolute',
-                top: 18,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                background: T.creamElev,
-                padding: '4px 14px',
-                borderRadius: 999,
-                border: `1px solid ${T.brand}33`,
-                whiteSpace: 'nowrap',
-              }}>
-                <MonoLabel color={T.brand}>↻ winners feed back into swipe · the loop nobody else has</MonoLabel>
-              </div>
-            </div>
-          )}
-          {isMobile && (
-            <div style={{ marginTop: 16, textAlign: 'center', padding: '10px 14px', borderRadius: 999, border: `1px solid ${T.brand}33`, display: 'inline-block' }}>
-              <MonoLabel color={T.brand}>↻ winners feed back into swipe · the loop nobody else has</MonoLabel>
-            </div>
-          )}
+          {/* Footer note */}
+          <div style={{ marginTop: 32, textAlign: 'center' }}>
+            <MonoLabel color={T.brand}>→ then iterate on the winners</MonoLabel>
+          </div>
         </div>
       </div>
     </section>
@@ -752,51 +748,51 @@ function SplitSection() {
             maxWidth: 'none',
             paddingBottom: '0.18em',
           }} id="split-title">
-            Swipe and generation belong in the same tool.
+            Strategy and generation belong in the same tool.
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, maxWidth: 'none', margin: '0 auto', lineHeight: 1.55 }}>
-            Swipe tools study what's winning. Generators make new things. Almost no one closes the loop.
+            Generic AI tools make a picture from a prompt. Swipe tools just store screenshots. Neither tells you what to test.
           </p>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1.15fr', gap: isMobile ? 16 : 20, alignItems: 'start', paddingTop: 16, paddingBottom: 32 }}>
           <CompareCard
             tier="option a"
-            title="Swipe-file tools"
-            desc="Browse and save winning ads from a public library. Tag and organize. But they're a research tool — not a creative one."
+            title="Generic AI ad gen"
+            desc="Type a prompt, get an image. No angle, no strategy, no idea what to test next."
             rows={[
-              { label: 'Swipe library', status: true },
-              { label: 'Save / tag refs', status: true },
-              { label: 'Generate ads', status: false },
-              { label: 'Angle extraction', status: false },
-              { label: 'Multi-brand', status: 'limited' },
-              { label: 'Surgical iteration', status: false },
+              { label: 'Marketing angles', status: false },
+              { label: 'Creative concepts', status: false },
+              { label: 'Ad tests', status: false },
+              { label: 'Brand-aware copy', status: 'limited' },
+              { label: 'Multi-brand', status: false },
+              { label: 'Iterate on winners', status: false },
             ]}
           />
           <CompareCard
             tier="option b"
-            title="Generic AI ad gen"
-            desc="Type a prompt, get an image. No memory of category. No reference for what's already converting in your niche. Templates only."
+            title="Swipe-file tools"
+            desc="Browse and save winning ads. Useful research — but it can't generate anything."
             rows={[
-              { label: 'Swipe library', status: false },
-              { label: 'Save / tag refs', status: false },
-              { label: 'Generate ads', status: true },
-              { label: 'Angle extraction', status: false },
-              { label: 'Multi-brand', status: false },
-              { label: 'Surgical iteration', status: false },
+              { label: 'Marketing angles', status: 'limited' },
+              { label: 'Creative concepts', status: false },
+              { label: 'Ad tests', status: false },
+              { label: 'Brand-aware copy', status: false },
+              { label: 'Multi-brand', status: 'limited' },
+              { label: 'Iterate on winners', status: false },
             ]}
           />
           <CompareCard
             tier="option c · prodsnap"
-            title="Both. One loop."
-            desc="Swipe + reference + generate + iterate, in one place. Per product, per brand. Every signal in your account ends up in the prompt."
+            title="The whole workflow"
+            desc="Angles → concepts → templates → ad test → copy. Per product, per brand."
             rows={[
-              { label: 'Swipe library', status: true },
-              { label: 'Save / tag refs', status: true },
-              { label: 'Generate ads', status: true },
-              { label: 'Angle extraction', status: true },
+              { label: 'Marketing angles', status: true },
+              { label: 'Creative concepts', status: true },
+              { label: 'Ad tests', status: true },
+              { label: 'Brand-aware copy', status: true },
               { label: 'Multi-brand', status: true },
-              { label: 'Surgical iteration', status: true },
+              { label: 'Iterate on winners', status: true },
             ]}
             primary
           />
@@ -1443,6 +1439,189 @@ function SurgicalExample({
 }
 
 // ============================================================
+// AD TEST SECTION
+// ============================================================
+
+function AdTestSection() {
+  const isMobile = useIsMobile()
+  return (
+    <section aria-labelledby="adtest-title" style={{ background: T.bg, color: T.text }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
+        <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
+          <Eyebrow style={{ justifyContent: 'center' }}>the ad test · 06</Eyebrow>
+          <h2 style={{
+            fontFamily: fontDisplay,
+            fontSize: isMobile ? 36 : 56,
+            lineHeight: 1.05,
+            letterSpacing: '-0.03em',
+            fontWeight: 600,
+            margin: '20px auto 0',
+            maxWidth: 900,
+            paddingBottom: '0.18em',
+          }} id="adtest-title">
+            Every batch lands in an ad test.
+          </h2>
+          <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, lineHeight: 1.55, margin: '24px auto 0', maxWidth: 700 }}>
+            Not loose images — a Facebook-style preview, every variant in one place, and copy written for the angle.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 24 : 32, alignItems: 'start' }}>
+
+          {/* LEFT — Facebook-style ad preview */}
+          <div style={{
+            background: T.bgElev,
+            border: `1px solid ${T.border}`,
+            borderRadius: 14,
+            overflow: 'hidden',
+          }}>
+            {/* FB header */}
+            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 18,
+                background: `linear-gradient(135deg, ${T.brand}, ${T.teal})`,
+                flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: fontDisplay, fontSize: 14, fontWeight: 700, color: '#fff',
+              }}>H</div>
+              <div>
+                <div style={{ fontFamily: fontBody, fontSize: 14, fontWeight: 700, color: T.text }}>Harry's</div>
+                <div style={{ fontFamily: fontMono, fontSize: 10, color: T.textDim, marginTop: 1 }}>Sponsored · <span style={{ color: T.textDim }}>🌐</span></div>
+              </div>
+            </div>
+
+            {/* Primary text */}
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.border}` }}>
+              <div style={{ fontFamily: fontBody, fontSize: 14, color: T.text, lineHeight: 1.5 }}>
+                Stop blaming your sleep. It's your night routine.
+              </div>
+            </div>
+
+            {/* Ad image */}
+            <div>
+              <img
+                src="/landing/shots/harrys-1-exact.png"
+                alt="Ad preview"
+                loading="lazy"
+                decoding="async"
+                style={{ width: '100%', display: 'block' }}
+              />
+            </div>
+
+            {/* Link card footer */}
+            <div style={{
+              padding: '12px 16px',
+              background: T.bgElev2,
+              borderTop: `1px solid ${T.border}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+            }}>
+              <div>
+                <div style={{ fontFamily: fontMono, fontSize: 10, color: T.textDim, marginBottom: 3 }}>harrys.com</div>
+                <div style={{ fontFamily: fontDisplay, fontSize: 15, fontWeight: 700, color: T.text, letterSpacing: '-0.01em' }}>Wake up to calmer skin</div>
+              </div>
+              <div style={{
+                padding: '8px 16px',
+                background: T.bgElev,
+                border: `1px solid ${T.border}`,
+                borderRadius: 6,
+                fontFamily: fontBody,
+                fontSize: 13,
+                fontWeight: 600,
+                color: T.text,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}>Shop Now</div>
+            </div>
+
+            {/* Like / comment / share */}
+            <div style={{ padding: '10px 16px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 20 }}>
+              {['Like', 'Comment', 'Share'].map(a => (
+                <span key={a} style={{ fontFamily: fontBody, fontSize: 13, color: T.textDim }}>{a}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* RIGHT — inside the test */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* Variant grid */}
+            <div style={{
+              background: T.bgElev,
+              border: `1px solid ${T.border}`,
+              borderRadius: 14,
+              overflow: 'hidden',
+            }}>
+              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <MonoLabel color={T.text}>generated</MonoLabel>
+                <MonoLabel color={T.textDim}>6 variants</MonoLabel>
+              </div>
+              <div style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                {[
+                  '/landing/shots/harrys-2-exact.png',
+                  '/landing/shots/harrys-3-exact.png',
+                  '/landing/shots/harrys-4-exact.png',
+                  '/landing/shots/harrys-5-exact.png',
+                  '/landing/shots/harrys-6-exact.png',
+                  '/landing/shots/toiletry-1.png',
+                ].map((src, i) => (
+                  <img
+                    key={i}
+                    src={src}
+                    alt={`Variant ${i + 2}`}
+                    loading="lazy"
+                    decoding="async"
+                    style={{
+                      width: '100%',
+                      aspectRatio: '1',
+                      objectFit: 'cover',
+                      borderRadius: 6,
+                      border: `1px solid ${T.border}`,
+                      display: 'block',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Copy bank */}
+            <div style={{
+              background: T.bgElev,
+              border: `1px solid ${T.border}`,
+              borderRadius: 14,
+              overflow: 'hidden',
+            }}>
+              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: fontDisplay, fontSize: 16, fontWeight: 600, color: T.text }}>Copy Bank</span>
+                <Pill color={T.teal} bg={T.tealTint} style={{ borderColor: T.teal + '55' }}>from angle: stop waking up to tight skin</Pill>
+              </div>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[
+                  { hl: 'Wake up to calmer skin', body: 'The dry-morning spiral, broken overnight.' },
+                  { hl: 'Your lotion should absorb', body: 'Not sit on top like the drugstore tub did.' },
+                ].map(({ hl, body }, i) => (
+                  <div key={i} style={{
+                    background: T.bg,
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 8,
+                    padding: '12px 14px',
+                  }}>
+                    <div style={{ fontFamily: fontDisplay, fontSize: 16, fontWeight: 600, color: T.text, letterSpacing: '-0.01em' }}>{hl}</div>
+                    <div style={{ fontFamily: fontBody, fontSize: 13, color: T.textMuted, marginTop: 4, lineHeight: 1.45 }}>{body}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ============================================================
 // FEATURE GRID
 // ============================================================
 
@@ -1452,7 +1631,7 @@ function FeatureGrid() {
     <section aria-labelledby="features-title" style={{ background: T.bg, color: T.text }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow style={{ justifyContent: 'center' }}>everything else · 06</Eyebrow>
+          <Eyebrow style={{ justifyContent: 'center' }}>everything else · 07</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
             fontSize: isMobile ? 36 : 56,
@@ -1475,7 +1654,7 @@ function FeatureGrid() {
             { tag: 'MODELS', t: 'Premium image generation', d: 'A state-of-the-art AI image model tuned for product ads.' },
             { tag: 'RATIOS', t: 'Every Meta ratio', d: '1:1 / 4:5 / 9:16 in one batch. No Canva detour.' },
             { tag: 'OUTPUT', t: 'Meta-ready PNG', d: 'High-res PNG per ad, per ratio. Drops straight into Ads Manager.' },
-            { tag: 'COPY', t: 'Optional ad copy', d: 'Headlines, primary texts, CTAs following Meta best practices. Opt-in.' },
+            { tag: 'AD TESTS', t: 'Ad tests, not one-offs', d: 'Every batch lands in a Facebook-style ad test with preview, variants, and angle-grounded copy.' },
             { tag: 'INGEST', t: 'URL onboarding', d: 'Paste a product or competitor URL — ProdSnap scrapes the images, copy, and details.' },
             { tag: 'PHOTOS', t: 'Multi-photo per product', d: 'Front / side / lifestyle / packaging. Pick which one drives each batch.' },
           ].map((f, i) => (
@@ -1564,7 +1743,7 @@ function PricingSection() {
     <section id="pricing" aria-labelledby="pricing-title" style={{ background: T.cream, color: T.ink, scrollMarginTop: 64 }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>start free · 07</Eyebrow>
+          <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>start free · 08</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
             fontSize: isMobile ? 36 : 56,
@@ -1703,8 +1882,8 @@ function FAQSection() {
   const isMobile = useIsMobile()
   const items: FAQItem[] = [
     { q: 'Is it really free to start — no card?', a: "Yes. Every new account gets 100 free credits (about 10 ads) with no credit card. Generate, preview, and mark winners for free. When you run out — or want to export and run bigger tests — pick a plan. No trial countdown, no surprise charge." },
-    { q: 'Is this the same as AdCreative or Glorify?', a: "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want a fast prompt-to-output flow. ProdSnap is built for performance teams — if you're testing 5+ angles a week, this is for you. Angle testing, swipe files, voice of customer, winners loops — the muscles you build when you ship creative every week." },
-    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file. ProdSnap is a swipe file that feeds a generator. Save a winning ad as a template, then generate straight from it — your reference becomes the seed for new creative, not just a folder you scroll. That loop doesn't exist anywhere else." },
+    { q: 'Is this the same as AdCreative or Glorify?', a: "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want a fast prompt-to-output flow. ProdSnap is built for performance teams — if you're testing 5+ angles a week, this is for you. Angle testing, swipe files, voice of customer, ad tests — the muscles you build when you ship creative every week." },
+    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file — a place to store ads you like. ProdSnap is a creative tool: it reads your product, proposes the angles worth testing, turns each into ad concepts, and generates a Meta-ready ad test with copy. Swiping is one input, not the product." },
     { q: 'What about my brand consistency?', a: "Each brand keeps its own kit — colors, fonts, voice notes. Tag a product with the brand it belongs to, and the generator pulls that kit's colors, voice, and offer into every batch. Lite includes 2 brand kits, Pro 10, Max unlimited. Kits don't bleed into each other across products." },
     { q: 'Will the output actually run on Meta?', a: "Yes — every output is in 1:1, 4:5, or 9:16 (you pick), exported as high-res PNG, and meets Meta's Ads Manager spec. Optional ad copy generation follows Meta best practices for headlines, primary texts, and CTAs." },
     { q: 'Can I bring competitor ads as references?', a: "Yes. Paste URLs from Meta Ad Library, drag images in, or bookmark templates from our curated library. Per-product. They feed the generator on every batch for that product." },
@@ -1714,7 +1893,7 @@ function FAQSection() {
     <section aria-labelledby="faq-title" style={{ background: T.bg, color: T.text }}>
       <div style={{ maxWidth: 980, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow style={{ justifyContent: 'center' }}>faq · 08</Eyebrow>
+          <Eyebrow style={{ justifyContent: 'center' }}>faq · 09</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
             fontSize: isMobile ? 36 : 56,
@@ -1798,7 +1977,7 @@ function FinalCTA() {
         pointerEvents: 'none',
       }}/>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '140px 32px', textAlign: 'center', position: 'relative' }}>
-        <Eyebrow style={{ justifyContent: 'center' }}>↻ close the loop</Eyebrow>
+        <Eyebrow style={{ justifyContent: 'center' }}>from product to tested ad</Eyebrow>
         <h2 style={{
           fontFamily: fontDisplay,
           fontSize: isMobile ? 48 : 88,
@@ -1813,7 +1992,7 @@ function FinalCTA() {
           <span style={{ color: T.textMuted, fontWeight: 400 }}>for every angle test.</span>
         </h2>
         <p style={{ fontFamily: fontBody, fontSize: isMobile ? 16 : 19, color: T.textMuted, maxWidth: 600, margin: '0 auto 36px', lineHeight: 1.5 }}>
-          Three paths. Twelve variants per batch. One loop that learns from what wins.
+          From a product URL to a full ad test — angles, concepts, creative, and copy.
         </p>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
           <Link to="/onboarding" search={{ starter: true }} style={{ textDecoration: 'none' }}>
@@ -1889,11 +2068,12 @@ function Home() {
     <LandingLayoutContext.Provider value={isMobile}>
       <main className="landing-root" style={{ background: T.bg, minHeight: '100vh' }}>
         <Hero />
-        <LoopSection />
+        <WorkflowSection />
         <SplitSection />
         <OnrampsSection />
         <VOCSection />
         <SurgicalSection />
+        <AdTestSection />
         <FeatureGrid />
         <PricingSection />
         <FAQSection />
