@@ -129,6 +129,28 @@ test('generateCopySet creates a set with the requested per-field counts', async 
   expect(row!.recommendedCtaButton).toBe('SHOP_NOW')
 })
 
+test('generateCopySet defaults to the test angle when there is exactly one', async () => {
+  const t = convexTest(schema, modules)
+  const { adTestId } = await seedTest(t)
+  const asUser = t.withIdentity({ tokenIdentifier: USER })
+
+  const copySetId = await asUser.action(api.adTests.generateCopySet, {
+    adTestId,
+    request: {
+      ...blankRequest,
+      includeHeadlines: true,
+      headlineCount: 2,
+      includePrimaryTexts: true,
+      primaryTextCount: 1,
+    },
+  })
+
+  const row = await t.run((ctx) => ctx.db.get(copySetId))
+  expect(row!.angleKey).toBe('benefit')
+  expect(row!.headlines.every((h) => h.angleKey === 'benefit')).toBe(true)
+  expect(row!.primaryTexts.every((p) => p.angleKey === 'benefit')).toBe(true)
+})
+
 test('generateCopySet rejects an empty or out-of-range request', async () => {
   const t = convexTest(schema, modules)
   const { adTestId } = await seedTest(t)

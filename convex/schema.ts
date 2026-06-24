@@ -364,7 +364,8 @@ const schema = defineSchema({
       name: v.optional(v.string()),
       aspectRatio: v.optional(aspectRatio),
     })),
-    // Snapshot of the seeding marketing angle (only set when mode === 'angle').
+    // Snapshot of the seeding marketing angle. Set by angle-only generations
+    // and by template generations launched from a recommended angle/concept.
     angleSeed: v.optional(v.object({
       title: v.string(),
       description: v.string(),

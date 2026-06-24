@@ -409,4 +409,3 @@ export const deleteTemplate = mutation({
     })
   },
 })
-

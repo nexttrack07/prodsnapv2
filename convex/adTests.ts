@@ -1144,10 +1144,14 @@ export const getCopyContextInternal = internalQuery({
       if (kit && kit.userId === userId) brandKit = kit
     }
 
-    // Ground the copy in a single angle when the caller picked one.
+    // Ground the copy in a single angle when the caller picked one. If this
+    // test was launched from Recommended Angles, it usually has exactly one
+    // angle, so use that by default for Copy Bank generation.
     const angle = angleKey
       ? adTest.angles.find((a) => a.key === angleKey)
-      : undefined
+      : adTest.angles.length === 1
+        ? adTest.angles[0]
+        : undefined
 
     // Per-product customer language wins over the brand-level list.
     const customerLanguage =
@@ -1169,6 +1173,7 @@ export const getCopyContextInternal = internalQuery({
             suggestedAdStyle: angle.suggestedAdStyle ?? '',
           }
         : undefined,
+      angleKey: angle?.key,
       brandVoice: brandKit?.voice,
       brandTagline: brandKit?.tagline,
       currentOffer: brandKit?.currentOffer,
@@ -1272,14 +1277,14 @@ export const generateCopySet = action({
       texts.map((text, variantIndex) => ({
         text,
         variantIndex,
-        angleKey: angleKey ?? undefined,
+        angleKey: context.angleKey ?? undefined,
       }))
 
     return ctx.runMutation(internal.adTests._insertCopySet, {
       userId,
       adTestId,
       productId: context.productId,
-      angleKey,
+      angleKey: context.angleKey,
       request,
       headlines: toSuggestions(ai.headlines),
       primaryTexts: toSuggestions(ai.primaryTexts),

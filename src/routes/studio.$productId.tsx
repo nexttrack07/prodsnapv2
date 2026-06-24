@@ -41,6 +41,7 @@ import {
   Collapse,
   Switch,
   ColorSwatch,
+  SimpleGrid,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -93,7 +94,7 @@ import { BrandPicker } from '../components/brand/BrandPicker'
 import { useCustomTemplateUpload } from '../utils/customTemplateUpload'
 import { MAX_TEMPLATE_IMAGE_SIZE } from '../utils/constants'
 
-type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string; editAd?: string; adTestId?: string }
+type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string; concept?: string; editAd?: string; adTestId?: string }
 
 export const Route = createFileRoute('/studio/$productId')({
   validateSearch: (search: Record<string, unknown>): ProductSearch => {
@@ -109,6 +110,9 @@ export const Route = createFileRoute('/studio/$productId')({
     }
     if (typeof search.angle === 'string' && /^\d+$/.test(search.angle)) {
       out.angle = search.angle
+    }
+    if (typeof search.concept === 'string' && /^\d+$/.test(search.concept)) {
+      out.concept = search.concept
     }
     if (typeof search.editAd === 'string' && search.editAd.length > 0) {
       out.editAd = search.editAd
@@ -241,7 +245,7 @@ function ProductWorkspacePage() {
 
   const closeCompose = () => {
     setView('gallery')
-    if (search.compose || search.template || search.angle || search.editAd) {
+    if (search.compose || search.template || search.angle || search.concept || search.editAd) {
       navigate({
         to: '/studio/$productId',
         params: { productId },
@@ -370,8 +374,14 @@ function ProductWorkspacePage() {
           creditsExhausted={creditsExhausted}
           initialFilters={initialFilters}
           adTestId={search.adTestId as Id<'adTests'>}
+          prefillAngleIndex={
+            search.angle != null ? Number(search.angle) : null
+          }
+          prefillConceptIndex={
+            search.concept != null ? Number(search.concept) : null
+          }
           onBack={() => {
-            const { compose: _omit, ...rest } = search
+            const { compose: _omit, angle: _angle, concept: _concept, ...rest } = search
             navigate({
               to: '/studio/$productId',
               params: { productId },
@@ -380,7 +390,7 @@ function ProductWorkspacePage() {
             })
           }}
           onComplete={() => {
-            const { compose: _omit, ...rest } = search
+            const { compose: _omit, angle: _angle, concept: _concept, ...rest } = search
             navigate({
               to: '/studio/$productId',
               params: { productId },
@@ -485,6 +495,9 @@ function ProductWorkspacePage() {
           prefillAngleIndex={
             search.angle != null ? Number(search.angle) : null
           }
+          prefillConceptIndex={
+            search.concept != null ? Number(search.concept) : null
+          }
           prefillEditAdId={
             (search.editAd ?? null) as Id<'templateGenerations'> | null
           }
@@ -512,6 +525,14 @@ function ProductHeader({
     generationCount: number
     primaryImageId?: Id<'productImages'>
     customerLanguage?: string[]
+    valueProposition?: string
+    marketingAngles?: Array<{
+      title: string
+      description: string
+      hook: string
+      suggestedAdStyle: string
+      angleType?: string
+    }>
   }
   productId: Id<'products'>
   primaryImageUrl?: string
@@ -720,6 +741,19 @@ function ProductHeader({
           >
             Source images
           </Tabs.Tab>
+          <Tabs.Tab
+            value="angles"
+            leftSection={<Box visibleFrom="sm"><IconTarget size={14} /></Box>}
+            rightSection={
+              anglesCount > 0 ? (
+                <Badge size="xs" variant="light" color="brand" radius="sm">
+                  {anglesCount}
+                </Badge>
+              ) : null
+            }
+          >
+            Recommended angles
+          </Tabs.Tab>
         </Tabs.List>
 
         <Paper
@@ -911,6 +945,17 @@ function ProductHeader({
             </Group>
           </Tabs.Panel>
 
+          {/* ── Recommended angles ──────────────────────────────────── */}
+          <Tabs.Panel value="angles">
+            <RecommendedAnglesPanel
+              productId={productId}
+              status={product.status}
+              valueProposition={product.valueProposition}
+              angles={product.marketingAngles ?? []}
+              creditsExhausted={creditsExhausted}
+            />
+          </Tabs.Panel>
+
         </Paper>
       </Tabs>
 
@@ -965,6 +1010,327 @@ function ProductHeader({
         </Stack>
       </Modal>
     </>
+  )
+}
+
+type RecommendedAngle = {
+  title: string
+  description: string
+  hook: string
+  suggestedAdStyle: string
+  angleType?: string
+}
+
+type CreativeConcept = {
+  title: string
+  format: string
+  idea: string
+  opening: string
+}
+
+function buildCreativeConcepts(angle: RecommendedAngle): CreativeConcept[] {
+  const style = angle.suggestedAdStyle || 'UGC-style product ad'
+  const hook = angle.hook || `Why this ${angle.title.toLowerCase()} angle matters`
+  return [
+    {
+      title: 'Day-in-the-life proof',
+      format: style,
+      idea: `Show the product naturally solving the "${angle.title}" job across a normal day. Use quick cuts that move from the starting problem into the satisfying end state.`,
+      opening: hook,
+    },
+    {
+      title: 'Problem to payoff demo',
+      format: 'Problem/solution sequence',
+      idea: `Open on the specific friction behind this angle, then show the product as the practical fix. Make the before state obvious, the product use simple, and the payoff easy to read.`,
+      opening: angle.description,
+    },
+    {
+      title: 'Comparison frame',
+      format: 'Side-by-side or replacement story',
+      idea: `Compare the old way buyers handle this need against the product-led way. Keep the contrast concrete: what feels harder, slower, less comfortable, or less desirable without the product.`,
+      opening: `The old way vs. the ${angle.title.toLowerCase()} way.`,
+    },
+  ]
+}
+
+function RecommendedAnglesPanel({
+  productId,
+  status,
+  valueProposition,
+  angles,
+  creditsExhausted,
+}: {
+  productId: Id<'products'>
+  status: 'analyzing' | 'ready' | 'failed'
+  valueProposition?: string
+  angles: RecommendedAngle[]
+  creditsExhausted: boolean
+}) {
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const navigate = useNavigate()
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [creatingKey, setCreatingKey] = useState<string | null>(null)
+  const createAdTest = useConvexMutation(api.adTests.createDraft)
+  const createConceptTestMutation = useMutation({ mutationFn: createAdTest })
+  const selectedAngle = angles[selectedIndex] ?? angles[0]
+  const concepts = selectedAngle ? buildCreativeConcepts(selectedAngle) : []
+
+  useEffect(() => {
+    if (selectedIndex >= angles.length) setSelectedIndex(0)
+  }, [angles.length, selectedIndex])
+
+  async function handleChooseTemplates(concept: CreativeConcept, conceptIndex: number) {
+    const key = `${selectedIndex}-${conceptIndex}`
+    setCreatingKey(key)
+    try {
+      const adTestId = await createConceptTestMutation.mutateAsync({
+        productId,
+        name: `${selectedAngle?.title ?? 'Ad test'} - ${concept.title}`,
+        source: 'custom',
+        angles: selectedAngle
+          ? [{
+              key: `product-angle-${selectedIndex}`,
+              title: selectedAngle.title,
+              description: selectedAngle.description,
+              hook: selectedAngle.hook,
+              suggestedAdStyle: selectedAngle.suggestedAdStyle,
+              productAngleIndex: selectedIndex,
+            }]
+          : [],
+        placements: ['feed_square', 'feed_vertical', 'story_reel'],
+      })
+      navigate({
+        to: '/studio/$productId',
+        params: { productId: productId as string },
+        search: {
+          adTestId: adTestId as string,
+          compose: 'true',
+          angle: String(selectedIndex),
+          concept: String(conceptIndex),
+        },
+      })
+    } catch (err) {
+      const info = mapGenerationError(err)
+      notifications.show({
+        title: info.title,
+        message: info.action ? (
+          <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
+        ) : info.message,
+        color: 'red',
+        autoClose: 8000,
+      })
+    } finally {
+      setCreatingKey(null)
+    }
+  }
+
+  if (status === 'analyzing') {
+    return (
+      <Center py={64}>
+        <Stack align="center" gap="sm">
+          <Loader size="sm" color="brand" />
+          <Text size="sm" c="dark.1" ta="center">
+            Analyzing your product to recommend angles...
+          </Text>
+        </Stack>
+      </Center>
+    )
+  }
+
+  if (status === 'failed') {
+    return (
+      <Alert
+        color="red"
+        variant="light"
+        title="Product analysis failed"
+        icon={<IconAlertTriangle size={16} />}
+      >
+        Retry analysis from the Overview tab to generate recommended angles.
+      </Alert>
+    )
+  }
+
+  if (angles.length === 0) {
+    return (
+      <Center py={64}>
+        <Text size="sm" c="dark.1" ta="center">
+          No recommended angles yet. Re-run product analysis to generate them.
+        </Text>
+      </Center>
+    )
+  }
+
+  return (
+    <Stack gap="lg">
+      {valueProposition && (
+        <Box>
+          <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
+            Product promise
+          </Text>
+          <Text size="sm" c="dark.0" maw={760} lh={1.6}>
+            {valueProposition}
+          </Text>
+        </Box>
+      )}
+
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+        {angles.map((angle, index) => {
+          const selected = index === selectedIndex
+          return (
+            <UnstyledButton
+              key={`${angle.title}-${index}`}
+              onClick={() => setSelectedIndex(index)}
+              style={{ height: '100%' }}
+            >
+              <Paper
+                withBorder
+                radius="md"
+                p="md"
+                h="100%"
+                style={{
+                  background: selected
+                    ? 'rgba(84, 116, 180, 0.16)'
+                    : 'rgba(255, 255, 255, 0.025)',
+                  borderColor: selected
+                    ? 'var(--mantine-color-brand-5)'
+                    : 'var(--mantine-color-dark-5)',
+                  transition: 'border-color 120ms ease, background-color 120ms ease',
+                }}
+              >
+                <Stack gap="sm">
+                  <Group gap={6}>
+                    {angle.angleType && (
+                      <Badge size="xs" variant="light" color="grape" radius="sm">
+                        {angleTypeLabel(angle.angleType)}
+                      </Badge>
+                    )}
+                    {angle.suggestedAdStyle && (
+                      <Badge size="xs" variant="outline" color="gray" radius="sm">
+                        {angle.suggestedAdStyle}
+                      </Badge>
+                    )}
+                  </Group>
+
+                  <Box>
+                    <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
+                      Angle
+                    </Text>
+                    <Text size="sm" fw={800} c="white" lh={1.35}>
+                      {angle.title}
+                    </Text>
+                  </Box>
+
+                  <Box>
+                    <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
+                      Insight
+                    </Text>
+                    <Text size="sm" c="dark.1" lh={1.5}>
+                      {angle.description}
+                    </Text>
+                  </Box>
+                </Stack>
+              </Paper>
+            </UnstyledButton>
+          )
+        })}
+      </SimpleGrid>
+
+      {selectedAngle && (
+        <Paper
+          withBorder
+          radius="md"
+          p={isMobile ? 'md' : 'lg'}
+          style={{
+            background: 'rgba(0, 0, 0, 0.16)',
+            borderColor: 'var(--mantine-color-dark-5)',
+          }}
+        >
+          <Stack gap="md">
+            <Group justify="space-between" align="flex-start" gap="md">
+              <Box>
+                <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={4}>
+                  Creative concepts for this angle
+                </Text>
+                <Title order={3} fz={isMobile ? 18 : 22} c="white">
+                  {selectedAngle.title}
+                </Title>
+              </Box>
+              <Badge variant="light" color="brand" radius="sm">
+                3 concepts
+              </Badge>
+            </Group>
+
+            {selectedAngle.hook && (
+              <Box
+                p="sm"
+                style={{
+                  borderRadius: 8,
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid var(--mantine-color-dark-6)',
+                }}
+              >
+                <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
+                  Hook
+                </Text>
+                <Text size="sm" c="dark.0" fs="italic">
+                  "{selectedAngle.hook}"
+                </Text>
+              </Box>
+            )}
+
+            <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+              {concepts.map((concept, index) => (
+                <Paper
+                  key={concept.title}
+                  withBorder
+                  radius="md"
+                  p="md"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.025)',
+                    borderColor: 'var(--mantine-color-dark-6)',
+                  }}
+                >
+                  <Stack gap="sm">
+                    <Badge size="xs" variant="light" color="dark" radius="sm" w="fit-content">
+                      Concept {index + 1}
+                    </Badge>
+                    <Text size="sm" fw={800} c="white">
+                      {concept.title}
+                    </Text>
+                    <Text size="xs" c="brand.2" fw={700}>
+                      {concept.format}
+                    </Text>
+                    <Text size="sm" c="dark.1" lh={1.55}>
+                      {concept.idea}
+                    </Text>
+                    <Box>
+                      <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
+                        Opening frame
+                      </Text>
+                      <Text size="xs" c="dark.0" lh={1.45}>
+                        {concept.opening}
+                      </Text>
+                    </Box>
+	                    <Button
+	                      size="xs"
+	                      mt="auto"
+	                      color="brand"
+	                      variant="light"
+	                      leftSection={<IconLayoutGrid size={13} />}
+	                      disabled={creditsExhausted}
+	                      loading={creatingKey === `${selectedIndex}-${index}`}
+	                      onClick={() => handleChooseTemplates(concept, index)}
+	                    >
+	                      Choose templates
+	                    </Button>
+                  </Stack>
+                </Paper>
+              ))}
+            </SimpleGrid>
+          </Stack>
+        </Paper>
+      )}
+    </Stack>
   )
 }
 
@@ -2073,6 +2439,7 @@ function GenerateWizard({
   prefillFromAdId,
   prefillTemplateId,
   prefillAngleIndex,
+  prefillConceptIndex,
   prefillEditAdId,
   adTestId,
 }: {
@@ -2103,6 +2470,7 @@ function GenerateWizard({
   prefillFromAdId?: Id<'templateGenerations'> | null
   prefillTemplateId?: Id<'adTemplates'> | null
   prefillAngleIndex?: number | null
+  prefillConceptIndex?: number | null
   prefillEditAdId?: Id<'templateGenerations'> | null
   /** When set, generated creatives attach to this Ad Test (template path). */
   adTestId?: Id<'adTests'> | null
@@ -2149,6 +2517,9 @@ function GenerateWizard({
     prefillTemplateId ? [prefillTemplateId] : [],
   )
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null)
+  const [selectedConceptIndex, setSelectedConceptIndex] = useState<number | null>(
+    prefillConceptIndex ?? null,
+  )
 
   // Ensure the prefilled template ends up selected even when this wizard was
   // NOT freshly mounted — e.g. navigating from the Inspiration tab's "Generate
@@ -2260,15 +2631,25 @@ function GenerateWizard({
       prefillAngleIndex < product.marketingAngles.length
     ) {
       setSelectedAngleIndex(prefillAngleIndex)
-      setActiveSegment('custom')
-      // Seed the prompt with the angle's hook (matches chip-click behavior)
-      if (prompt.trim().length === 0) {
-        setPrompt(product.marketingAngles[prefillAngleIndex].hook)
+      if (prefillConceptIndex != null) {
+        const conceptCount = buildCreativeConcepts(product.marketingAngles[prefillAngleIndex]).length
+        setSelectedConceptIndex(
+          prefillConceptIndex >= 0 && prefillConceptIndex < conceptCount
+            ? prefillConceptIndex
+            : null,
+        )
+        setActiveSegment('template')
+      } else {
+        setActiveSegment('custom')
+        // Seed the prompt with the angle's hook (matches chip-click behavior)
+        if (prompt.trim().length === 0) {
+          setPrompt(product.marketingAngles[prefillAngleIndex].hook)
+        }
       }
       setAnglePrefillApplied(true)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillAngleIndex, product.marketingAngles, anglePrefillApplied, prefillTemplateId, prefillFromAdId])
+  }, [prefillAngleIndex, prefillConceptIndex, product.marketingAngles, anglePrefillApplied, prefillTemplateId, prefillFromAdId])
 
   // ── Source ad for "Edit with custom prompt" ───────────────────────────────
   const { data: editSourceAd } = useQuery(
@@ -2568,6 +2949,12 @@ function GenerateWizard({
   const canGenerate = useTemplatePath || usePromptPath || useAnglePath
 
   const variationsCount = parseInt(variationsPerTemplate, 10)
+  const selectedAngle =
+    selectedAngleIndex !== null ? product.marketingAngles?.[selectedAngleIndex] : undefined
+  const selectedConcept =
+    selectedAngle && selectedConceptIndex !== null
+      ? buildCreativeConcepts(selectedAngle)[selectedConceptIndex]
+      : undefined
   const totalCount = useTemplatePath
     ? pickedIds.length * variationsCount
     : (usePromptPath || useAnglePath)
@@ -2591,6 +2978,15 @@ function GenerateWizard({
           applyBrand,
           applyVoice,
           adTestId: adTestId ?? undefined,
+          angleSeed: selectedAngle
+            ? {
+                title: selectedAngle.title,
+                description: selectedAngle.description,
+                hook: selectedAngle.hook,
+                suggestedAdStyle: selectedAngle.suggestedAdStyle,
+              }
+            : undefined,
+          creativeConcept: selectedConcept,
         })
         notifications.show({
           title: 'Success',
@@ -2722,6 +3118,49 @@ function GenerateWizard({
         </Group>
       </Group>
 
+      {selectedAngle && (
+        <Box px="md" mb="md">
+          <Paper
+            p="sm"
+            radius="md"
+            bg="dark.7"
+            style={{ border: '1px solid var(--mantine-color-brand-7)' }}
+          >
+            <Group justify="space-between" align="flex-start" gap="sm" wrap="nowrap">
+              <Group gap="sm" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
+                <ThemeIcon variant="light" color="brand" radius="xl" size="md">
+                  <IconTarget size={16} />
+                </ThemeIcon>
+                <Box style={{ minWidth: 0 }}>
+                  <Text size="xs" fw={700} c="brand.3" tt="uppercase">
+                    Using recommended strategy
+                  </Text>
+                  <Text size="sm" fw={700} c="white" lineClamp={1}>
+                    {selectedAngle.title}
+                  </Text>
+                  {selectedConcept && (
+                    <Text size="xs" c="dark.1" lineClamp={2}>
+                      Concept: {selectedConcept.title} - {selectedConcept.idea}
+                    </Text>
+                  )}
+                </Box>
+              </Group>
+              <Button
+                size="xs"
+                variant="subtle"
+                color="gray"
+                onClick={() => {
+                  setSelectedAngleIndex(null)
+                  setSelectedConceptIndex(null)
+                }}
+              >
+                Clear
+              </Button>
+            </Group>
+          </Paper>
+        </Box>
+      )}
+
       {/* Segmented control — hidden when editing an existing ad, and when
           generating into an ad test (template-only path). */}
       {!prefillEditAdId && !adTestId && (
@@ -2741,7 +3180,7 @@ function GenerateWizard({
 
       <Box style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 320px',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 360px',
         gap: 'var(--mantine-spacing-md)',
       }}>
         {/* ═══ Per-segment content area ═══ */}
@@ -2957,8 +3396,10 @@ function GenerateWizard({
                         onClick={() => {
                           if (selectedAngleIndex === idx) {
                             setSelectedAngleIndex(null)
+                            setSelectedConceptIndex(null)
                           } else {
                             setSelectedAngleIndex(idx)
+                            setSelectedConceptIndex(null)
                             // Only auto-fill the prompt if textarea is empty
                             if (prompt.trim().length === 0) {
                               setPrompt(angle.hook)
@@ -2979,6 +3420,7 @@ function GenerateWizard({
                         if (angles.length === 0) return
                         const randomIdx = Math.floor(Math.random() * angles.length)
                         setSelectedAngleIndex(randomIdx)
+                        setSelectedConceptIndex(null)
                         if (prompt.trim().length === 0) {
                           setPrompt(angles[randomIdx].hook)
                         }
@@ -3421,13 +3863,37 @@ function GenerateWizard({
             border: '1px solid var(--mantine-color-dark-6)',
             background: 'rgba(26, 26, 26, 0.5)',
             alignSelf: 'flex-start',
-            position: isMobile ? 'relative' : 'sticky',
-            top: isMobile ? undefined : 80,
+            position: isMobile ? 'relative' : 'fixed',
+            top: isMobile ? undefined : 'var(--mantine-spacing-sm)',
+            right: isMobile ? undefined : 'var(--mantine-spacing-lg)',
             order: isMobile ? 1 : 2,
+            width: isMobile ? undefined : 360,
+            height: isMobile
+              ? undefined
+              : 'calc(100dvh - var(--mantine-spacing-sm) - var(--mantine-spacing-sm))',
+            maxHeight: isMobile
+              ? undefined
+              : 'calc(100dvh - var(--mantine-spacing-sm) - var(--mantine-spacing-sm))',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: isMobile ? undefined : 'hidden',
+            boxSizing: 'border-box',
+            zIndex: isMobile ? undefined : 10,
           }}
         >
-          {/* Source image picker */}
-          <Box mb="md">
+          <Box
+            style={{
+              flex: '1 1 0',
+              height: isMobile ? undefined : 0,
+              minHeight: 0,
+              overflowY: isMobile ? 'visible' : 'auto',
+              overscrollBehavior: isMobile ? undefined : 'contain',
+              paddingRight: isMobile ? undefined : 4,
+              marginRight: isMobile ? undefined : -4,
+            }}
+          >
+            {/* Source image picker */}
+            <Box mb="md">
             <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb="xs">
               Source image
             </Text>
@@ -3545,10 +4011,10 @@ function GenerateWizard({
                 </Text>
               </Box>
             </Paper>
-          </Box>
+            </Box>
 
-          {/* Segment-aware selection summary */}
-          <Box mb="md">
+            {/* Segment-aware selection summary */}
+            <Box mb="md">
             <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb="xs">
               {activeSegment === 'template' ? 'Templates' : 'Starting from'}
             </Text>
@@ -3664,10 +4130,10 @@ function GenerateWizard({
                 </Text>
               </Paper>
             )}
-          </Box>
+            </Box>
 
-          {/* Output Aspect Ratio */}
-          <Box mb="md">
+            {/* Output Aspect Ratio */}
+            <Box mb="md">
             <Text size="sm" fw={600} c="white" mb="xs">Output size</Text>
             <SegmentedControl
               value={aspectRatio}
@@ -3676,11 +4142,11 @@ function GenerateWizard({
               fullWidth
               color="brand"
             />
-          </Box>
+            </Box>
 
-          {/* Mode — only relevant for template path */}
-          {activeSegment === 'template' && hasTemplates && (
-            <Box mb="md">
+            {/* Mode — only relevant for template path */}
+            {activeSegment === 'template' && hasTemplates && (
+              <Box mb="md">
               <Text size="sm" fw={500} c="white" mb="xs">Mode</Text>
               <Radio.Group value={mode} onChange={(val) => setMode(val as Mode)}>
                 <Stack gap="xs">
@@ -3730,14 +4196,14 @@ function GenerateWizard({
                   onChange={(e) => setColorAdapt(e.currentTarget.checked)}
                 />
               )}
-            </Box>
-          )}
+              </Box>
+            )}
 
-          {/* Brand application — applies the user's brand kit + voice to this run.
+            {/* Brand application — applies the user's brand kit + voice to this run.
               Hidden when the user has no brand kit (nothing to apply), mirroring
               the BrandPicker's behaviour. */}
-          {activeBrandKit && (
-            <Paper mb="md" p="sm" radius="md" withBorder bg="dark.7">
+            {activeBrandKit && (
+              <Paper mb="md" p="sm" radius="md" withBorder bg="dark.7">
               <Group justify="space-between" mb="xs" wrap="nowrap">
                 <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
                   {activeBrandKit.logoUrl ? (
@@ -3795,13 +4261,13 @@ function GenerateWizard({
                 disabled={!hasVoiceData}
                 styles={{ label: { fontWeight: 500 } }}
               />
-            </Paper>
-          )}
+              </Paper>
+            )}
 
-          {/* Product has no brand assigned but the user has brands — explain
+            {/* Product has no brand assigned but the user has brands — explain
               why there's no brand styling and where to assign one. */}
-          {!activeBrandKit && hasAnyBrand && (
-            <Paper mb="md" p="sm" radius="md" withBorder bg="dark.7">
+            {!activeBrandKit && hasAnyBrand && (
+              <Paper mb="md" p="sm" radius="md" withBorder bg="dark.7">
               <Group gap="xs" wrap="nowrap" align="flex-start">
                 <IconTag size={14} color="var(--mantine-color-dark-2)" style={{ marginTop: 2, flexShrink: 0 }} />
                 <Text size="xs" c="dark.2">
@@ -3813,11 +4279,11 @@ function GenerateWizard({
                   ) to apply your theme.
                 </Text>
               </Group>
-            </Paper>
-          )}
+              </Paper>
+            )}
 
-          {/* Variations */}
-          <Box mb="md">
+            {/* Variations */}
+            <Box mb="md">
             <Text size="sm" fw={500} c="white" mb="xs">
               Variations
               {activeSegment === 'template' && hasTemplates ? ' per template' : ''}
@@ -3835,10 +4301,18 @@ function GenerateWizard({
                 Locked to 1 when editing an existing ad.
               </Text>
             )}
+            </Box>
           </Box>
 
           {/* Summary & Submit */}
-          <Box pt="lg" mt="lg" style={{ borderTop: '1px solid var(--mantine-color-dark-5)' }}>
+          <Box
+            pt="md"
+            mt="md"
+            style={{
+              borderTop: '1px solid var(--mantine-color-dark-5)',
+              flexShrink: 0,
+            }}
+          >
             {!canGenerate ? (
               <Text size="sm" c="dark.2" ta="center" mb="md">
                 {activeSegment === 'template' ? 'Pick a template' : 'Type a prompt (10+ chars) or pick an angle'}

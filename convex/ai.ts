@@ -833,6 +833,15 @@ export const composePrompt = internalAction({
       .filter(Boolean)
       .join('\n')
 
+    const strategyContext = generation.angleSeed
+      ? [
+          `Marketing angle: ${generation.angleSeed.title}`,
+          `Why this angle works: ${generation.angleSeed.description}`,
+          `Sample hook/opening frame: "${generation.angleSeed.hook}"`,
+          `Suggested ad style: ${generation.angleSeed.suggestedAdStyle}`,
+        ].join('\n')
+      : ''
+
     // Brand kit feeds the template path too, so a product tagged with a brand
     // gets its colors/voice/offer applied on every generation — not just in the
     // angle/prompt composers. (Keeps the "brand kit on every gen" promise true.)
@@ -859,6 +868,13 @@ export const composePrompt = internalAction({
       productContextStr || '(no product analysis available)',
       '',
       templateContext || '(no template tags available)',
+      '',
+      strategyContext
+        ? `User-selected strategy context:\n${strategyContext}`
+        : '(no selected angle or creative concept)',
+      strategyContext
+        ? 'Use the selected ad template as the visual reference, but make the final ad communicate this strategy context. If the strategy conflicts with the template, preserve the template structure and adapt the message, props, overlays, and opening frame toward the strategy.'
+        : '',
       '',
       brandLines.length ? brandLines.join('\n') : '(no brand kit set — keep brand styling neutral)',
       ...(applyBrand && brandKit?.currentOffer ? [`Current offer to display at the bottom: "${brandKit.currentOffer}"`] : []),
@@ -1107,7 +1123,6 @@ export const composeFromAnglePrompt = internalAction({
       )
       if (bgRemoved) productImageUrl = bgRemoved.imageUrl
     }
-
     const prodLines: string[] = []
     if (prodCtx.category) prodLines.push(`Product category: ${prodCtx.category}`)
     if (prodCtx.productDescription) prodLines.push(`Product description: ${prodCtx.productDescription}`)

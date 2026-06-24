@@ -55,6 +55,48 @@ const aspectRatioValidator = v.union(
   v.literal('9:16'),
 )
 
+const generationAngleSeed = v.object({
+  title: v.string(),
+  description: v.string(),
+  hook: v.string(),
+  suggestedAdStyle: v.string(),
+})
+
+const creativeConcept = v.object({
+  title: v.string(),
+  format: v.string(),
+  idea: v.string(),
+  opening: v.string(),
+})
+
+function applyCreativeConceptToAngle(
+  angle: {
+    title: string
+    description: string
+    hook: string
+    suggestedAdStyle: string
+  },
+  concept?: {
+    title: string
+    format: string
+    idea: string
+    opening: string
+  },
+) {
+  if (!concept) return angle
+  return {
+    title: angle.title,
+    description: [
+      angle.description,
+      '',
+      `Selected creative concept: ${concept.title}.`,
+      `Concept idea: ${concept.idea}`,
+    ].join('\n'),
+    hook: concept.opening || angle.hook,
+    suggestedAdStyle: concept.format || angle.suggestedAdStyle,
+  }
+}
+
 // ─── Rate limiting ─────────────────────────────────────────────────────────
 
 const RATE_LIMIT_WINDOW_MS = 60_000
@@ -1031,6 +1073,9 @@ export const generateFromProduct = mutation({
     applyBrand: v.optional(v.boolean()),
     /** Apply customer voice (brand voice + customer phrases). Defaults to true. */
     applyVoice: v.optional(v.boolean()),
+    /** Optional strategy context carried from Recommended Angles. */
+    angleSeed: v.optional(generationAngleSeed),
+    creativeConcept: v.optional(creativeConcept),
     /**
      * Optional: attach these creatives to an Ad Test. The test becomes the
      * container that groups creatives + copy. When set, each generated row is
@@ -1063,6 +1108,10 @@ export const generateFromProduct = mutation({
     if (product.archivedAt) {
       throw new Error('Cannot generate from archived product')
     }
+
+    const angleSeed = args.angleSeed
+      ? applyCreativeConceptToAngle(args.angleSeed, args.creativeConcept)
+      : undefined
 
     // When attaching to an Ad Test, verify it's owned and belongs to this
     // product. We compute the next adUnitIndex so creatives added across
@@ -1190,6 +1239,7 @@ export const generateFromProduct = mutation({
           colorAdapt: args.colorAdapt,
           applyBrand: args.applyBrand ?? true,
           applyVoice: args.applyVoice ?? true,
+          angleSeed,
           variationIndex: variationCounter,
           status: 'queued',
           model: args.model ?? 'nano-banana-2',
@@ -1575,4 +1625,3 @@ export const generateVariations = mutation({
     return { ok: true, generationIds }
   },
 })
-

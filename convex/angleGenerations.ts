@@ -21,6 +21,41 @@ const aspectRatio = v.union(
   v.literal('9:16'),
 )
 
+const creativeConcept = v.object({
+  title: v.string(),
+  format: v.string(),
+  idea: v.string(),
+  opening: v.string(),
+})
+
+function withCreativeConcept(
+  angle: {
+    title: string
+    description: string
+    hook: string
+    suggestedAdStyle: string
+  },
+  concept?: {
+    title: string
+    format: string
+    idea: string
+    opening: string
+  },
+) {
+  if (!concept) return angle
+  return {
+    title: angle.title,
+    description: [
+      angle.description,
+      '',
+      `Selected creative concept: ${concept.title}.`,
+      `Concept idea: ${concept.idea}`,
+    ].join('\n'),
+    hook: concept.opening || angle.hook,
+    suggestedAdStyle: concept.format || angle.suggestedAdStyle,
+  }
+}
+
 export const submitAngleGeneration = mutation({
   args: {
     productId: v.id('products'),
@@ -34,8 +69,10 @@ export const submitAngleGeneration = mutation({
     applyBrand: v.optional(v.boolean()),
     /** Apply customer voice (brand voice + customer phrases). Defaults to true. */
     applyVoice: v.optional(v.boolean()),
+    /** Optional strategy layer from the Recommended angles tab. */
+    creativeConcept: v.optional(creativeConcept),
   },
-  handler: async (ctx, { productId, angleIndex, aspectRatio: ar, count, model, productImageId, applyBrand, applyVoice }) => {
+  handler: async (ctx, { productId, angleIndex, aspectRatio: ar, count, model, productImageId, applyBrand, applyVoice, creativeConcept }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -60,7 +97,7 @@ export const submitAngleGeneration = mutation({
     if (angleIndex < 0 || angleIndex >= product.marketingAngles.length) {
       throw new Error('Invalid angle index')
     }
-    const angle = product.marketingAngles[angleIndex]
+    const angle = withCreativeConcept(product.marketingAngles[angleIndex], creativeConcept)
 
     // Resolve source: caller-supplied productImageId wins; fall back to primary.
     let resolvedImageId: typeof product.primaryImageId
