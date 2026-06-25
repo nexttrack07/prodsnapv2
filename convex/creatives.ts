@@ -14,9 +14,13 @@ async function getAuthUserId(
 }
 
 /**
- * Every creative (any status) for a product, newest first. The product page's
- * Overview tab renders this — queued/running/failed rows show progress, complete
- * rows show the image.
+ * Creatives for a product, newest first. The product page's Overview tab
+ * renders this — queued/running rows show progress, complete rows show the
+ * image. Failed rows are intentionally excluded: a failed generation is never
+ * billed (we charge only after a durable upload), there is no inline retry, and
+ * a non-clickable "Failed" tile is a dead-end the user can't dismiss. Hiding it
+ * keeps the gallery to results that matter; the watchdog flips stuck rows to
+ * 'failed', so timed-out generations drop out here too.
  */
 export const listForProduct = query({
   args: { productId: v.id('products') },
@@ -32,7 +36,7 @@ export const listForProduct = query({
       .collect()
 
     return gens
-      .filter((g) => g.userId === userId)
+      .filter((g) => g.userId === userId && g.status !== 'failed')
       .sort((a, b) => b._creationTime - a._creationTime)
   },
 })

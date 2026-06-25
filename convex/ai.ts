@@ -1,6 +1,6 @@
 'use node'
 
-import { fal } from '@fal-ai/client'
+import { fal, ValidationError } from '@fal-ai/client'
 import { v } from 'convex/values'
 import { z } from 'zod'
 import { action, internalAction } from './_generated/server'
@@ -1216,6 +1216,55 @@ export const composePrompt = internalAction({
 
 type ImageEditModel = 'nano-banana-2' | 'gpt-image-2'
 
+/**
+ * Normalizes a fal.subscribe failure into our own error vocabulary AND makes it
+ * loud. fal's ApiError.message is uselessly generic for 422s ("Unprocessable
+ * Entity") — the actionable cause lives in `err.body.detail` (e.g. "failed to
+ * download image_urls.1", "prompt too long"). The old catch blocks threw the
+ * bare message and discarded that detail, so every input rejection looked like
+ * a random mystery 422. We log the detail and fold it into the thrown message.
+ */
+function mapFalImageError(err: unknown): Error {
+  const raw = err instanceof Error ? err.message : String(err)
+  const status = (err as { status?: number })?.status
+
+  // Overload / transient — caller maps the FAL_OVERLOADED code to "AI is busy".
+  if (status === 429 || status === 503 || /overload|too many requests|service unavailable/i.test(raw)) {
+    const overloadErr = new Error('FAL_OVERLOADED')
+    ;(overloadErr as Error & { code: string }).code = 'FAL_OVERLOADED'
+    return overloadErr
+  }
+
+  // 422 Unprocessable Entity — fal rejected the input payload. Surface the
+  // field-level detail that fal returns so the failure is diagnosable.
+  if (err instanceof ValidationError || status === 422) {
+    const detail =
+      (err as ValidationError)?.fieldErrors ??
+      (err as { body?: { detail?: unknown } })?.body?.detail
+    const detailText = Array.isArray(detail)
+      ? detail
+          .map((d: { loc?: unknown[]; msg?: string }) =>
+            `${(d.loc ?? []).join('.')}: ${d.msg ?? ''}`.trim(),
+          )
+          .join('; ')
+      : typeof detail === 'string'
+        ? detail
+        : detail
+          ? JSON.stringify(detail)
+          : ''
+    console.error('[fal] 422 ValidationError', {
+      requestId: (err as { requestId?: string })?.requestId,
+      detail: detail ?? raw,
+    })
+    return new Error(`Image model rejected the input (422): ${detailText || raw}`)
+  }
+
+  if (/safety|blocked|rejected/i.test(raw)) {
+    return new Error('Image model rejected the request — try a different template or soften the prompt.')
+  }
+  return err instanceof Error ? err : new Error(raw)
+}
+
 async function callImageEditModel({
   model,
   prompt,
@@ -1246,17 +1295,7 @@ async function callImageEditModel({
       })
     }
   } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err)
-    const status = (err as { status?: number })?.status
-    if (status === 429 || status === 503 || /overload|too many requests|service unavailable/i.test(raw)) {
-      const overloadErr = new Error('FAL_OVERLOADED')
-      ;(overloadErr as Error & { code: string }).code = 'FAL_OVERLOADED'
-      throw overloadErr
-    }
-    if (/safety|blocked|rejected/i.test(raw)) {
-      throw new Error('Image model rejected the request — try a different template or soften the prompt.')
-    }
-    throw err
+    throw mapFalImageError(err)
   }
   const data = result.data as { images?: Array<{ url?: string }> }
   const generatedUrl = data.images?.[0]?.url
@@ -1295,17 +1334,7 @@ async function callImageGenModel({
       })
     }
   } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err)
-    const status = (err as { status?: number })?.status
-    if (status === 429 || status === 503 || /overload|too many requests|service unavailable/i.test(raw)) {
-      const overloadErr = new Error('FAL_OVERLOADED')
-      ;(overloadErr as Error & { code: string }).code = 'FAL_OVERLOADED'
-      throw overloadErr
-    }
-    if (/safety|blocked|rejected/i.test(raw)) {
-      throw new Error('Image model rejected the request — try softening the prompt.')
-    }
-    throw err
+    throw mapFalImageError(err)
   }
   const data = result.data as { images?: Array<{ url?: string }> }
   const generatedUrl = data.images?.[0]?.url
