@@ -32,41 +32,106 @@ import { isAppRoute, isWizardRoute } from '~/utils/routeGroups'
 
 const theme = createTheme({
   fontFamily:
-    'Poppins, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    'Lato, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+  fontFamilyMonospace: 'JetBrains Mono, ui-monospace, SFMono-Regular, monospace',
+  headings: {
+    // Sharp grotesk display for headings (techy, Linear-like) over Lato body.
+    fontFamily: '"Space Grotesk", Lato, ui-sans-serif, system-ui, sans-serif',
+    fontWeight: '600',
+    textWrap: 'balance',
+  },
   primaryColor: 'brand',
+  white: '#ffffff',
+  black: '#16191d',
   colors: {
+    // Minimalist monochrome accent: `brand` is a near-black grayscale ramp, so
+    // every primary button / link / accent (color="brand", brand.6, etc.)
+    // renders black instead of blue. Index 6 is the primary shade.
     brand: [
-      '#e5f3ff',
-      '#cde2ff',
-      '#9ac2ff',
-      '#64a0ff',
-      '#3884fe',
-      '#1d72fe',
-      '#0063ff',
-      '#0058e4',
-      '#004ecd',
-      '#0043b5',
-    ],
-    dark: [
-      '#C1C2C5',
-      '#A6A7AB',
-      '#909296',
-      '#5C5F66',
-      '#373A40',
-      '#2C2E33',
-      '#1a1a1a',
-      '#0d0d0d',
-      '#050505',
+      '#f4f5f6',
+      '#e7e8ea',
+      '#cfd1d4',
+      '#abaeb3',
+      '#7f8389',
+      '#4a4e56',
+      '#16191d',
+      '#0c0e11',
+      '#060709',
       '#000000',
     ],
+    // Neutral ramp, INVERTED for light mode: the codebase consistently uses low
+    // `dark.X` indices for text and high indices for surfaces, so this mapping
+    // makes existing `c="dark.2"` / `bg dark-7` / `border dark-5` usages resolve
+    // to correct light-theme values without touching those files.
+    dark: [
+      '#16191d', // 0 — primary text (near-black)
+      '#344054', // 1 — strong secondary text
+      '#475467', // 2 — secondary text
+      '#667085', // 3 — muted text
+      '#98a2b3', // 4 — faint text / disabled
+      '#e6e8eb', // 5 — hairline border
+      '#eef0f3', // 6 — divider / subtle border
+      '#ffffff', // 7 — CARD / panel surface (white, pops on the gray canvas)
+      '#f4f6f8', // 8 — app canvas / page background (very light gray)
+      '#eef1f4', // 9 — deeper nested well
+    ],
+    // Cool neutral gray used by Mantine defaults (borders, inputs, subtle fills).
+    gray: [
+      '#fafbfc',
+      '#f3f4f6',
+      '#eef0f3',
+      '#e6e8eb',
+      '#d5d9df',
+      '#98a2b3',
+      '#667085',
+      '#475467',
+      '#344054',
+      '#16191d',
+    ],
   },
-  defaultRadius: 'lg',
+  defaultRadius: 'xs',
+  // Sharp, minimal corners everywhere — every radius token resolves to 4px so
+  // cards, buttons, pills, badges, inputs all share the same crisp 4px corner.
+  radius: { xs: '4px', sm: '4px', md: '4px', lg: '4px', xl: '4px' },
+  shadows: {
+    xs: '0 1px 2px rgba(16, 24, 40, 0.05)',
+    sm: '0 1px 3px rgba(16, 24, 40, 0.10), 0 1px 2px rgba(16, 24, 40, 0.06)',
+    md: '0 4px 8px -2px rgba(16, 24, 40, 0.10), 0 2px 4px -2px rgba(16, 24, 40, 0.06)',
+    lg: '0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03)',
+    xl: '0 20px 24px -4px rgba(16, 24, 40, 0.08), 0 8px 8px -4px rgba(16, 24, 40, 0.03)',
+  },
   other: {
-    borderSubtle: 'rgba(255, 255, 255, 0.06)',
+    borderSubtle: 'rgba(16, 24, 40, 0.08)',
   },
   components: {
     Button: {
       defaultProps: { fw: 600 },
+    },
+    Paper: {
+      defaultProps: { radius: 'md' },
+    },
+    // Mantine derives the SegmentedControl indicator/control radius from
+    // calc(radius - 4px), which collapses to 0 (square selection) at our 4px
+    // radius. Force a rounded 4px selection via inline styles (beats the class).
+    SegmentedControl: {
+      styles: {
+        indicator: { borderRadius: '4px' },
+        control: { borderRadius: '4px' },
+      },
+    },
+    // Dropdown options use `color: inherit` and were picking up a light value.
+    // Force dark option text via the styles API (inline → beats inheritance).
+    Select: {
+      styles: { option: { color: 'var(--mantine-color-text)' } },
+    },
+    MultiSelect: {
+      styles: { option: { color: 'var(--mantine-color-text)' } },
+    },
+    Autocomplete: {
+      styles: { option: { color: 'var(--mantine-color-text)' } },
+    },
+    Combobox: {
+      styles: { option: { color: 'var(--mantine-color-text)' } },
     },
   },
 })
@@ -120,7 +185,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <MantineProvider theme={theme} forceColorScheme="dark">
+        <MantineProvider theme={theme} forceColorScheme="light">
           <ModalsProvider>
             <Notifications position={isMobile ? 'top-center' : 'bottom-right'} />
             <Authenticated>

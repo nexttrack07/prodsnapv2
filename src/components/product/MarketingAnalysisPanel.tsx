@@ -230,7 +230,7 @@ export function MarketingAnalysisPanel({
             <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
               Value proposition
             </Text>
-            <Title order={3} c="white">
+            <Title order={3} c="dark.0">
               {product.valueProposition}
             </Title>
           </Box>
@@ -246,12 +246,12 @@ export function MarketingAnalysisPanel({
                 withBorder
                 radius="md"
                 p="lg"
-                style={{ background: 'rgba(255,255,255,0.02)' }}
+                style={{ background: 'rgba(16,24,40,0.02)' }}
               >
                 <Stack gap="md">
                   <Box style={{ flex: 1, minWidth: 200 }}>
                     <Group gap="sm" align="center">
-                      <Text size="sm" fw={700} c="white">
+                      <Text size="sm" fw={700} c="dark.0">
                         {angle.title}
                       </Text>
                       <Badge size="xs" color="teal" variant="light" radius="sm">

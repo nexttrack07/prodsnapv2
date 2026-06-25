@@ -314,7 +314,7 @@ function CollageBackground({
             breakInside: 'avoid',
             backgroundColor: 'var(--mantine-color-dark-6)',
             backgroundImage:
-              'linear-gradient(135deg, rgba(84, 116, 180, 0.18), rgba(84, 116, 180, 0.04))',
+              'linear-gradient(135deg, rgba(16, 24, 40, 0.18), rgba(16, 24, 40, 0.04))',
           }}
         />
       ))}
@@ -356,7 +356,7 @@ function SinglePrimaryBackground({ imageUrl }: { imageUrl: string | null }) {
           style={{
             height: '100%',
             backgroundImage:
-              'linear-gradient(135deg, rgba(84, 116, 180, 0.25), rgba(84, 116, 180, 0.06))',
+              'linear-gradient(135deg, rgba(16, 24, 40, 0.25), rgba(16, 24, 40, 0.06))',
           }}
         />
       )}
@@ -408,7 +408,7 @@ function EmptyHero({ isMobile }: { isMobile: boolean }) {
       style={{
         backgroundColor: 'var(--mantine-color-dark-7)',
         backgroundImage:
-          'radial-gradient(circle at top right, rgba(84, 116, 180, 0.20), transparent 50%)',
+          'radial-gradient(circle at top right, rgba(16, 24, 40, 0.20), transparent 50%)',
         borderColor: 'var(--mantine-color-dark-5)',
       }}
     >
@@ -418,12 +418,12 @@ function EmptyHero({ isMobile }: { isMobile: boolean }) {
           radius="lg"
           variant="gradient"
           gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
-          style={{ boxShadow: '0 8px 32px rgba(84, 116, 180, 0.30)' }}
+          style={{ boxShadow: '0 8px 32px rgba(16, 24, 40, 0.30)' }}
         >
           <IconPhoto size={36} />
         </ThemeIcon>
         <Stack gap={4} align="center">
-          <Title order={2} fz={28} fw={700} c="white" ta="center">
+          <Title order={2} fz={28} fw={700} c="dark.0" ta="center">
             Let's make your first ad
           </Title>
           <Text c="dark.2" size="sm" maw={460} ta="center">
@@ -485,7 +485,7 @@ function ProductsRow({
   return (
     <Stack gap="sm">
       <Group justify="space-between" align="baseline">
-        <Title order={3} fz={18} c="white" fw={600}>
+        <Title order={3} fz={18} c="dark.0" fw={600}>
           Your products
         </Title>
         <Text size="xs" c="dark.2">
@@ -493,7 +493,9 @@ function ProductsRow({
         </Text>
       </Group>
       <ScrollArea offsetScrollbars scrollbarSize={6} type="hover">
-        <Group gap="md" wrap="nowrap" pb="xs">
+        {/* Vertical padding so the cards' hover-lift + drop shadow + border
+            aren't clipped by the ScrollArea viewport's overflow. */}
+        <Group gap="md" wrap="nowrap" pt="xs" pb="md" px={2}>
           <NewProductTile onClick={onAddProduct} />
           {products.map((p) => (
             <ProductTile key={p._id} product={p} />
@@ -547,7 +549,7 @@ function NewProductTile({ onClick }: { onClick: () => void }) {
           </Box>
         </AspectRatio>
         <Box p="sm">
-          <Text fw={500} size="sm" c="white" truncate>
+          <Text fw={500} size="sm" c="dark.0" truncate>
             New product
           </Text>
           <Text size="xs" c="dark.2" mt={2}>
@@ -601,7 +603,7 @@ function ProductTile({ product }: { product: ProductRow }) {
           </Box>
         </AspectRatio>
         <Box p="sm">
-          <Text fw={500} size="sm" c="white" truncate>
+          <Text fw={500} size="sm" c="dark.0" truncate>
             {capitalizeWords(product.name)}
           </Text>
           <Text size="xs" c="dark.2" mt={2}>
@@ -654,7 +656,7 @@ function TemplatesShelf({
       <Group justify="space-between" align="baseline">
         <Group gap="xs" align="baseline">
           <IconSparkles size={18} color="var(--mantine-color-brand-5)" />
-          <Title order={3} fz={18} c="white" fw={600}>
+          <Title order={3} fz={18} c="dark.0" fw={600}>
             Start from a proven format
           </Title>
         </Group>
@@ -774,7 +776,7 @@ function ThreePathsSection({ focusProductId }: { focusProductId: Id<'products'> 
 
   return (
     <Stack gap="sm">
-      <Title order={3} fz={18} c="white" fw={600}>
+      <Title order={3} fz={18} c="dark.0" fw={600}>
         Three ways to make an ad
       </Title>
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
@@ -801,7 +803,7 @@ function ThreePathsSection({ focusProductId }: { focusProductId: Id<'products'> 
                 {p.label}
               </Text>
             </Group>
-            <Text mt="md" size="md" fw={600} c="white">
+            <Text mt="md" size="md" fw={600} c="dark.0">
               {p.title}
             </Text>
             <Text mt={4} size="xs" c="dark.2">
@@ -814,45 +816,39 @@ function ThreePathsSection({ focusProductId }: { focusProductId: Id<'products'> 
   )
 }
 
-// ─── Next tests (persisted Ad Test recommendations + winner loop) ───────────
-
-const PLACEMENT_SHORT: Record<string, string> = {
-  feed_square: 'Feed 1:1',
-  feed_vertical: 'Feed 4:5',
-  story_reel: 'Story 9:16',
-  landscape: 'Landscape',
-}
+// ─── Next ads (persisted angle recommendations + winner loop) ───────────────
 
 type HomeSurface = NonNullable<
-  ReturnType<typeof useQuery<typeof api.adTests.getHomeAdTestSurface>>
+  ReturnType<typeof useQuery<typeof api.recommendations.getHomeSurface>>
 >
 type Recommendation = HomeSurface['recommendations'][number]
 type RecentWinner = HomeSurface['recentWinners'][number]
 
 function NextTestsSection() {
   const navigate = useNavigate()
-  const surface = useQuery(api.adTests.getHomeAdTestSurface, {})
-  const createTest = useMutation(api.adTests.createRecommendedAdTest)
-  const dismiss = useMutation(api.adTests.dismissRecommendation)
+  const surface = useQuery(api.recommendations.getHomeSurface, {})
+  const consume = useMutation(api.recommendations.consumeRecommendation)
+  const dismiss = useMutation(api.recommendations.dismissRecommendation)
   const [busyId, setBusyId] = useState<string | null>(null)
 
   if (!surface || !surface.focusProductId) return null
   const { focusProductId, productName, recommendations, recentWinners } = surface
   if (recommendations.length === 0 && recentWinners.length === 0) return null
 
-  const handleCreate = async (rec: Recommendation) => {
+  const handleGenerate = async (rec: Recommendation) => {
     setBusyId(rec._id)
     try {
-      const adTestId = await createTest({ recommendationId: rec._id })
+      const { productId } = await consume({
+        recommendationId: rec._id as Id<'adTestRecommendations'>,
+      })
       navigate({
         to: '/studio/$productId',
-        params: { productId: focusProductId },
-        search: { adTestId },
+        params: { productId },
       })
     } catch (err) {
       notifications.show({
         color: 'red',
-        message: err instanceof Error ? err.message : 'Could not create Ad Test',
+        message: err instanceof Error ? err.message : 'Could not start',
       })
       setBusyId(null)
     }
@@ -860,29 +856,29 @@ function NextTestsSection() {
 
   const handleDismiss = async (rec: Recommendation) => {
     try {
-      await dismiss({ recommendationId: rec._id })
+      await dismiss({
+        recommendationId: rec._id as Id<'adTestRecommendations'>,
+      })
     } catch {
       notifications.show({ color: 'red', message: 'Could not dismiss' })
     }
   }
 
-  // Prioritize the winner loop: prefer a winner that belongs to a test we can
-  // open for review/iteration.
-  const topWinner = recentWinners.find((w) => w.adTestId) ?? recentWinners[0]
+  const topWinner = recentWinners[0]
 
   return (
     <Stack gap="sm">
       <Group gap="xs" align="baseline">
         <IconTarget size={18} color="var(--mantine-color-brand-5)" />
-        <Title order={3} fz={18} c="white" fw={600}>
-          What to test next
+        <Title order={3} fz={18} c="dark.0" fw={600}>
+          What to make next
         </Title>
       </Group>
 
       {recentWinners.length > 0 && topWinner && (
         <WinnerIterationCard
           winner={topWinner}
-          productId={focusProductId}
+          productId={focusProductId as Id<'products'>}
           productName={productName ?? 'this product'}
           winnerCount={recentWinners.length}
         />
@@ -896,7 +892,7 @@ function NextTestsSection() {
                 key={rec._id}
                 rec={rec}
                 busy={busyId === rec._id}
-                onCreate={() => handleCreate(rec)}
+                onGenerate={() => handleGenerate(rec)}
                 onDismiss={() => handleDismiss(rec)}
               />
             ))}
@@ -919,17 +915,8 @@ function WinnerIterationCard({
   winnerCount: number
 }) {
   const navigate = useNavigate()
-  const openTarget = () => {
-    if (winner.adTestId) {
-      navigate({
-        to: '/studio/$productId',
-        params: { productId },
-        search: { adTestId: winner.adTestId },
-      })
-    } else {
-      navigate({ to: '/library' })
-    }
-  }
+  const openTarget = () =>
+    navigate({ to: '/studio/$productId', params: { productId } })
 
   return (
     <Paper
@@ -962,13 +949,13 @@ function WinnerIterationCard({
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Group gap={6} align="center">
             <IconStarFilled size={13} color="var(--mantine-color-yellow-5)" />
-            <Text size="sm" fw={600} c="white">
+            <Text size="sm" fw={600} c="dark.0">
               {winnerCount} winner{winnerCount !== 1 ? 's' : ''} on{' '}
               {capitalizeWords(productName)}
             </Text>
           </Group>
           <Text size="xs" c="dark.2" mt={2}>
-            Create your next Ad Test from a winner.
+            Iterate on a winning ad.
           </Text>
         </Box>
         <Button
@@ -990,12 +977,12 @@ function WinnerIterationCard({
 function RecommendationCard({
   rec,
   busy,
-  onCreate,
+  onGenerate,
   onDismiss,
 }: {
   rec: Recommendation
   busy: boolean
-  onCreate: () => void
+  onGenerate: () => void
   onDismiss: () => void
 }) {
   return (
@@ -1035,20 +1022,20 @@ function RecommendationCard({
         </Tooltip>
       </Group>
 
-      <Text size="sm" fw={600} c="white" lineClamp={2}>
+      <Text size="sm" fw={600} c="dark.0" lineClamp={2}>
         {rec.title}
       </Text>
       <Text size="xs" c="dark.2" mt={4} lineClamp={2} style={{ flex: 1 }}>
         {rec.description}
       </Text>
 
-      <Group gap={4} wrap="wrap" mt="sm">
-        {rec.placements.map((p) => (
-          <Badge key={p} size="xs" variant="outline" color="dark.2">
-            {PLACEMENT_SHORT[p] ?? p}
+      {rec.angleCount > 0 && (
+        <Group gap={4} wrap="wrap" mt="sm">
+          <Badge size="xs" variant="outline" color="dark.2">
+            {rec.angleCount} angle{rec.angleCount !== 1 ? 's' : ''}
           </Badge>
-        ))}
-      </Group>
+        </Group>
+      )}
 
       <Button
         size="xs"
@@ -1057,9 +1044,9 @@ function RecommendationCard({
         fullWidth
         loading={busy}
         leftSection={<IconSparkles size={14} />}
-        onClick={onCreate}
+        onClick={onGenerate}
       >
-        Create Ad Test
+        Generate
       </Button>
     </Paper>
   )
@@ -1088,7 +1075,7 @@ function LibraryTeaser({ totalGenerations }: { totalGenerations: number }) {
             <IconLibrary size={20} />
           </ThemeIcon>
           <Box>
-            <Text size="sm" fw={600} c="white">
+            <Text size="sm" fw={600} c="dark.0">
               Generation library
             </Text>
             <Text size="xs" c="dark.2">

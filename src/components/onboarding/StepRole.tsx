@@ -172,7 +172,7 @@ function RoleCard({
           : 'var(--mantine-color-dark-5)',
         borderWidth: selected ? 2 : 1,
         backgroundColor: selected
-          ? 'rgba(84, 116, 180, 0.12)'
+          ? 'rgba(16, 24, 40, 0.12)'
           : 'var(--mantine-color-dark-7)',
         transition: 'all 150ms ease',
       }}
@@ -187,7 +187,7 @@ function RoleCard({
           <Icon size={22} />
         </ThemeIcon>
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text fw={600} c="white">
+          <Text fw={600} c="dark.0">
             {role.title}
           </Text>
           <Text size="sm" c="dark.2">

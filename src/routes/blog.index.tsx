@@ -51,7 +51,7 @@ function BlogIndex() {
   return (
     <Container size="lg" py={64}>
       <Stack gap={4} mb="xl">
-        <Title order={1} c="white">
+        <Title order={1} c="dark.0">
           Blog
         </Title>
         <Text c="dark.2" maw={620}>
@@ -82,7 +82,7 @@ function BlogIndex() {
                   overflow: 'hidden',
                   height: '100%',
                   borderColor: 'var(--mantine-color-dark-6)',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'rgba(16,24,40,0.02)',
                 }}
               >
                 <AspectRatio ratio={16 / 9} style={{ background: 'var(--mantine-color-dark-7)' }}>
@@ -98,7 +98,7 @@ function BlogIndex() {
                   <Text size="xs" c="dark.3" mb={6}>
                     {formatDate(post.publishedAt)}
                   </Text>
-                  <Title order={3} fz={18} c="white" lineClamp={2} mb={6}>
+                  <Title order={3} fz={18} c="dark.0" lineClamp={2} mb={6}>
                     {post.title}
                   </Title>
                   {post.metaDescription && (

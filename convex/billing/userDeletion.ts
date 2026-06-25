@@ -6,8 +6,7 @@
 // Coverage (tables walked):
 //   products, productImages, studioRuns (legacy), userPlans, billingEvents,
 //   templateGenerations, brandKits, urlImports, onboardingProfiles,
-//   productInspirations, adTests, adTestRecommendations,
-//   adTestPerformanceNotes, adTestCopySets
+//   productInspirations, adTestRecommendations, copySets
 //
 // Skipped:
 //   - boards/columns/items (Trellaux demo, no userId)
@@ -303,26 +302,6 @@ export const findProductInspirationsByUserId = internalQuery({
   },
 })
 
-export const findAdTestIdsByUserId = internalQuery({
-  args: { userId: v.string(), cursor: v.union(v.string(), v.null()) },
-  returns: v.object({
-    page: v.array(v.id('adTests')),
-    isDone: v.boolean(),
-    continueCursor: v.string(),
-  }),
-  handler: async (ctx, { userId, cursor }) => {
-    const r = await ctx.db
-      .query('adTests')
-      .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .paginate({ numItems: BATCH_SIZE, cursor })
-    return {
-      page: r.page.map((d) => d._id),
-      isDone: r.isDone,
-      continueCursor: r.continueCursor,
-    }
-  },
-})
-
 export const findAdTestRecommendationIdsByUserId = internalQuery({
   args: { userId: v.string(), cursor: v.union(v.string(), v.null()) },
   returns: v.object({
@@ -343,36 +322,16 @@ export const findAdTestRecommendationIdsByUserId = internalQuery({
   },
 })
 
-export const findAdTestPerformanceNoteIdsByUserId = internalQuery({
+export const findCopySetIdsByUserId = internalQuery({
   args: { userId: v.string(), cursor: v.union(v.string(), v.null()) },
   returns: v.object({
-    page: v.array(v.id('adTestPerformanceNotes')),
+    page: v.array(v.id('copySets')),
     isDone: v.boolean(),
     continueCursor: v.string(),
   }),
   handler: async (ctx, { userId, cursor }) => {
     const r = await ctx.db
-      .query('adTestPerformanceNotes')
-      .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .paginate({ numItems: BATCH_SIZE, cursor })
-    return {
-      page: r.page.map((d) => d._id),
-      isDone: r.isDone,
-      continueCursor: r.continueCursor,
-    }
-  },
-})
-
-export const findAdTestCopySetIdsByUserId = internalQuery({
-  args: { userId: v.string(), cursor: v.union(v.string(), v.null()) },
-  returns: v.object({
-    page: v.array(v.id('adTestCopySets')),
-    isDone: v.boolean(),
-    continueCursor: v.string(),
-  }),
-  handler: async (ctx, { userId, cursor }) => {
-    const r = await ctx.db
-      .query('adTestCopySets')
+      .query('copySets')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .paginate({ numItems: BATCH_SIZE, cursor })
     return {
@@ -475,15 +434,6 @@ export const deleteProductInspirationRows = internalMutation({
   },
 })
 
-export const deleteAdTestRows = internalMutation({
-  args: { ids: v.array(v.id('adTests')) },
-  returns: v.null(),
-  handler: async (ctx, { ids }) => {
-    for (const id of ids) await ctx.db.delete(id)
-    return null
-  },
-})
-
 export const deleteAdTestRecommendationRows = internalMutation({
   args: { ids: v.array(v.id('adTestRecommendations')) },
   returns: v.null(),
@@ -493,17 +443,8 @@ export const deleteAdTestRecommendationRows = internalMutation({
   },
 })
 
-export const deleteAdTestPerformanceNoteRows = internalMutation({
-  args: { ids: v.array(v.id('adTestPerformanceNotes')) },
-  returns: v.null(),
-  handler: async (ctx, { ids }) => {
-    for (const id of ids) await ctx.db.delete(id)
-    return null
-  },
-})
-
-export const deleteAdTestCopySetRows = internalMutation({
-  args: { ids: v.array(v.id('adTestCopySets')) },
+export const deleteCopySetRows = internalMutation({
+  args: { ids: v.array(v.id('copySets')) },
   returns: v.null(),
   handler: async (ctx, { ids }) => {
     for (const id of ids) await ctx.db.delete(id)
@@ -621,16 +562,7 @@ export const handleUserDeleted = internalAction({
         (counts.productInspirations ?? 0) +
         (await drainProductInspirations(ctx, userId, r2Keys))
 
-      // ── Ad Test tables (no R2 assets; plain id drain)
-      counts.adTests =
-        (counts.adTests ?? 0) +
-        (await drainIds(
-          ctx,
-          userId,
-          internal.billing.userDeletion.findAdTestIdsByUserId,
-          internal.billing.userDeletion.deleteAdTestRows,
-        ))
-
+      // ── Recommendations + copy sets (no R2 assets; plain id drain)
       counts.adTestRecommendations =
         (counts.adTestRecommendations ?? 0) +
         (await drainIds(
@@ -640,22 +572,13 @@ export const handleUserDeleted = internalAction({
           internal.billing.userDeletion.deleteAdTestRecommendationRows,
         ))
 
-      counts.adTestPerformanceNotes =
-        (counts.adTestPerformanceNotes ?? 0) +
+      counts.copySets =
+        (counts.copySets ?? 0) +
         (await drainIds(
           ctx,
           userId,
-          internal.billing.userDeletion.findAdTestPerformanceNoteIdsByUserId,
-          internal.billing.userDeletion.deleteAdTestPerformanceNoteRows,
-        ))
-
-      counts.adTestCopySets =
-        (counts.adTestCopySets ?? 0) +
-        (await drainIds(
-          ctx,
-          userId,
-          internal.billing.userDeletion.findAdTestCopySetIdsByUserId,
-          internal.billing.userDeletion.deleteAdTestCopySetRows,
+          internal.billing.userDeletion.findCopySetIdsByUserId,
+          internal.billing.userDeletion.deleteCopySetRows,
         ))
     }
 

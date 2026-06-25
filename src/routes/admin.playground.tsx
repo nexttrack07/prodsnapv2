@@ -152,7 +152,7 @@ function GenerationCard({
           borderRadius: 'var(--mantine-radius-lg)',
           overflow: 'hidden',
           border: `2px solid ${selected ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-5)'}`,
-          boxShadow: selected ? '0 0 0 3px rgba(84, 116, 180, 0.3)' : 'none',
+          boxShadow: selected ? '0 0 0 3px rgba(16, 24, 40, 0.3)' : 'none',
           transition: 'all 200ms ease',
           cursor: 'pointer',
           backgroundColor: 'var(--mantine-color-dark-7)',
@@ -218,7 +218,7 @@ function GenerationCard({
         {/* Metadata row */}
         <Box p={8}>
           <Group justify="space-between" gap={4} wrap="nowrap">
-            <Text size="xs" fw={500} c="white" truncate style={{ maxWidth: '60%' }}>
+            <Text size="xs" fw={500} c="dark.0" truncate style={{ maxWidth: '60%' }}>
               {gen.productName ?? 'Unknown product'}
             </Text>
             {gen.mode && (
@@ -383,7 +383,7 @@ function Stage0Source({
       }}
     >
       <Group justify="space-between" mb="sm">
-        <Text size="sm" fw={500} c="white">Stage 1 — Source generation</Text>
+        <Text size="sm" fw={500} c="dark.0">Stage 1 — Source generation</Text>
         {(source || hasActiveRun) && (
           <Button size="xs" variant="subtle" color="gray" onClick={onClear} fz="xs">
             Start over
@@ -408,7 +408,7 @@ function Stage0Source({
             </Box>
           )}
           <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-            <Text size="sm" fw={500} c="white">{source.productName ?? 'Unknown product'}</Text>
+            <Text size="sm" fw={500} c="dark.0">{source.productName ?? 'Unknown product'}</Text>
             <Text size="xs" c="dark.2">User: {source.productUserId?.slice(0, 12) ?? '—'}</Text>
             <Group gap="xs">
               {source.mode && <Badge size="xs" variant="light" color="brand">{source.mode}</Badge>}
@@ -522,7 +522,7 @@ function Stage1Compose({
           opacity: disabled ? 0.5 : 1,
         }}
       >
-        <Text size="sm" fw={500} c="white" mb="md">Stage 2 — Compose prompt</Text>
+        <Text size="sm" fw={500} c="dark.0" mb="md">Stage 2 — Compose prompt</Text>
 
         {/* Pre-run UI — only when no run exists yet */}
         {!runId && (
@@ -693,7 +693,7 @@ function Stage1Compose({
               {systemPrompt && (
                 <Accordion.Item value="system">
                   <Accordion.Control>
-                    <Text size="xs" fw={500} c="white">System prompt</Text>
+                    <Text size="xs" fw={500} c="dark.0">System prompt</Text>
                   </Accordion.Control>
                   <Accordion.Panel>
                     <Group gap="xs" mb="xs" justify="flex-end">
@@ -717,7 +717,7 @@ function Stage1Compose({
               {userPrompt && (
                 <Accordion.Item value="user">
                   <Accordion.Control>
-                    <Text size="xs" fw={500} c="white">User prompt</Text>
+                    <Text size="xs" fw={500} c="dark.0">User prompt</Text>
                   </Accordion.Control>
                   <Accordion.Panel>
                     <Group gap="xs" mb="xs" justify="flex-end">
@@ -740,7 +740,7 @@ function Stage1Compose({
 
               <Accordion.Item value="images">
                 <Accordion.Control>
-                  <Text size="xs" fw={500} c="white">Input images</Text>
+                  <Text size="xs" fw={500} c="dark.0">Input images</Text>
                 </Accordion.Control>
                 <Accordion.Panel>
                   <InputImageRow
@@ -752,7 +752,7 @@ function Stage1Compose({
 
               <Accordion.Item value="output">
                 <Accordion.Control>
-                  <Text size="xs" fw={500} c="white">Composer output (editable)</Text>
+                  <Text size="xs" fw={500} c="dark.0">Composer output (editable)</Text>
                 </Accordion.Control>
                 <Accordion.Panel>
                   <Stack gap="xs">
@@ -896,7 +896,7 @@ function Stage2Generate({
           opacity: isEnabled ? 1 : 0.5,
         }}
       >
-        <Text size="sm" fw={500} c="white" mb="md">Stage 3 — Generate image</Text>
+        <Text size="sm" fw={500} c="dark.0" mb="md">Stage 3 — Generate image</Text>
 
         {!isEnabled && (
           <Text size="xs" c="dark.3">Complete Stage 2 (compose) first to unlock generation.</Text>
@@ -1010,7 +1010,7 @@ function Stage2Generate({
               {!!(run.generatorPromptUsed) && (
                 <Accordion.Item value="prompt">
                   <Accordion.Control>
-                    <Text size="xs" fw={500} c="white">Prompt that was sent</Text>
+                    <Text size="xs" fw={500} c="dark.0">Prompt that was sent</Text>
                   </Accordion.Control>
                   <Accordion.Panel>
                     <ScrollArea.Autosize mah={200}>
@@ -1023,7 +1023,7 @@ function Stage2Generate({
               {!!(run.generatorRawResponse) && (
                 <Accordion.Item value="raw">
                   <Accordion.Control>
-                    <Text size="xs" fw={500} c="white">Raw response</Text>
+                    <Text size="xs" fw={500} c="dark.0">Raw response</Text>
                   </Accordion.Control>
                   <Accordion.Panel>
                     <ScrollArea.Autosize mah={300}>
@@ -1119,7 +1119,7 @@ function PlaygroundPage() {
         p="xl"
         mb={32}
         style={{
-          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.12) 0%, rgba(84, 116, 180, 0.04) 100%)',
+          background: 'linear-gradient(135deg, rgba(16, 24, 40, 0.12) 0%, rgba(16, 24, 40, 0.04) 100%)',
           border: '1px solid var(--mantine-color-dark-5)',
         }}
       >
@@ -1139,7 +1139,7 @@ function PlaygroundPage() {
             <IconFlask2 size={20} />
           </ThemeIcon>
           <Box>
-            <Title order={1} fz={28} fw={600} c="white">Variation Playground</Title>
+            <Title order={1} fz={28} fw={600} c="dark.0">Variation Playground</Title>
             <Text c="dark.2" size="sm">
               Re-run any user's variation flow with full visibility into prompts and inputs.
             </Text>

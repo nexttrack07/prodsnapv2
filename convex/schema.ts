@@ -3,8 +3,6 @@ import { type Infer, v } from 'convex/values'
 import {
   adPlacement,
   adTestAngle,
-  adTestSource,
-  adTestStatus,
   copySetRequest,
   copySuggestion,
   recommendedAdTestConcept,
@@ -477,15 +475,11 @@ const schema = defineSchema({
     // that deducts credits, AFTER the output is durably uploaded. Blocks
     // double-charge when the workflow retries the generation action.
     creditCharged: v.optional(v.boolean()),
-    // ─── Ad Test linkage (optional; absent on legacy/loose generations) ─────
-    // When set, this generated row is one ad unit of an Ad Test. The UI groups
-    // rows by adTestId → angleKey → placement to review/export a test set.
-    adTestId: v.optional(v.id('adTests')),
-    placement: v.optional(adPlacement),
-    adUnitIndex: v.optional(v.number()),
+    // Optional grounding angle (carried through generation; not a grouping key).
     angleKey: v.optional(v.string()),
-    // Optional pairing of a test-level Copy Bank suggestion with this creative.
-    selectedCopySetId: v.optional(v.id('adTestCopySets')),
+    // Optional pairing of a product Copy Bank suggestion with this creative
+    // (selecting copy in the creative detail panel → a "saved ad").
+    selectedCopySetId: v.optional(v.id('copySets')),
     selectedHeadlineIndex: v.optional(v.number()),
     selectedPrimaryTextIndex: v.optional(v.number()),
     selectedDescriptionIndex: v.optional(v.number()),
@@ -497,66 +491,9 @@ const schema = defineSchema({
     // diluted by queued/failed rows filtered out after the pagination slice.
     .index('by_userId_status', ['userId', 'status'])
     .index('by_run', ['runId']) // legacy, keep for migration
-    .index('by_template', ['templateId'])
-    // Ad Test grouping/review/export indexes.
-    .index('by_adTestId', ['adTestId'])
-    .index('by_adTestId_status', ['adTestId', 'status'])
-    .index('by_adTestId_placement', ['adTestId', 'placement'])
-    .index('by_adTestId_winner', ['adTestId', 'isWinner']),
+    .index('by_template', ['templateId']),
 
-  // ─── Ad Tests (named set of complete ad units for one performance question) ─
-  // The core object the UX is organized around. Generated creatives live in
-  // templateGenerations and are queried by adTestId; this row stores only the
-  // plan + summary counters, never an unbounded list of generationIds.
-  adTests: defineTable({
-    userId: v.string(),
-    productId: v.id('products'),
-    name: v.string(),
-    status: adTestStatus,
-    source: adTestSource,
-
-    // Test definition. These arrays are the plan, not the generated output list,
-    // so they stay intentionally small.
-    angles: v.array(adTestAngle),
-    prompts: v.optional(v.array(v.string())),
-    placements: v.array(adPlacement),
-    aspectRatios: v.array(aspectRatio),
-    defaultCopyRequest: v.optional(copySetRequest),
-
-    // Optional source context (winner iteration / cloned test).
-    sourceGenerationId: v.optional(v.id('templateGenerations')),
-    sourceAdTestId: v.optional(v.id('adTests')),
-
-    // Summary counters over image-bearing child rows (creatives, not copy).
-    // Billing preflight must use plannedImageCount.
-    plannedImageCount: v.number(),
-    completedImageCount: v.number(),
-    failedImageCount: v.number(),
-    winnerCount: v.number(),
-
-    // Lifecycle state is timestamp-derived, not part of `status`. An exported
-    // test can reopen and generate more rows (status → generating) while
-    // exportedAt remains set.
-    exportedAt: v.optional(v.number()),
-    archivedAt: v.optional(v.number()),
-    lastLifecycleEmailSentAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_userId', ['userId'])
-    .index('by_productId', ['productId'])
-    .index('by_userId_status', ['userId', 'status'])
-    .index('by_productId_status', ['productId', 'status'])
-    .index('by_userId_archivedAt', ['userId', 'archivedAt'])
-    .index('by_productId_archivedAt', ['productId', 'archivedAt'])
-    .index('by_productId_createdAt', ['productId', 'createdAt'])
-    // Weekly lifecycle cron: scan only NOT-yet-nudged tests by export time.
-    // Putting lastLifecycleEmailSentAt first means once a test is nudged it
-    // leaves the `eq(undefined)` partition entirely, so the sweep never re-walks
-    // already-handled rows and always reaches fresh candidates.
-    .index('by_lifecycle', ['lastLifecycleEmailSentAt', 'exportedAt']),
-
-  // ─── Ad Test recommendations (persisted "what to test next" concepts) ──────
+  // ─── Recommendations (persisted "what to generate next" angle concepts) ────
   // Generated during product analysis / winner iteration and stored so Home
   // can read them cheaply. Queries must NOT call LLM actions to produce these.
   adTestRecommendations: defineTable({
@@ -572,35 +509,12 @@ const schema = defineSchema({
     .index('by_userId', ['userId'])
     .index('by_productId_consumedAt', ['productId', 'consumedAt']),
 
-  // ─── Ad Test performance notes (child table; CPA/CTR/ROAS, free-form) ──────
-  // Stored as child rows rather than an unbounded array on adTests.
-  adTestPerformanceNotes: defineTable({
+  // ─── Copy sets (product-level Copy Bank; user-triggered) ──────────────────
+  // Copy is generated at the product level. Each requested field mix is stored
+  // as its own row. CTA is a platform button enum recommendation
+  // (recommendedCtaButton), not free-form generated prose.
+  copySets: defineTable({
     userId: v.string(),
-    adTestId: v.id('adTests'),
-    generationId: v.optional(v.id('templateGenerations')),
-    platform: v.optional(v.union(
-      v.literal('meta'),
-      v.literal('tiktok'),
-      v.literal('google'),
-      v.literal('other'),
-    )),
-    metricName: v.optional(v.string()),
-    metricValue: v.optional(v.string()),
-    note: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_adTestId', ['adTestId'])
-    .index('by_generationId', ['generationId'])
-    .index('by_userId', ['userId']),
-
-  // ─── Ad Test copy sets (test-level Copy Bank; user-triggered) ─────────────
-  // Copy is generated at the Ad Test level, not per image. Each requested field
-  // mix is stored as its own child row. CTA is a platform button enum
-  // recommendation (recommendedCtaButton), not free-form generated prose.
-  adTestCopySets: defineTable({
-    userId: v.string(),
-    adTestId: v.id('adTests'),
     productId: v.id('products'),
     angleKey: v.optional(v.string()),
     request: copySetRequest,
@@ -612,7 +526,6 @@ const schema = defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index('by_adTestId', ['adTestId'])
     .index('by_productId', ['productId'])
     .index('by_userId', ['userId']),
 
@@ -920,17 +833,11 @@ export type BrandKit = Infer<typeof schema.tables.brandKits.validator>
 export type UrlImport = Infer<typeof schema.tables.urlImports.validator>
 export type MarketingAngle = Infer<typeof marketingAngle>
 
-// ─── Ad Test types ──────────────────────────────────────────────────────────
-export type AdTest = Infer<typeof schema.tables.adTests.validator>
+// ─── Copy / recommendation types ────────────────────────────────────────────
 export type AdTestRecommendation = Infer<
   typeof schema.tables.adTestRecommendations.validator
 >
-export type AdTestPerformanceNote = Infer<
-  typeof schema.tables.adTestPerformanceNotes.validator
->
-export type AdTestCopySet = Infer<typeof schema.tables.adTestCopySets.validator>
-export type AdTestStatus = Infer<typeof adTestStatus>
-export type AdTestSource = Infer<typeof adTestSource>
+export type CopySet = Infer<typeof schema.tables.copySets.validator>
 export type AdPlacement = Infer<typeof adPlacement>
 export type AdTestAngle = Infer<typeof adTestAngle>
 export type CopySuggestion = Infer<typeof copySuggestion>

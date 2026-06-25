@@ -80,7 +80,7 @@ function StrategyPage() {
               <IconArrowLeft size={14} /> Back to {capitalizeWords(product.name)}
             </Box>
           </Link>
-          <Title order={1} fz={28} fw={700} c="white">
+          <Title order={1} fz={28} fw={700} c="dark.0">
             Strategy
           </Title>
           <Text c="dark.2">
@@ -116,7 +116,7 @@ function StrategyPage() {
             <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
               Value proposition
             </Text>
-            <Text size="md" c="white" lh={1.6}>
+            <Text size="md" c="dark.0" lh={1.6}>
               {product.valueProposition}
             </Text>
           </Box>

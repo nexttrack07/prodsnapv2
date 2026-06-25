@@ -301,7 +301,7 @@ function DesignLibrary() {
       <Stack gap="xl">
         <Group justify="space-between" align="flex-end">
           <div>
-            <Title order={2} fw={600} c="white">Design Library</Title>
+            <Title order={2} fw={600} c="dark.0">Design Library</Title>
             <Text size="sm" c="dark.2" mt={4}>
               {outputs.length} design{outputs.length !== 1 ? 's' : ''} saved
             </Text>
@@ -437,7 +437,7 @@ function DesignLibrary() {
                     {groupDesignsByDate(outputs as DesignOutput[]).map(group => (
                       <Stack key={group.key} gap="sm">
                         <Group gap={8} align="center">
-                          <Text size="sm" fw={700} c="white" tt="uppercase" style={{ letterSpacing: 0.4 }}>
+                          <Text size="sm" fw={700} c="dark.0" tt="uppercase" style={{ letterSpacing: 0.4 }}>
                             {group.label}
                           </Text>
                           <Text size="xs" c="dark.3">
@@ -662,9 +662,9 @@ function IdeaListCard({
               />
             )}
             {idea.status === 'generating' && (
-              <Loader size="xs" color="blue" style={{ flexShrink: 0 }} />
+              <Loader size="xs" color="gray" style={{ flexShrink: 0 }} />
             )}
-            <Text size="sm" fw={600} c="white" lineClamp={1} style={{ flex: 1 }}>
+            <Text size="sm" fw={600} c="dark.0" lineClamp={1} style={{ flex: 1 }}>
               {draft.title}
             </Text>
           </Group>
@@ -704,7 +704,7 @@ function IdeaListCard({
                 input: {
                   fontSize: 12,
                   backgroundColor: 'var(--mantine-color-dark-7)',
-                  color: 'var(--mantine-color-white)',
+                  color: 'var(--mantine-color-dark-0)',
                   border: 'none',
                 },
               }}
@@ -734,7 +734,7 @@ function IdeaListCard({
                       input: {
                         fontSize: 12,
                         backgroundColor: 'var(--mantine-color-dark-7)',
-                        color: 'var(--mantine-color-white)',
+                        color: 'var(--mantine-color-dark-0)',
                         border: 'none',
                         padding: '4px 8px',
                       },
@@ -864,7 +864,7 @@ function DesignCard({
           }}>
             <Stack align="center" gap="xs">
               <Loader size="md" color="brand" />
-              <Text size="xs" c="white">Generating…</Text>
+              <Text size="xs" c="dark.0">Generating…</Text>
             </Stack>
           </div>
         )}
@@ -873,7 +873,7 @@ function DesignCard({
         {selectMode && (
           <div style={{
             position: 'absolute', inset: 0,
-            backgroundColor: bulkSelected ? 'rgba(84,116,180,0.18)' : 'transparent',
+            backgroundColor: bulkSelected ? 'rgba(16, 24, 40,0.18)' : 'transparent',
             display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
             padding: 8,
             transition: 'background-color 150ms ease',
@@ -964,7 +964,7 @@ function DesignCard({
 
       {/* Card footer */}
       <Stack gap={4} p="xs" pt={4}>
-        <Text size="xs" fw={600} c="white" lineClamp={1}>{design.promptTitle}</Text>
+        <Text size="xs" fw={600} c="dark.0" lineClamp={1}>{design.promptTitle}</Text>
         {!selectMode && (
           <Group gap={4}>
             <Tooltip label={expanded ? 'Close' : 'Quick edit'}>
@@ -1015,7 +1015,7 @@ function DesignCard({
               input: {
                 fontSize: 12,
                 backgroundColor: 'var(--mantine-color-dark-6)',
-                color: 'var(--mantine-color-white)',
+                color: 'var(--mantine-color-dark-0)',
               },
             }}
           />

@@ -91,7 +91,7 @@ function BlogPost() {
       </Anchor>
 
       <Stack gap="md" mb="xl">
-        <Title order={1} c="white" fz={{ base: 30, sm: 38 }} lh={1.15}>
+        <Title order={1} c="dark.0" fz={{ base: 30, sm: 38 }} lh={1.15}>
           {post.title}
         </Title>
         <Group gap="xs" wrap="wrap">

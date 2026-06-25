@@ -150,8 +150,8 @@ export function PlanCard({
               ? 'var(--mantine-color-brand-5)'
               : 'var(--mantine-color-dark-5)',
           borderWidth: isCurrent || highlight ? 2 : 1,
-          backgroundColor: 'var(--mantine-color-dark-7)',
-          boxShadow: highlight ? 'var(--mantine-shadow-xl)' : undefined,
+          backgroundColor: highlight ? 'rgba(16, 24, 40, 0.03)' : 'var(--mantine-color-dark-8)',
+          boxShadow: highlight ? '0 4px 24px rgba(16, 24, 40,0.08), var(--mantine-shadow-sm)' : 'var(--mantine-shadow-xs)',
           position: 'relative',
         }}
       >

@@ -190,7 +190,7 @@ function CheckoutShell({ children }: { children: React.ReactNode }) {
     <Container size="sm" py="xl">
       <Stack gap="lg">
         <Title order={2}>Checkout</Title>
-        <Card withBorder radius="lg" padding="lg" bg="dark.7">
+        <Card withBorder radius="lg" padding="lg">
           {children}
         </Card>
       </Stack>

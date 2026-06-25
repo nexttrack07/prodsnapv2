@@ -131,7 +131,7 @@ function LibraryPage() {
         {/* Header */}
         <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
           <Box>
-            <Title order={1} fz={28} fw={700} c="white" mb={4}>
+            <Title order={1} fz={28} fw={700} c="dark.0" mb={4}>
               Generation library
             </Title>
             <Text size="sm" c="dark.2">
@@ -155,8 +155,8 @@ function LibraryPage() {
             style={{ flex: '1 1 180px', maxWidth: 280 }}
             styles={{
               input: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
             }}
           />
@@ -295,7 +295,7 @@ function AdCard({
         borderRadius: 'var(--mantine-radius-sm)',
         overflow: 'hidden',
         cursor: 'pointer',
-        backgroundColor: 'var(--mantine-color-dark-7)',
+        backgroundColor: 'var(--mantine-color-dark-6)',
         boxShadow: ad.isWinner
           ? 'inset 0 0 0 2px var(--mantine-color-yellow-5)'
           : 'none',
@@ -373,7 +373,7 @@ function EmptyState() {
         borderWidth: 2,
         borderColor: 'var(--mantine-color-dark-5)',
         background:
-          'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
+          'linear-gradient(135deg, rgba(16, 24, 40, 0.05) 0%, rgba(255, 255, 255, 0) 60%)',
       }}
     >
       <IconLibrary
@@ -383,7 +383,7 @@ function EmptyState() {
           marginBottom: 16,
         }}
       />
-      <Title order={3} fz="lg" fw={600} c="white" mb={8}>
+      <Title order={3} fz="lg" fw={600} c="dark.0" mb={8}>
         No ads yet
       </Title>
       <Text c="dark.2" mb="xl" maw={400} mx="auto">

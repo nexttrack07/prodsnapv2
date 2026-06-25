@@ -87,7 +87,7 @@ export function CreditsPill() {
 
       <Popover.Dropdown
         style={{
-          background: 'var(--mantine-color-dark-7)',
+          background: 'var(--mantine-color-dark-8)',
           border: '1px solid var(--mantine-color-dark-5)',
           borderRadius: 8,
           padding: '12px 14px',
@@ -96,7 +96,7 @@ export function CreditsPill() {
         <Stack gap="xs">
           {/* Plan header */}
           <Group justify="space-between" align="baseline" wrap="nowrap">
-            <Text size="sm" fw={700} c="white">
+            <Text size="sm" fw={700} c="dark.0">
               {formatPlanName(planSlug)} plan
             </Text>
           </Group>
@@ -107,7 +107,7 @@ export function CreditsPill() {
               <Text size="xs" c="dark.2">
                 Plan credits left
               </Text>
-              <Text size="xs" c="white">
+              <Text size="xs" c="dark.0">
                 {planCreditsLeft}
               </Text>
             </Group>
@@ -117,14 +117,14 @@ export function CreditsPill() {
                 <Text size="xs" c="dark.2">
                   Top-up credits
                 </Text>
-                <Text size="xs" c="white">
+                <Text size="xs" c="dark.0">
                   {topupCreditsLeft}
                 </Text>
               </Group>
             )}
 
             <Group justify="space-between" wrap="nowrap" mt={6}>
-              <Text size="xs" fw={700} c="white">
+              <Text size="xs" fw={700} c="dark.0">
                 Total
               </Text>
               <Text size="xs" fw={700} style={{ color }}>

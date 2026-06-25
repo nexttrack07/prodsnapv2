@@ -317,7 +317,7 @@ function BatchGenerate() {
         {/* Header */}
         <Group justify="space-between" align="flex-end">
           <div>
-            <Title order={2} fw={600} c="white">Batch Generate</Title>
+            <Title order={2} fw={600} c="dark.0">Batch Generate</Title>
             <Text size="sm" c="dark.2" mt={4}>Generate multiple designs in parallel</Text>
           </div>
           <Group>
@@ -376,7 +376,7 @@ function BatchGenerate() {
         >
           <Stack gap="xs">
             <Group gap="xs">
-              <Text size="sm" fw={600} c="white">Shared context</Text>
+              <Text size="sm" fw={600} c="dark.0">Shared context</Text>
               <Text size="xs" c="dark.3">· prepended to every prompt · saved to browser</Text>
             </Group>
             <Textarea
@@ -389,7 +389,7 @@ function BatchGenerate() {
               styles={{
                 input: {
                   backgroundColor: 'var(--mantine-color-dark-7)',
-                  color: 'var(--mantine-color-white)',
+                  color: 'var(--mantine-color-dark-0)',
                   fontSize: 13,
                 },
               }}
@@ -452,7 +452,7 @@ function BatchGenerate() {
         >
           <Stack gap="xs">
             <Group gap="xs">
-              <Text size="sm" fw={600} c="white">Paste prompts</Text>
+              <Text size="sm" fw={600} c="dark.0">Paste prompts</Text>
               <Text size="xs" c="dark.3">· one prompt per block, separate with a line of <code>---</code></Text>
             </Group>
             <Textarea
@@ -465,7 +465,7 @@ function BatchGenerate() {
               styles={{
                 input: {
                   backgroundColor: 'var(--mantine-color-dark-7)',
-                  color: 'var(--mantine-color-white)',
+                  color: 'var(--mantine-color-dark-0)',
                   fontSize: 13,
                   fontFamily: 'var(--mantine-font-family-monospace)',
                 },
@@ -641,7 +641,7 @@ function GenCardItem({
               styles={{
                 input: {
                   backgroundColor: 'var(--mantine-color-dark-7)',
-                  color: 'var(--mantine-color-white)',
+                  color: 'var(--mantine-color-dark-0)',
                   fontSize: 13,
                 },
               }}

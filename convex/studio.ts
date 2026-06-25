@@ -101,14 +101,6 @@ export const generateFromTemplateWorkflow = workflow.define({
         runId: gen.runId,
       })
     }
-    if (gen.adTestId) {
-      await step.runMutation(internal.adTests.updateCountersForGeneration, {
-        adTestId: gen.adTestId,
-      })
-      await step.runMutation(internal.adTests.setStatusFromChildren, {
-        adTestId: gen.adTestId,
-      })
-    }
     // Ad copy is now opt-in — user requests it from the ad detail panel via
     // api.adCopy.generateAdCopy after the image lands.
   },
@@ -153,14 +145,6 @@ export const generateFromAngleWorkflow = workflow.define({
         error: err instanceof Error ? err.message : String(err),
       })
     }
-    if (gen.adTestId) {
-      await step.runMutation(internal.adTests.updateCountersForGeneration, {
-        adTestId: gen.adTestId,
-      })
-      await step.runMutation(internal.adTests.setStatusFromChildren, {
-        adTestId: gen.adTestId,
-      })
-    }
     // Ad copy is now opt-in — user requests it from the ad detail panel via
     // api.adCopy.generateAdCopy after the image lands.
   },
@@ -195,14 +179,6 @@ export const generateFromPromptWorkflow = workflow.define({
       await step.runMutation(internal.studio.markGenerationFailed, {
         generationId,
         error: err instanceof Error ? err.message : String(err),
-      })
-    }
-    if (gen.adTestId) {
-      await step.runMutation(internal.adTests.updateCountersForGeneration, {
-        adTestId: gen.adTestId,
-      })
-      await step.runMutation(internal.adTests.setStatusFromChildren, {
-        adTestId: gen.adTestId,
       })
     }
     // Generate ad copy alongside the image (best-effort).
@@ -261,14 +237,6 @@ export const generateVariationWorkflow = workflow.define({
       await step.runMutation(internal.studio.markGenerationFailed, {
         generationId,
         error: err instanceof Error ? err.message : String(err),
-      })
-    }
-    if (gen.adTestId) {
-      await step.runMutation(internal.adTests.updateCountersForGeneration, {
-        adTestId: gen.adTestId,
-      })
-      await step.runMutation(internal.adTests.setStatusFromChildren, {
-        adTestId: gen.adTestId,
       })
     }
     // Ad copy is now opt-in — user requests it from the ad detail panel via
@@ -447,9 +415,6 @@ export const retryGeneration = mutation({
     if (gen.runId) {
       await ctx.db.patch(gen.runId, { status: 'generating' })
     }
-    if (gen.adTestId) {
-      await ctx.db.patch(gen.adTestId, { status: 'generating', updatedAt: Date.now() })
-    }
     if (gen.variationSource) {
       await workflow.start(ctx, internal.studio.generateVariationWorkflow, { generationId }, { startAsync: true })
     } else if (gen.mode === 'prompt') {
@@ -498,20 +463,12 @@ export const markStuckGenerationsFailed = internalMutation({
       )
       .collect()
 
-    const affectedAdTestIds = new Set<Id<'adTests'>>()
     for (const gen of stuckRunning) {
       await ctx.db.patch(gen._id, {
         status: 'failed',
         error: 'Generation timed out — please try again.',
         finishedAt: now,
       })
-      if (gen.adTestId) affectedAdTestIds.add(gen.adTestId)
-    }
-
-    // Refresh counters + status for any ad tests whose child rows were timed out.
-    for (const adTestId of affectedAdTestIds) {
-      await ctx.scheduler.runAfter(0, internal.adTests.updateCountersForGeneration, { adTestId })
-      await ctx.scheduler.runAfter(0, internal.adTests.setStatusFromChildren, { adTestId })
     }
 
     return { marked: stuckRunning.length }

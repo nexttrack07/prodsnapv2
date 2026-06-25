@@ -181,7 +181,7 @@ export function AccountBillingPage() {
           </Alert>
         )}
 
-        <Card withBorder radius="lg" padding="lg" bg="dark.7">
+        <Card withBorder radius="lg" padding="lg">
           <Stack gap="md">
             <Group justify="space-between" align="flex-start">
               <Stack gap={4}>
@@ -241,7 +241,7 @@ export function AccountBillingPage() {
           </Stack>
         </Card>
 
-        <Card withBorder radius="lg" padding="lg" bg="dark.7">
+        <Card withBorder radius="lg" padding="lg">
           <Stack gap="sm">
             <Text size="xs" c="dark.2" tt="uppercase" fw={600}>
               Cancel subscription
@@ -263,7 +263,7 @@ export function AccountBillingPage() {
           </Stack>
         </Card>
 
-        <Card withBorder radius="lg" padding="lg" bg="dark.7">
+        <Card withBorder radius="lg" padding="lg">
           <Stack gap="sm">
             <Text size="xs" c="dark.2" tt="uppercase" fw={600}>
               Account

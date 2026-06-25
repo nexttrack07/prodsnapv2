@@ -1,9 +1,9 @@
 /**
  * Saved ads on the product detail page. A "saved ad" is a creative the user
- * paired with copy via "Save this ad" in the ad-test review — i.e. a finished
- * image + headline/primary text/description/CTA combo. This section renders each
- * one as the actual Facebook ad preview so the product page shows the buyer's
- * finished ads directly, with download + jump-to-test actions.
+ * paired with copy via "Save this ad" in the creative detail panel — i.e. a
+ * finished image + headline/primary text/description/CTA combo. This section
+ * renders each one as the actual Facebook ad preview so the product page shows
+ * the buyer's finished ads directly, with download.
  */
 import { useState } from 'react'
 import { useQuery } from 'convex/react'
@@ -20,12 +20,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core'
-import {
-  IconBookmark,
-  IconDownload,
-  IconExternalLink,
-  IconTrophy,
-} from '@tabler/icons-react'
+import { IconBookmark, IconDownload, IconTrophy } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -33,25 +28,23 @@ import { FacebookAdPreview } from './FacebookAdPreview'
 import { downloadGeneratedImage } from '../../utils/downloadImage'
 
 type SavedAd = NonNullable<
-  ReturnType<typeof useQuery<typeof api.adTests.listSavedAds>>
+  ReturnType<typeof useQuery<typeof api.creatives.listSavedAds>>
 >[number]
 
 export function SavedAdsSection({
   productId,
   productName,
-  onOpenTest,
 }: {
   productId: Id<'products'>
   productName: string
-  onOpenTest: (adTestId: Id<'adTests'>) => void
 }) {
-  const ads = useQuery(api.adTests.listSavedAds, { productId })
+  const ads = useQuery(api.creatives.listSavedAds, { productId })
 
   return (
     <Stack gap="md" mt="xl" mb="xl">
       <Group gap="xs" align="center">
         <IconBookmark size={20} color="var(--mantine-color-brand-5)" />
-        <Title order={3} fz={18} c="white" fw={600}>
+        <Title order={3} fz={18} c="dark.0" fw={600}>
           Saved ads
         </Title>
         {ads && ads.length > 0 && (
@@ -62,9 +55,9 @@ export function SavedAdsSection({
       </Group>
 
       {ads === undefined ? (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} h={420} radius="md" />
+        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing="md">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} h={300} radius="md" />
           ))}
         </SimpleGrid>
       ) : ads.length === 0 ? (
@@ -82,19 +75,18 @@ export function SavedAdsSection({
             No saved ads yet
           </Text>
           <Text size="sm" c="dark.3" maw={520}>
-            Open an ad test, pick a creative plus a headline and primary text in
-            the Facebook preview, then hit <strong>Save this ad</strong>. Your
-            finished ads collect here.
+            Open a creative, pick a headline and primary text in the Facebook
+            preview, then hit <strong>Save this ad</strong>. Your finished ads
+            collect here.
           </Text>
         </Paper>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing="md">
           {ads.map((ad) => (
             <SavedAdCard
               key={ad.generationId}
               ad={ad}
               productName={productName}
-              onOpenTest={onOpenTest}
             />
           ))}
         </SimpleGrid>
@@ -106,11 +98,9 @@ export function SavedAdsSection({
 function SavedAdCard({
   ad,
   productName,
-  onOpenTest,
 }: {
   ad: SavedAd
   productName: string
-  onOpenTest: (adTestId: Id<'adTests'>) => void
 }) {
   const [downloading, setDownloading] = useState(false)
 
@@ -154,18 +144,6 @@ function SavedAdCard({
         )}
       </Box>
       <Group justify="flex-end" gap={4}>
-        {ad.adTestId && (
-          <Tooltip label="Open in ad test" withArrow>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => onOpenTest(ad.adTestId as Id<'adTests'>)}
-              aria-label="Open in ad test"
-            >
-              <IconExternalLink size={16} />
-            </ActionIcon>
-          </Tooltip>
-        )}
         <Tooltip label="Download PNG" withArrow>
           <ActionIcon
             variant="subtle"

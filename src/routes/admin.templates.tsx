@@ -154,7 +154,7 @@ function AdminTemplatesPage() {
         p="xl"
         mb="xl"
         style={{
-          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.1) 0%, rgba(84, 116, 180, 0.03) 100%)',
+          background: 'linear-gradient(135deg, rgba(16, 24, 40, 0.1) 0%, rgba(16, 24, 40, 0.03) 100%)',
           border: '1px solid var(--mantine-color-dark-5)',
         }}
       >
@@ -166,7 +166,7 @@ function AdminTemplatesPage() {
               </Anchor>
               <Text size="sm" c="dark.1">Templates</Text>
             </Breadcrumbs>
-            <Title order={1} fz={30} fw={600} c="white">
+            <Title order={1} fz={30} fw={600} c="dark.0">
               Templates
             </Title>
             <Text c="dark.2" mt={4}>
@@ -275,7 +275,7 @@ function PendingSubmissionsPanel() {
   return (
     <Box mb="xl">
       <Group justify="space-between" mb="md">
-        <Title order={2} size="lg" fw={600} c="white">
+        <Title order={2} size="lg" fw={600} c="dark.0">
           Pending public submissions
         </Title>
         <Badge size="md" variant="light" color="brand">
@@ -341,7 +341,7 @@ function PendingSubmissionsPanel() {
                 </Box>
               </AspectRatio>
               <Box p="md">
-                <Text size="sm" fw={600} c="white" lineClamp={1}>
+                <Text size="sm" fw={600} c="dark.0" lineClamp={1}>
                   {t.name ?? 'Untitled'}
                 </Text>
                 <Text size="xs" c="dark.2" mt={2} lineClamp={1}>
@@ -624,7 +624,7 @@ function UploadArea() {
         borderStyle: 'dashed',
         cursor: 'pointer',
         borderColor: dragging ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-4)',
-        backgroundColor: dragging ? 'rgba(84, 116, 180, 0.1)' : 'var(--mantine-color-dark-7)',
+        backgroundColor: dragging ? 'rgba(16, 24, 40, 0.1)' : 'var(--mantine-color-dark-7)',
         transition: 'border-color 200ms ease, background-color 200ms ease, transform 200ms ease',
         transform: dragging ? 'scale(1.01)' : 'scale(1)',
       }}
@@ -653,11 +653,11 @@ function UploadArea() {
         gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
         mx="auto"
         mb="md"
-        style={{ boxShadow: '0 4px 20px rgba(84, 116, 180, 0.25)' }}
+        style={{ boxShadow: '0 4px 20px rgba(16, 24, 40, 0.25)' }}
       >
         <IconUpload size={28} />
       </ThemeIcon>
-      <Text fw={600} size="lg" c="white">
+      <Text fw={600} size="lg" c="dark.0">
         {inFlight > 0
           ? `Uploading ${inFlight} file${inFlight === 1 ? '' : 's'}…`
           : (
@@ -1056,7 +1056,7 @@ function TemplatesTable({
         style={{
           borderColor: 'var(--mantine-color-dark-5)',
           borderStyle: 'dashed',
-          background: 'linear-gradient(180deg, rgba(84, 116, 180, 0.05) 0%, transparent 100%)',
+          background: 'linear-gradient(180deg, rgba(16, 24, 40, 0.05) 0%, transparent 100%)',
         }}
       >
         <Text c="dark.2" size="lg">No templates yet. Drop some images above to seed the library.</Text>
@@ -1116,7 +1116,7 @@ function TemplatesTable({
 
       <Box>
       <Group justify="space-between" mb="md">
-        <Title order={2} size="lg" fw={600} c="white">
+        <Title order={2} size="lg" fw={600} c="dark.0">
           Library
         </Title>
         <Group gap="xs">

@@ -72,7 +72,7 @@ export function Breadcrumbs() {
           )
         }
         return (
-          <Text key={`${c.label}-${i}`} size="sm" c={isLast ? 'white' : 'dark.2'} fw={isLast ? 600 : 400}>
+          <Text key={`${c.label}-${i}`} size="sm" c={isLast ? 'dark.0' : 'dark.2'} fw={isLast ? 600 : 400}>
             {c.label}
           </Text>
         )

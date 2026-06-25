@@ -34,23 +34,28 @@ export const Route = createFileRoute('/')({
 // Tokens (design-matched, with brand color substitution)
 // ============================================================
 const T = {
-  bg: '#0B0D10',
-  bgElev: '#15181D',
-  bgElev2: '#1C2026',
-  cream: '#FFFFFF',
-  creamElev: '#F7F8FA',
-  ink: '#0B0D10',
-  text: '#FFFFFF',
-  textMuted: '#9CA1AA',
-  textDim: '#8A8F98',
-  textOnCream: '#0B0D10',
+  // Light theme: the former "dark page" surfaces now map to the light
+  // canvas/surface tokens. `cream*` (already light) stay as the alt sections.
+  // Two-tone bands so sections read as distinct: white sections alternate with
+  // light-gray (`cream`) bands, and cards take the opposite tone + a hairline
+  // border so they pop on either background.
+  bg: '#FFFFFF',
+  bgElev: '#F4F6F8',
+  bgElev2: '#EAEDF1',
+  cream: '#F4F6F8',
+  creamElev: '#FFFFFF',
+  ink: '#16191D',
+  text: '#16191D',
+  textMuted: '#475467',
+  textDim: '#667085',
+  textOnCream: '#16191D',
   textOnCreamMuted: '#5A6068',
-  border: '#262A31',
-  borderCream: '#E5E7EB',
-  // Brand substitutions: #2F55D4 → brand-6 (#0063ff), #5874E0 → brand-5 (#1d72fe)
-  brand: '#0063ff',
-  brandSoft: '#1d72fe',
-  brandTint: 'rgba(0, 99, 255, 0.10)',
+  border: '#E6E8EB',
+  borderCream: '#E6E8EB',
+  // Brand substitutions: #16191d → brand-6 (#16191d), #475467 → brand-5 (#344054)
+  brand: '#16191d',
+  brandSoft: '#344054',
+  brandTint: 'rgba(16, 24, 40, 0.10)',
   teal: '#5FB8A6',
   tealTint: 'rgba(95, 184, 166, 0.14)',
   neutral: '#94A3B8',
@@ -65,7 +70,7 @@ type AngleEntry = { title: string; hook: string; selected: boolean }
 type FAQItem = { q: string; a: string }
 type PricingFeature = { label: string; on: boolean }
 
-const fontDisplay = '"Inter Tight", "Inter", -apple-system, sans-serif'
+const fontDisplay = '"Space Grotesk", "Inter Tight", -apple-system, sans-serif'
 const fontBody = '"Inter", -apple-system, sans-serif'
 const fontMono = '"JetBrains Mono", "SF Mono", monospace'
 
@@ -114,7 +119,7 @@ function Pill({ children, color, bg, style }: { children: React.ReactNode; color
       alignItems: 'center',
       gap: 6,
       padding: '4px 10px',
-      borderRadius: 999,
+      borderRadius: 4,
       fontFamily: fontMono,
       fontSize: 11,
       fontWeight: 500,
@@ -259,7 +264,7 @@ function Hero() {
           maxWidth: 'none',
           fontWeight: 400,
         }}>
-          Angles, creative, and copy — generated. Paste your product URL and ProdSnap turns it into a Meta-ready ad test.
+          Angles, creative, and copy — generated. Paste your product URL and ProdSnap turns it into Meta-ready ads.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 24 }}>
           <form
@@ -309,7 +314,7 @@ function Hero() {
                 whiteSpace: 'nowrap',
               }}
             >
-              Create my free ad test →
+              Create my free ads →
             </button>
           </form>
           <MonoLabel>100 free credits to start · ~10 ads · no card</MonoLabel>
@@ -367,7 +372,7 @@ function Hero() {
                   background: T.bg,
                 }}
               />
-              <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14, padding: '8px 10px', background: '#0B0D10ee', borderRadius: 6, border: `1px solid ${T.border}`, fontFamily: fontMono, fontSize: 10, color: T.textMuted }}>
+              <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14, padding: '8px 10px', background: 'rgba(255,255,255,0.92)', borderRadius: 6, border: `1px solid ${T.border}`, fontFamily: fontMono, fontSize: 10, color: T.textMuted, backdropFilter: 'blur(4px)' }}>
                 <div style={{ color: T.teal }}>✓ background removed</div>
                 <div>✓ analyzed · "Harry's hydrating night lotion"</div>
                 <div>✓ description generated</div>
@@ -491,7 +496,7 @@ function WorkflowSection() {
             <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Angle first. Then the creative.</span>
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 18, lineHeight: 1.55, color: T.textOnCreamMuted, margin: '24px auto 0', maxWidth: 720 }}>
-            Paste a product URL. ProdSnap reverse-engineers the strategy — the angles worth testing, the concepts for each, and the templates that fit — then builds the ad test.
+            Paste a product URL. ProdSnap reverse-engineers the strategy — the angles worth testing, the concepts for each, and the templates that fit — then generates the creatives.
           </p>
         </div>
 
@@ -597,11 +602,11 @@ function WorkflowSection() {
 
             {!isMobile && <LoopArrow />}
 
-            {/* STEP 03 — TEMPLATES → AD TEST */}
+            {/* STEP 03 — TEMPLATES → CREATIVES */}
             <LoopCard
-              tag="step 03 · templates → ad test"
-              title="Pick templates, get an ad test"
-              sub="Choose references you like; we generate the test."
+              tag="step 03 · templates → creatives"
+              title="Pick templates, get creatives"
+              sub="Choose references you like; we generate the ads."
             >
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
                 {[1, 2, 3, 4].map((i) => (
@@ -624,7 +629,7 @@ function WorkflowSection() {
                 ))}
               </div>
               <div style={{ marginTop: 12 }}>
-                <Pill color={T.teal} bg={T.tealTint} style={{ borderColor: T.teal + '55' }}>✓ ad test created</Pill>
+                <Pill color={T.teal} bg={T.tealTint} style={{ borderColor: T.teal + '55' }}>✓ ads created</Pill>
               </div>
             </LoopCard>
           </div>
@@ -682,7 +687,7 @@ function CompareCard({ tier, title, desc, rows, primary }: {
             padding: '5px 10px',
             background: '#fff',
             color: T.brand,
-            borderRadius: 999,
+            borderRadius: 4,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           }}>★ recommended</span>
         </div>
@@ -763,7 +768,7 @@ function SplitSection() {
             rows={[
               { label: 'Marketing angles', status: false },
               { label: 'Creative concepts', status: false },
-              { label: 'Ad tests', status: false },
+              { label: 'Batched ad creatives', status: false },
               { label: 'Brand-aware copy', status: 'limited' },
               { label: 'Multi-brand', status: false },
               { label: 'Iterate on winners', status: false },
@@ -776,7 +781,7 @@ function SplitSection() {
             rows={[
               { label: 'Marketing angles', status: 'limited' },
               { label: 'Creative concepts', status: false },
-              { label: 'Ad tests', status: false },
+              { label: 'Batched ad creatives', status: false },
               { label: 'Brand-aware copy', status: false },
               { label: 'Multi-brand', status: 'limited' },
               { label: 'Iterate on winners', status: false },
@@ -785,11 +790,11 @@ function SplitSection() {
           <CompareCard
             tier="option c · prodsnap"
             title="The whole workflow"
-            desc="Angles → concepts → templates → ad test → copy. Per product, per brand."
+            desc="Angles → concepts → templates → creatives → copy. Per product, per brand."
             rows={[
               { label: 'Marketing angles', status: true },
               { label: 'Creative concepts', status: true },
-              { label: 'Ad tests', status: true },
+              { label: 'Batched ad creatives', status: true },
               { label: 'Brand-aware copy', status: true },
               { label: 'Multi-brand', status: true },
               { label: 'Iterate on winners', status: true },
@@ -972,7 +977,7 @@ function OnrampsSection() {
                     border: `1px solid ${on ? T.brand : T.borderCream}`,
                     background: on ? T.brand : '#fff',
                     color: on ? '#fff' : T.textOnCreamMuted,
-                    borderRadius: 999,
+                    borderRadius: 4,
                     fontWeight: on ? 500 : 400,
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1193,7 +1198,7 @@ function VOCSection() {
                 padding: '3px 8px',
                 background: T.brandTint,
                 color: T.brandSoft,
-                borderRadius: 999,
+                borderRadius: 4,
                 border: `1px solid ${T.brand}66`,
                 fontWeight: 600,
                 letterSpacing: '0.06em',
@@ -1211,7 +1216,7 @@ function VOCSection() {
                   border: `1px solid ${T.border}`,
                   borderRadius: 8,
                   padding: 14,
-                  boxShadow: '0 1px 0 rgba(255,255,255,0.04)',
+                  boxShadow: '0 1px 0 rgba(16,24,40,0.04)',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <MonoLabel color={T.textDim}>{v.src}</MonoLabel>
@@ -1383,7 +1388,7 @@ function SurgicalExample({
           <div key={label} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '5px 10px',
-            borderRadius: 999,
+            borderRadius: 4,
             border: `1px solid ${on ? T.brand : T.border}`,
             background: on ? T.brandTint : 'transparent',
           }}>
@@ -1448,7 +1453,7 @@ function AdTestSection() {
     <section aria-labelledby="adtest-title" style={{ background: T.bg, color: T.text }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow style={{ justifyContent: 'center' }}>the ad test · 06</Eyebrow>
+          <Eyebrow style={{ justifyContent: 'center' }}>the ad batch · 06</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
             fontSize: isMobile ? 36 : 56,
@@ -1459,7 +1464,7 @@ function AdTestSection() {
             maxWidth: 900,
             paddingBottom: '0.18em',
           }} id="adtest-title">
-            Every batch lands in an ad test.
+            Every batch is ready to ship.
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, lineHeight: 1.55, margin: '24px auto 0', maxWidth: 700 }}>
             Not loose images — a Facebook-style preview, every variant in one place, and copy written for the angle.
@@ -1544,7 +1549,7 @@ function AdTestSection() {
             </div>
           </div>
 
-          {/* RIGHT — inside the test */}
+          {/* RIGHT — inside the batch */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Variant grid */}
@@ -1654,7 +1659,7 @@ function FeatureGrid() {
             { tag: 'MODELS', t: 'Premium image generation', d: 'A state-of-the-art AI image model tuned for product ads.' },
             { tag: 'RATIOS', t: 'Every Meta ratio', d: '1:1 / 4:5 / 9:16 in one batch. No Canva detour.' },
             { tag: 'OUTPUT', t: 'Meta-ready PNG', d: 'High-res PNG per ad, per ratio. Drops straight into Ads Manager.' },
-            { tag: 'AD TESTS', t: 'Ad tests, not one-offs', d: 'Every batch lands in a Facebook-style ad test with preview, variants, and angle-grounded copy.' },
+            { tag: 'BATCHES', t: 'Batches, not one-offs', d: 'Every batch lands in a Facebook-style preview with variants and angle-grounded copy.' },
             { tag: 'INGEST', t: 'URL onboarding', d: 'Paste a product or competitor URL — ProdSnap scrapes the images, copy, and details.' },
             { tag: 'PHOTOS', t: 'Multi-photo per product', d: 'Front / side / lifestyle / packaging. Pick which one drives each batch.' },
           ].map((f, i) => (
@@ -1789,7 +1794,7 @@ function PricingSection() {
                     padding: '3px 8px',
                     background: T.brand,
                     color: '#fff',
-                    borderRadius: 999,
+                    borderRadius: 4,
                     letterSpacing: '0.08em',
                     textTransform: 'uppercase',
                     fontWeight: 600,
@@ -1882,8 +1887,8 @@ function FAQSection() {
   const isMobile = useIsMobile()
   const items: FAQItem[] = [
     { q: 'Is it really free to start — no card?', a: "Yes. Every new account gets 100 free credits (about 10 ads) with no credit card. Generate, preview, and mark winners for free. When you run out — or want to export and run bigger tests — pick a plan. No trial countdown, no surprise charge." },
-    { q: 'Is this the same as AdCreative or Glorify?', a: "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want a fast prompt-to-output flow. ProdSnap is built for performance teams — if you're testing 5+ angles a week, this is for you. Angle testing, swipe files, voice of customer, ad tests — the muscles you build when you ship creative every week." },
-    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file — a place to store ads you like. ProdSnap is a creative tool: it reads your product, proposes the angles worth testing, turns each into ad concepts, and generates a Meta-ready ad test with copy. Swiping is one input, not the product." },
+    { q: 'Is this the same as AdCreative or Glorify?', a: "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want a fast prompt-to-output flow. ProdSnap is built for performance teams — if you're testing 5+ angles a week, this is for you. Angle testing, swipe files, voice of customer, batched creatives — the muscles you build when you ship creative every week." },
+    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file — a place to store ads you like. ProdSnap is a creative tool: it reads your product, proposes the angles worth testing, turns each into ad concepts, and generates Meta-ready creatives with copy. Swiping is one input, not the product." },
     { q: 'What about my brand consistency?', a: "Each brand keeps its own kit — colors, fonts, voice notes. Tag a product with the brand it belongs to, and the generator pulls that kit's colors, voice, and offer into every batch. Lite includes 2 brand kits, Pro 10, Max unlimited. Kits don't bleed into each other across products." },
     { q: 'Will the output actually run on Meta?', a: "Yes — every output is in 1:1, 4:5, or 9:16 (you pick), exported as high-res PNG, and meets Meta's Ads Manager spec. Optional ad copy generation follows Meta best practices for headlines, primary texts, and CTAs." },
     { q: 'Can I bring competitor ads as references?', a: "Yes. Paste URLs from Meta Ad Library, drag images in, or bookmark templates from our curated library. Per-product. They feed the generator on every batch for that product." },
@@ -1966,7 +1971,7 @@ function FinalCTA() {
   const isMobile = useIsMobile()
   return (
     <section aria-labelledby="final-cta-title" style={{
-      background: `linear-gradient(135deg, ${T.bg} 0%, #161B26 100%)`,
+      background: `linear-gradient(135deg, ${T.bg} 0%, ${T.creamElev} 100%)`,
       color: T.text,
       position: 'relative',
       overflow: 'hidden',
@@ -1992,7 +1997,7 @@ function FinalCTA() {
           <span style={{ color: T.textMuted, fontWeight: 400 }}>for every angle test.</span>
         </h2>
         <p style={{ fontFamily: fontBody, fontSize: isMobile ? 16 : 19, color: T.textMuted, maxWidth: 600, margin: '0 auto 36px', lineHeight: 1.5 }}>
-          From a product URL to a full ad test — angles, concepts, creative, and copy.
+          From a product URL to ready-to-ship ads — angles, concepts, creative, and copy.
         </p>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
           <Link to="/onboarding" search={{ starter: true }} style={{ textDecoration: 'none' }}>

@@ -244,7 +244,7 @@ function TemplatesBrowsePage() {
       {/* Header */}
       <Group justify="space-between" align="flex-end" mb="lg" wrap="wrap" gap="md">
         <Box>
-          <Title order={1} fz="xl" fw={600} c="white">
+          <Title order={1} fz="xl" fw={600} c="dark.0">
             Templates
           </Title>
           <Text size="sm" c="dark.2">
@@ -264,7 +264,7 @@ function TemplatesBrowsePage() {
           tab: {
             color: 'var(--mantine-color-dark-2)',
             '&[data-active]': {
-              color: 'white',
+              color: 'var(--mantine-color-dark-0)',
               borderColor: 'var(--mantine-color-brand-5)',
             },
           },
@@ -324,7 +324,7 @@ function TemplatesBrowsePage() {
           navigate({
             to: '/studio/$productId',
             params: { productId },
-            search: { compose: 'true', template: tpl._id },
+            search: { template: tpl._id },
           })
         }}
       />
@@ -493,12 +493,12 @@ function MyTemplatesPanel({
         p="md"
         mb="lg"
         style={{
-          border: '1px solid var(--mantine-color-dark-6)',
-          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid var(--mantine-color-dark-5)',
+          background: 'var(--mantine-color-dark-8)',
         }}
       >
         <Stack gap="sm">
-          <Text size="sm" fw={500} c="white">
+          <Text size="sm" fw={500} c="dark.0">
             Upload a template
           </Text>
           <Group gap="sm" wrap="wrap" align="flex-end">
@@ -555,7 +555,7 @@ function MyTemplatesPanel({
             borderWidth: 2,
             borderColor: 'var(--mantine-color-dark-5)',
             background:
-              'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
+              'linear-gradient(135deg, rgba(16, 24, 40, 0.05) 0%, rgba(255, 255, 255, 0) 60%)',
           }}
         >
           <IconPhoto size={32} color="var(--mantine-color-dark-3)" />
@@ -593,8 +593,8 @@ function MyTemplatesPanel({
                 radius="sm"
                 style={{
                   overflow: 'hidden',
-                  border: '1px solid var(--mantine-color-dark-6)',
-                  backgroundColor: 'var(--mantine-color-dark-7)',
+                  border: '1px solid var(--mantine-color-dark-5)',
+                  backgroundColor: 'var(--mantine-color-dark-8)',
                 }}
               >
                 <UnstyledButton
@@ -617,7 +617,7 @@ function MyTemplatesPanel({
                 <Box p="xs">
                   <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
                     <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
-                      <Text size="xs" fw={500} c="white" lineClamp={1}>
+                      <Text size="xs" fw={500} c="dark.0" lineClamp={1}>
                         {t.name ?? 'Untitled'}
                       </Text>
                       {visibilityBadge(t.visibility)}
@@ -791,7 +791,7 @@ function TemplateTile({
         style={{
           borderRadius: 'var(--mantine-radius-sm)',
           overflow: 'hidden',
-          backgroundColor: 'var(--mantine-color-dark-7)',
+          backgroundColor: 'var(--mantine-color-dark-6)',
           display: 'block',
           transition: 'transform 150ms ease',
         }}
@@ -988,7 +988,7 @@ function TemplatePreviewStep({
       </Box>
 
       {template.name && (
-        <Text fw={600} c="white">
+        <Text fw={600} c="dark.0">
           {template.name}
         </Text>
       )}
@@ -1101,13 +1101,13 @@ function ProductPickerStep({
               style={{
                 borderRadius: 'var(--mantine-radius-md)',
                 border: '1px solid var(--mantine-color-dark-5)',
-                backgroundColor: 'var(--mantine-color-dark-7)',
+                backgroundColor: 'var(--mantine-color-dark-8)',
                 transition: 'background-color 120ms ease',
               }}
               styles={{
                 root: {
                   '&:hover': {
-                    backgroundColor: 'var(--mantine-color-dark-6)',
+                    backgroundColor: 'var(--mantine-color-dark-7)',
                   },
                 },
               }}
@@ -1152,7 +1152,7 @@ function ProductPickerStep({
                   </Box>
                 )}
                 <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="sm" fw={500} c="white" lineClamp={1}>
+                  <Text size="sm" fw={500} c="dark.0" lineClamp={1}>
                     {product.name}
                   </Text>
                   {product.category && (

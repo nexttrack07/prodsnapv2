@@ -50,7 +50,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
       <AppShell header={{ height: 64 }} padding={0}>
         <AppShell.Header
           style={{
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backgroundColor: 'rgba(255, 255, 255, 0.85)',
             backdropFilter: 'blur(8px)',
             borderBottom: '1px solid var(--mantine-color-dark-5)',
           }}
@@ -199,7 +199,7 @@ function NavLink({
       py={6}
       fz="sm"
       fw={500}
-      c={isActive ? 'white' : 'dark.1'}
+      c={isActive ? 'brand.6' : 'dark.1'}
       bg={isActive ? 'dark.6' : undefined}
       style={{
         borderRadius: 'var(--mantine-radius-md)',
@@ -209,7 +209,7 @@ function NavLink({
         root: {
           '&:hover': {
             backgroundColor: 'var(--mantine-color-dark-6)',
-            color: 'white',
+            color: 'var(--mantine-color-dark-0)',
           },
         },
       }}
@@ -243,7 +243,7 @@ function MobileNavLink({
       py="sm"
       fz="md"
       fw={isActive ? 600 : 500}
-      c={isActive ? 'white' : 'dark.0'}
+      c={isActive ? 'brand.6' : 'dark.0'}
       bg={isActive ? 'dark.6' : undefined}
       display="block"
       style={{

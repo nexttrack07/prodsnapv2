@@ -176,12 +176,5 @@ export const toggleWinner = mutation({
     }
 
     await ctx.db.patch(generationId, { isWinner: !gen.isWinner })
-
-    // Keep the parent Ad Test's winnerCount in sync.
-    if (gen.adTestId) {
-      await ctx.runMutation(internal.adTests.updateCountersForGeneration, {
-        adTestId: gen.adTestId,
-      })
-    }
   },
 })

@@ -250,7 +250,7 @@ function StepIndicator({ current }: { current: number }) {
             <Text
               size="sm"
               fw={isActive ? 600 : 400}
-              c={isActive ? 'white' : 'dark.2'}
+              c={isActive ? 'dark.0' : 'dark.2'}
               visibleFrom="sm"
             >
               {s.label}
@@ -348,12 +348,12 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
     imp?.status === 'failed' ||
     (imp?.status === 'done' && (imp.uploadedImageUrls?.length ?? 0) === 0)
 
-  // Photos confirmed → create product + the starter Ad Test, then drop the user
-  // straight into that test to watch its creatives render.
+  // Photos confirmed → create product + generate the starter creatives, then
+  // drop the user straight into the product overview to watch them render.
   const handlePhotosConfirm = async (imageUrls: string[]) => {
     setStep('working')
     try {
-      const { productId, adTestId } = await activateWithTemplates({
+      const { productId } = await activateWithTemplates({
         imageUrls,
         importId: importId ?? undefined,
         templateIds,
@@ -361,7 +361,6 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
       navigate({
         to: '/studio/$productId',
         params: { productId },
-        search: { adTestId },
       })
     } catch (err) {
       fail(err instanceof Error ? err.message : 'Could not generate your ads.')
@@ -843,11 +842,10 @@ function StarterFromSample() {
     setError(null)
     try {
       sessionStorage.setItem(STARTER_MODE_KEY, 'starter')
-      const { adTestId, productId } = await activateStarterFlow({})
+      const { productId } = await activateStarterFlow({})
       navigate({
         to: '/studio/$productId',
         params: { productId },
-        search: { adTestId },
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not activate free test. Try again.')

@@ -122,7 +122,7 @@ function AdminPromptsPage() {
         p="xl"
         mb="xl"
         style={{
-          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.1) 0%, rgba(84, 116, 180, 0.03) 100%)',
+          background: 'linear-gradient(135deg, rgba(16, 24, 40, 0.1) 0%, rgba(16, 24, 40, 0.03) 100%)',
           border: '1px solid var(--mantine-color-dark-5)',
         }}
       >
@@ -132,7 +132,7 @@ function AdminPromptsPage() {
           </Anchor>
           <Text size="sm" c="dark.1">Prompt composer</Text>
         </Breadcrumbs>
-        <Title order={1} fz={30} fw={600} c="white">
+        <Title order={1} fz={30} fw={600} c="dark.0">
           Prompt composer settings
         </Title>
         <Text c="dark.2" mt={4}>
@@ -183,7 +183,7 @@ function AdminPromptsPage() {
         <Accordion.Item value="core">
           <Accordion.Control>
             <Group gap="sm">
-              <Text fw={600} c="white">Core instructions</Text>
+              <Text fw={600} c="dark.0">Core instructions</Text>
               <Badge size="xs" variant="light" color="brand">Required</Badge>
             </Group>
           </Accordion.Control>
@@ -201,7 +201,7 @@ function AdminPromptsPage() {
 
         <Accordion.Item value="exact">
           <Accordion.Control>
-            <Text fw={600} c="white">Exact-mode addendum</Text>
+            <Text fw={600} c="dark.0">Exact-mode addendum</Text>
           </Accordion.Control>
           <Accordion.Panel>
             <Text size="xs" c="dark.2" mb="sm">
@@ -217,7 +217,7 @@ function AdminPromptsPage() {
 
         <Accordion.Item value="remix">
           <Accordion.Control>
-            <Text fw={600} c="white">Remix-mode addendum</Text>
+            <Text fw={600} c="dark.0">Remix-mode addendum</Text>
           </Accordion.Control>
           <Accordion.Panel>
             <Text size="xs" c="dark.2" mb="sm">
@@ -233,7 +233,7 @@ function AdminPromptsPage() {
 
         <Accordion.Item value="color">
           <Accordion.Control>
-            <Text fw={600} c="white">Color-adapt addendum</Text>
+            <Text fw={600} c="dark.0">Color-adapt addendum</Text>
           </Accordion.Control>
           <Accordion.Panel>
             <Text size="xs" c="dark.2" mb="sm">
@@ -363,7 +363,7 @@ function PromptField({
     <Box>
       <Group justify="space-between" mb={4}>
         <Group gap="xs">
-          <Text size="sm" fw={600} c="white">{label}</Text>
+          <Text size="sm" fw={600} c="dark.0">{label}</Text>
           <Badge
             size="sm"
             variant={enhanceOpen ? 'filled' : 'light'}
@@ -412,8 +412,8 @@ function PromptField({
           mt="sm"
           withBorder
           style={{
-            backgroundColor: 'rgba(84, 116, 180, 0.1)',
-            borderColor: 'rgba(84, 116, 180, 0.3)',
+            backgroundColor: 'rgba(16, 24, 40, 0.1)',
+            borderColor: 'rgba(16, 24, 40, 0.3)',
           }}
         >
           <Group justify="space-between" align="flex-start" mb="xs">
@@ -568,8 +568,8 @@ function PromptFieldContent({
           mt="sm"
           withBorder
           style={{
-            backgroundColor: 'rgba(84, 116, 180, 0.1)',
-            borderColor: 'rgba(84, 116, 180, 0.3)',
+            backgroundColor: 'rgba(16, 24, 40, 0.1)',
+            borderColor: 'rgba(16, 24, 40, 0.3)',
           }}
         >
           <Group justify="space-between" align="flex-start" mb="xs">

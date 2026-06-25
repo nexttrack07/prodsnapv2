@@ -230,7 +230,7 @@ function BrandCard({
               w={48}
               fit="contain"
               radius="sm"
-              bg="rgba(255,255,255,0.04)"
+              bg="rgba(16,24,40,0.04)"
               style={{ flexShrink: 0 }}
             />
           ) : (
@@ -254,7 +254,7 @@ function BrandCard({
 
           <Stack gap={4} style={{ minWidth: 0 }}>
             <Group gap="xs">
-              <Text fw={600} c="white" truncate>
+              <Text fw={600} c="dark.0" truncate>
                 {displayName}
               </Text>
               {brand.isPrimary && (
@@ -460,7 +460,7 @@ function BrandForm({
     <Paper withBorder radius="md" p="lg" style={{ borderColor: 'var(--mantine-color-brand-8)' }}>
       <Stack gap="md">
         <Group justify="space-between">
-          <Title order={4} c="white">
+          <Title order={4} c="dark.0">
             {isNew ? 'New brand' : `Edit: ${brand.name || 'Unnamed'}`}
           </Title>
           <ActionIcon variant="subtle" color="gray" onClick={onCancel}>
@@ -478,7 +478,7 @@ function BrandForm({
 
         {/* Logo */}
         <Stack gap="xs">
-          <Text size="sm" fw={600} c="white">
+          <Text size="sm" fw={600} c="dark.0">
             Logo
           </Text>
           {logoUrl ? (
@@ -490,7 +490,7 @@ function BrandForm({
                 w="auto"
                 fit="contain"
                 radius="sm"
-                bg="rgba(255,255,255,0.04)"
+                bg="rgba(16,24,40,0.04)"
                 p="xs"
               />
               <ActionIcon
@@ -529,7 +529,7 @@ function BrandForm({
 
         {/* Colors */}
         <Stack gap="xs">
-          <Text size="sm" fw={600} c="white">
+          <Text size="sm" fw={600} c="dark.0">
             Brand colors
           </Text>
           <Text size="xs" c="dark.2">
@@ -545,7 +545,7 @@ function BrandForm({
                 setColors((prev) => prev.map((c, i) => (i === idx ? value : c)))
               }
               format="hex"
-              swatches={['#000000', '#ffffff', '#5474b4', '#0d9488', '#a855f7']}
+              swatches={['#000000', 'var(--surface, #ffffff)', '#5474b4', '#0d9488', '#a855f7']}
             />
           ))}
         </Stack>

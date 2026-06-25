@@ -272,7 +272,7 @@ function DesignLabNew() {
 
         {/* Header */}
         <Group justify="space-between">
-          <Title order={2} fw={600} c="white">New Batch</Title>
+          <Title order={2} fw={600} c="dark.0">New Batch</Title>
           <Button
             component={Link}
             to="/admin/design-lab"
@@ -291,7 +291,7 @@ function DesignLabNew() {
           color="brand"
           size="sm"
           styles={{
-            stepLabel: { color: 'var(--mantine-color-white)' },
+            stepLabel: { color: 'var(--mantine-color-dark-0)' },
             stepDescription: { color: 'var(--mantine-color-dark-2)' },
           }}
         >
@@ -312,7 +312,7 @@ function DesignLabNew() {
           <Center py={80}>
             <Stack align="center" gap="md">
               <Loader size="xl" color="brand" />
-              <Text c="white" fw={500}>
+              <Text c="dark.0" fw={500}>
                 {step === 'uploading' && 'Uploading images…'}
                 {step === 'analyzing' && 'Analyzing your designs…'}
                 {step === 'expanding' && 'Generating prompt ideas…'}
@@ -327,7 +327,7 @@ function DesignLabNew() {
           <Stack gap="lg">
             <Paper p="lg" radius="lg" withBorder style={{ borderColor: 'var(--mantine-color-dark-5)', backgroundColor: 'var(--mantine-color-dark-8)' }}>
               <Stack gap="md">
-                <Text fw={600} c="white" size="sm">Niche context</Text>
+                <Text fw={600} c="dark.0" size="sm">Niche context</Text>
                 <Text size="xs" c="dark.3">Help the AI stay focused on your specific market.</Text>
                 <Textarea
                   label="Niche description"
@@ -387,7 +387,7 @@ function DesignLabNew() {
               style={{
                 borderColor: isDragging ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-4)',
                 borderStyle: 'dashed',
-                backgroundColor: isDragging ? 'rgba(84,116,180,0.08)' : 'var(--mantine-color-dark-8)',
+                backgroundColor: isDragging ? 'rgba(16, 24, 40,0.08)' : 'var(--mantine-color-dark-8)',
                 cursor: 'pointer',
                 transition: 'all 150ms ease',
               }}
@@ -396,7 +396,7 @@ function DesignLabNew() {
                 <ThemeIcon size={44} radius="xl" variant="light" color="brand">
                   <IconUpload size={20} />
                 </ThemeIcon>
-                <Text fw={500} c="white">Drop a competitor design here or click to browse</Text>
+                <Text fw={500} c="dark.0">Drop a competitor design here or click to browse</Text>
                 <Text size="sm" c="dark.3">1 image · PNG, JPG, WebP</Text>
                 {images.length > 0 && <Badge color="brand" variant="light">1 selected</Badge>}
               </Stack>
@@ -435,7 +435,7 @@ function DesignLabNew() {
         {/* ── Step 1: Concept review ── */}
         {step === 'concepts' && concepts[0] && (
           <Stack gap="lg">
-            <Text fw={600} c="white">Concept identified</Text>
+            <Text fw={600} c="dark.0">Concept identified</Text>
 
             <Paper p="lg" radius="md" withBorder style={{ borderColor: 'var(--mantine-color-brand-7)', backgroundColor: 'var(--mantine-color-dark-8)' }}>
               <Stack gap="sm">
@@ -447,7 +447,7 @@ function DesignLabNew() {
             <Paper p="lg" radius="md" withBorder style={{ borderColor: 'var(--mantine-color-dark-5)', backgroundColor: 'var(--mantine-color-dark-8)' }}>
               <Stack gap="xs">
                 <Group justify="space-between">
-                  <Text size="sm" fw={600} c="white">Ideas to generate</Text>
+                  <Text size="sm" fw={600} c="dark.0">Ideas to generate</Text>
                   <Badge variant="light" color="brand">{ideasPerConcept} ideas</Badge>
                 </Group>
                 <Slider
@@ -488,7 +488,7 @@ function DesignLabNew() {
           <Stack gap="xl">
             <Group justify="space-between">
               <div>
-                <Text fw={600} c="white">
+                <Text fw={600} c="dark.0">
                   {step === 'done' ? `Done — ${doneCount} design${doneCount !== 1 ? 's' : ''} saved` : 'Review prompts and references'}
                 </Text>
                 <Text size="sm" c="dark.3" mt={2}>
@@ -583,7 +583,7 @@ function ConceptCard({ concept, onToggle }: { concept: Concept; onToggle: () => 
       onClick={onToggle}
       style={{
         borderColor: concept.approved ? 'var(--mantine-color-brand-6)' : 'var(--mantine-color-dark-5)',
-        backgroundColor: concept.approved ? 'rgba(84,116,180,0.08)' : 'var(--mantine-color-dark-8)',
+        backgroundColor: concept.approved ? 'rgba(16, 24, 40,0.08)' : 'var(--mantine-color-dark-8)',
         cursor: 'pointer',
         transition: 'all 150ms ease',
         userSelect: 'none',
@@ -591,7 +591,7 @@ function ConceptCard({ concept, onToggle }: { concept: Concept; onToggle: () => 
     >
       <Stack gap="sm">
         <Group justify="space-between" align="flex-start">
-          <Text fw={700} size="md" c="white" style={{ flex: 1 }}>{concept.title}</Text>
+          <Text fw={700} size="md" c="dark.0" style={{ flex: 1 }}>{concept.title}</Text>
           <Checkbox
             checked={concept.approved}
             onChange={() => {}}
@@ -629,7 +629,7 @@ function IdeaField({ label, value, editable, onChange, multiline }: {
           styles={{
             input: {
               backgroundColor: 'var(--mantine-color-dark-7)',
-              color: editable ? 'var(--mantine-color-white)' : 'var(--mantine-color-dark-1)',
+              color: editable ? 'var(--mantine-color-dark-0)' : 'var(--mantine-color-dark-1)',
               fontSize: 12,
               lineHeight: 1.6,
               border: editable ? undefined : 'none',
@@ -646,7 +646,7 @@ function IdeaField({ label, value, editable, onChange, multiline }: {
           styles={{
             input: {
               backgroundColor: 'var(--mantine-color-dark-7)',
-              color: editable ? 'var(--mantine-color-white)' : 'var(--mantine-color-dark-1)',
+              color: editable ? 'var(--mantine-color-dark-0)' : 'var(--mantine-color-dark-1)',
               fontSize: 12,
               border: editable ? undefined : 'none',
               padding: editable ? undefined : '4px 0',
@@ -700,7 +700,7 @@ function PromptCard({
       <Stack gap="sm">
         {/* Header */}
         <Group justify="space-between" align="flex-start">
-          <Text fw={700} size="sm" c="white" style={{ flex: 1 }}>{card.title}</Text>
+          <Text fw={700} size="sm" c="dark.0" style={{ flex: 1 }}>{card.title}</Text>
           <Group gap={6}>
             {isGenerating && <Loader size={16} color="brand" />}
             {isDone && (

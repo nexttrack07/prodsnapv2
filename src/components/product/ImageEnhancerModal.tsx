@@ -205,7 +205,7 @@ export function ImageEnhancerModal({
             <Text size="xs" tt="uppercase" fw={700} c="dark.2">
               Source image
             </Text>
-            <Text fw={600} c="white" size="sm" mt={2}>
+            <Text fw={600} c="dark.0" size="sm" mt={2}>
               {productName}
             </Text>
           </Box>
@@ -321,7 +321,7 @@ export function ImageEnhancerModal({
       <ThemeIcon size={42} radius="xl" color="red" variant="light">
         <IconWand size={20} />
       </ThemeIcon>
-      <Text c="white" fw={600}>
+      <Text c="dark.0" fw={600}>
         Processing failed
       </Text>
       <Text c="dark.2" size="sm">
@@ -332,7 +332,7 @@ export function ImageEnhancerModal({
 
   const bgImage =
     image.type === 'background-removed'
-      ? 'repeating-conic-gradient(#222 0% 25%, #1a1a1a 25% 50%) 0 0 / 16px 16px'
+      ? 'repeating-conic-gradient(#eceef1 0% 25%, var(--surface-muted) 25% 50%) 0 0 / 16px 16px'
       : undefined
 
   return (
@@ -354,7 +354,7 @@ export function ImageEnhancerModal({
           {/* Image preview — mobile: top, capped at 60vh */}
           <Box
             style={{
-              backgroundColor: 'var(--mantine-color-dark-8, #050505)',
+              backgroundColor: 'var(--mantine-color-dark-8, var(--surface-muted))',
               backgroundImage: bgImage,
               display: 'flex',
               alignItems: 'center',
@@ -395,7 +395,7 @@ export function ImageEnhancerModal({
           <Box
             style={{
               flex: 1,
-              backgroundColor: 'var(--mantine-color-dark-8, #050505)',
+              backgroundColor: 'var(--mantine-color-dark-8, var(--surface-muted))',
               backgroundImage: bgImage,
               display: 'flex',
               alignItems: 'center',

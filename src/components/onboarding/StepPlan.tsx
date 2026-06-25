@@ -78,19 +78,19 @@ export function StepPlan({ onBack }: { onBack: () => void }) {
               appearance={{
                 variables: {
                   colorPrimary: 'var(--mantine-color-brand-5)',
-                  colorBackground: 'var(--mantine-color-dark-7)',
-                  colorText: '#ffffff',
-                  colorTextSecondary: 'var(--mantine-color-dark-2)',
-                  colorInputBackground: 'var(--mantine-color-dark-6)',
-                  colorInputText: '#ffffff',
-                  colorNeutral: 'var(--mantine-color-dark-5)',
+                  colorBackground: 'var(--surface, #ffffff)',
+                  colorText: '#16191D',
+                  colorTextSecondary: 'var(--text-2, #475467)',
+                  colorInputBackground: 'var(--surface-muted, #f7f8fa)',
+                  colorInputText: '#16191D',
+                  colorNeutral: 'var(--border, #e6e8eb)',
                   borderRadius: '12px',
                   fontFamily: 'var(--mantine-font-family)',
                 },
                 elements: {
                   card: {
-                    backgroundColor: 'var(--mantine-color-dark-7)',
-                    borderColor: 'var(--mantine-color-dark-5)',
+                    backgroundColor: 'var(--surface, #ffffff)',
+                    borderColor: 'var(--border, #e6e8eb)',
                   },
                 },
               }}

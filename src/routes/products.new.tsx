@@ -310,7 +310,7 @@ function NewProductPage() {
       <Stack gap="xl">
         {/* Header */}
         <Group justify="space-between" align="center">
-          <Title order={2} fw={700} c="white">
+          <Title order={2} fw={700} c="dark.0">
             New product
           </Title>
           <Anchor component={Link} to="/home" c="dark.2" size="sm" underline="never">
@@ -324,14 +324,14 @@ function NewProductPage() {
           withBorder
           p="lg"
           style={{
-            backgroundColor: 'var(--mantine-color-dark-7)',
+            backgroundColor: 'var(--mantine-color-dark-8)',
             borderColor: 'var(--mantine-color-dark-5)',
           }}
         >
           <Stack gap="sm">
             <Group gap="xs" align="center">
               <IconLink size={16} color="var(--mantine-color-brand-4)" />
-              <Text size="sm" fw={600} c="white">
+              <Text size="sm" fw={600} c="dark.0">
                 Import from a product URL
               </Text>
             </Group>
@@ -350,8 +350,8 @@ function NewProductPage() {
                 style={{ flex: 1 }}
                 styles={{
                   input: {
-                    backgroundColor: 'var(--mantine-color-dark-6)',
-                    borderColor: 'var(--mantine-color-dark-4)',
+                    backgroundColor: 'var(--mantine-color-dark-7)',
+                    borderColor: 'var(--mantine-color-dark-5)',
                   },
                 }}
               />
@@ -419,16 +419,16 @@ function NewProductPage() {
             autoFocus={!isImporting}
             styles={{
               input: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
-              label: { color: 'var(--mantine-color-white)' },
+              label: { color: 'var(--mantine-color-dark-0)' },
             }}
           />
 
           {/* Multi-image section */}
           <Stack gap="xs">
-            <Text size="sm" fw={500} c="white">
+            <Text size="sm" fw={500} c="dark.0">
               Product images{' '}
               <Text span size="xs" c="dark.2">
                 (at least 1 required)
@@ -447,7 +447,7 @@ function NewProductPage() {
                     overflow: 'hidden',
                     border: idx === 0
                       ? '2px solid var(--mantine-color-brand-5)'
-                      : '2px solid var(--mantine-color-dark-4)',
+                      : '2px solid var(--mantine-color-dark-5)',
                   }}
                 >
                   <Image
@@ -475,7 +475,7 @@ function NewProductPage() {
                       <ThemeIcon
                         size={20}
                         radius="sm"
-                        color="dark"
+                        color="dark.0"
                         variant="filled"
                         style={{ cursor: 'pointer', opacity: 0.7 }}
                         onClick={() => {
@@ -503,7 +503,7 @@ function NewProductPage() {
                       }}
                       onClick={() => moveImageUp(idx)}
                     >
-                      <ThemeIcon size={20} radius="sm" color="dark" variant="filled" style={{ opacity: 0.8 }}>
+                      <ThemeIcon size={20} radius="sm" color="dark.0" variant="filled" style={{ opacity: 0.8 }}>
                         <Text size="xs" fw={700} c="white">↑</Text>
                       </ThemeIcon>
                     </Box>
@@ -535,9 +535,9 @@ function NewProductPage() {
                 style={{
                   width: 120,
                   height: 120,
-                  border: '2px dashed var(--mantine-color-dark-4)',
+                  border: '2px dashed var(--mantine-color-dark-5)',
                   borderRadius: 'var(--mantine-radius-md)',
-                  background: 'var(--mantine-color-dark-6)',
+                  background: 'var(--mantine-color-dark-7)',
                   padding: 0,
                   display: 'flex',
                   alignItems: 'center',
@@ -567,7 +567,7 @@ function NewProductPage() {
               avoid pulling in unrelated images. Tap to add to the product. */}
           {moreCandidates.length > 0 && (
             <Stack gap="xs">
-              <Text size="sm" fw={500} c="white">
+              <Text size="sm" fw={500} c="dark.0">
                 More photos from this page{' '}
                 <Text span size="xs" c="dark.2">
                   (we left these out to avoid unrelated images — tap to add)
@@ -584,7 +584,7 @@ function NewProductPage() {
                       height: 88,
                       borderRadius: 'var(--mantine-radius-md)',
                       overflow: 'hidden',
-                      border: '2px dashed var(--mantine-color-dark-4)',
+                      border: '2px dashed var(--mantine-color-dark-5)',
                       cursor: 'pointer',
                     }}
                   >
@@ -622,14 +622,14 @@ function NewProductPage() {
               data={brandOptions}
               styles={{
                 input: {
-                  backgroundColor: 'var(--mantine-color-dark-6)',
-                  borderColor: 'var(--mantine-color-dark-4)',
+                  backgroundColor: 'var(--mantine-color-dark-7)',
+                  borderColor: 'var(--mantine-color-dark-5)',
                 },
-                label: { color: 'var(--mantine-color-white)' },
+                label: { color: 'var(--mantine-color-dark-0)' },
                 description: { color: 'var(--mantine-color-dark-2)' },
                 dropdown: {
-                  backgroundColor: 'var(--mantine-color-dark-6)',
-                  borderColor: 'var(--mantine-color-dark-4)',
+                  backgroundColor: 'var(--mantine-color-dark-7)',
+                  borderColor: 'var(--mantine-color-dark-5)',
                 },
               }}
             />
@@ -646,10 +646,10 @@ function NewProductPage() {
             minRows={3}
             styles={{
               input: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
-              label: { color: 'var(--mantine-color-white)' },
+              label: { color: 'var(--mantine-color-dark-0)' },
             }}
           />
 
@@ -668,13 +668,13 @@ function NewProductPage() {
             allowDeselect
             styles={{
               input: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
-              label: { color: 'var(--mantine-color-white)' },
+              label: { color: 'var(--mantine-color-dark-0)' },
               dropdown: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
             }}
           />
@@ -692,10 +692,10 @@ function NewProductPage() {
               style={{ flex: 1 }}
               styles={{
                 input: {
-                  backgroundColor: 'var(--mantine-color-dark-6)',
-                  borderColor: 'var(--mantine-color-dark-4)',
+                  backgroundColor: 'var(--mantine-color-dark-7)',
+                  borderColor: 'var(--mantine-color-dark-5)',
                 },
-                label: { color: 'var(--mantine-color-white)' },
+                label: { color: 'var(--mantine-color-dark-0)' },
               }}
             />
             <Select
@@ -707,13 +707,13 @@ function NewProductPage() {
               w={160}
               styles={{
                 input: {
-                  backgroundColor: 'var(--mantine-color-dark-6)',
-                  borderColor: 'var(--mantine-color-dark-4)',
+                  backgroundColor: 'var(--mantine-color-dark-7)',
+                  borderColor: 'var(--mantine-color-dark-5)',
                 },
-                label: { color: 'var(--mantine-color-white)' },
+                label: { color: 'var(--mantine-color-dark-0)' },
                 dropdown: {
-                  backgroundColor: 'var(--mantine-color-dark-6)',
-                  borderColor: 'var(--mantine-color-dark-4)',
+                  backgroundColor: 'var(--mantine-color-dark-7)',
+                  borderColor: 'var(--mantine-color-dark-5)',
                 },
               }}
             />
@@ -729,10 +729,10 @@ function NewProductPage() {
             maxTags={20}
             styles={{
               input: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
-              label: { color: 'var(--mantine-color-white)' },
+              label: { color: 'var(--mantine-color-dark-0)' },
             }}
           />
 
@@ -748,10 +748,10 @@ function NewProductPage() {
             minRows={2}
             styles={{
               input: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
-              label: { color: 'var(--mantine-color-white)' },
+              label: { color: 'var(--mantine-color-dark-0)' },
               description: { color: 'var(--mantine-color-dark-2)' },
             }}
           />

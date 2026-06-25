@@ -10,9 +10,6 @@
 
 import type * as activation from "../activation.js";
 import type * as adCopy from "../adCopy.js";
-import type * as adTestExport from "../adTestExport.js";
-import type * as adTestLifecycle from "../adTestLifecycle.js";
-import type * as adTests from "../adTests.js";
 import type * as admin_audit from "../admin/audit.js";
 import type * as admin_playground from "../admin/playground.js";
 import type * as admin_playgroundActions from "../admin/playgroundActions.js";
@@ -25,6 +22,8 @@ import type * as billing_webhookHandler from "../billing/webhookHandler.js";
 import type * as blog from "../blog.js";
 import type * as blogImages from "../blogImages.js";
 import type * as brandKits from "../brandKits.js";
+import type * as copyBank from "../copyBank.js";
+import type * as creatives from "../creatives.js";
 import type * as credits from "../credits.js";
 import type * as crons from "../crons.js";
 import type * as customTemplates from "../customTemplates.js";
@@ -60,6 +59,7 @@ import type * as promptGenerations from "../promptGenerations.js";
 import type * as promptSuggestions from "../promptSuggestions.js";
 import type * as prompts from "../prompts.js";
 import type * as r2 from "../r2.js";
+import type * as recommendations from "../recommendations.js";
 import type * as studio from "../studio.js";
 import type * as templateGenerations from "../templateGenerations.js";
 import type * as templateRecommendations from "../templateRecommendations.js";
@@ -80,9 +80,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   activation: typeof activation;
   adCopy: typeof adCopy;
-  adTestExport: typeof adTestExport;
-  adTestLifecycle: typeof adTestLifecycle;
-  adTests: typeof adTests;
   "admin/audit": typeof admin_audit;
   "admin/playground": typeof admin_playground;
   "admin/playgroundActions": typeof admin_playgroundActions;
@@ -95,6 +92,8 @@ declare const fullApi: ApiFromModules<{
   blog: typeof blog;
   blogImages: typeof blogImages;
   brandKits: typeof brandKits;
+  copyBank: typeof copyBank;
+  creatives: typeof creatives;
   credits: typeof credits;
   crons: typeof crons;
   customTemplates: typeof customTemplates;
@@ -130,6 +129,7 @@ declare const fullApi: ApiFromModules<{
   promptSuggestions: typeof promptSuggestions;
   prompts: typeof prompts;
   r2: typeof r2;
+  recommendations: typeof recommendations;
   studio: typeof studio;
   templateGenerations: typeof templateGenerations;
   templateRecommendations: typeof templateRecommendations;

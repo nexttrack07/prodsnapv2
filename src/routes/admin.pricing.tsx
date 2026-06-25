@@ -123,11 +123,11 @@ function AdminPricing() {
         mb={32}
         style={{
           background:
-            'linear-gradient(135deg, rgba(84, 116, 180, 0.12) 0%, rgba(84, 116, 180, 0.04) 100%)',
+            'linear-gradient(135deg, rgba(16, 24, 40, 0.12) 0%, rgba(16, 24, 40, 0.04) 100%)',
           border: '1px solid var(--mantine-color-dark-5)',
         }}
       >
-        <Title order={1} fz={32} fw={600} c="white">
+        <Title order={1} fz={32} fw={600} c="dark.0">
           Pricing Calculator
         </Title>
         <Text size="md" c="dark.2" mt={6}>
@@ -148,7 +148,7 @@ function AdminPricing() {
       >
         <Stack gap="md">
           <Group justify="space-between" align="baseline">
-            <Text fw={600} c="white">
+            <Text fw={600} c="dark.0">
               Cost to us per credit (COGS)
             </Text>
             <Text fw={700} c="brand.4" fz="lg">
@@ -224,7 +224,7 @@ function AdminPricing() {
           borderColor: 'var(--mantine-color-dark-5)',
         }}
       >
-        <Title order={3} fz={18} fw={600} c="white" mb="md">
+        <Title order={3} fz={18} fw={600} c="dark.0" mb="md">
           Side-by-side
         </Title>
         <Table
@@ -257,7 +257,7 @@ function AdminPricing() {
                   : 0
               return (
                 <Table.Tr key={key}>
-                  <Table.Td fw={600} c="white">
+                  <Table.Td fw={600} c="dark.0">
                     {p.name}
                   </Table.Td>
                   <Table.Td ta="right">{p.credits}</Table.Td>
@@ -273,7 +273,7 @@ function AdminPricing() {
                   <Table.Td ta="right">
                     <NumberFormatter value={m.cogs} prefix="$" decimalScale={2} fixedDecimalScale />
                   </Table.Td>
-                  <Table.Td ta="right" fw={600} c="white">
+                  <Table.Td ta="right" fw={600} c="dark.0">
                     <NumberFormatter value={m.profit} prefix="$" decimalScale={2} fixedDecimalScale />
                   </Table.Td>
                   <Table.Td ta="right" c={m.margin >= 70 ? 'teal.4' : m.margin >= 50 ? 'yellow.4' : 'red.4'}>
@@ -297,7 +297,7 @@ function AdminPricing() {
           borderColor: 'var(--mantine-color-dark-5)',
         }}
       >
-        <Title order={3} fz={18} fw={600} c="white" mb="md">
+        <Title order={3} fz={18} fw={600} c="dark.0" mb="md">
           What each action costs the user (at Lite's $/credit anchor)
         </Title>
         <Text size="xs" c="dimmed" mb="md">
@@ -337,7 +337,7 @@ function AdminPricing() {
           borderColor: 'var(--mantine-color-dark-5)',
         }}
       >
-        <Title order={3} fz={18} fw={600} c="white" mb="md">
+        <Title order={3} fz={18} fw={600} c="dark.0" mb="md">
           At 1000 customers (50% Lite · 35% Pro · 15% Max)
         </Title>
         <ScenarioSummary
@@ -405,7 +405,7 @@ function PlanCard({
     >
       <Stack gap="md">
         <Group justify="space-between" align="center">
-          <Title order={2} fz={22} fw={600} c="white">
+          <Title order={2} fz={22} fw={600} c="dark.0">
             {plan.name}
           </Title>
           {badge && (
@@ -420,7 +420,7 @@ function PlanCard({
             <Text size="sm" c="dark.2">
               Credits / month
             </Text>
-            <Text fw={700} c="white">
+            <Text fw={700} c="dark.0">
               {plan.credits}
             </Text>
           </Group>
@@ -439,7 +439,7 @@ function PlanCard({
             <Text size="sm" c="dark.2">
               Monthly price
             </Text>
-            <Text fw={700} c="white">
+            <Text fw={700} c="dark.0">
               <NumberFormatter value={plan.price} prefix="$" decimalScale={2} fixedDecimalScale />
             </Text>
           </Group>
@@ -456,7 +456,7 @@ function PlanCard({
         <Divider color="dark.5" />
 
         <Stack gap={6}>
-          <Metric label="$ per credit" value={metrics.perCredit} prefix="$" decimals={3} accent="white" />
+          <Metric label="$ per credit" value={metrics.perCredit} prefix="$" decimals={3} accent="dark.0" />
           {!isAnchor && (
             <Metric
               label="Discount vs Lite"
@@ -467,7 +467,7 @@ function PlanCard({
             />
           )}
           <Metric label="COGS / user" value={metrics.cogs} prefix="$" decimals={2} accent="dimmed" />
-          <Metric label="Profit / user" value={metrics.profit} prefix="$" decimals={2} accent="white" emphasized />
+          <Metric label="Profit / user" value={metrics.profit} prefix="$" decimals={2} accent="dark.0" emphasized />
           <Metric label="Margin" value={metrics.margin} suffix="%" decimals={1} accent={marginColor} emphasized />
         </Stack>
       </Stack>
@@ -539,7 +539,7 @@ function ActionRetail({
         {label}
       </Text>
       <Group gap="xs" align="baseline">
-        <Text fw={700} fz="xl" c="white">
+        <Text fw={700} fz="xl" c="dark.0">
           {credits}
         </Text>
         <Text size="xs" c="dimmed">
@@ -582,7 +582,7 @@ function ScenarioSummary({
 
   return (
     <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-      <StatBlock label="Total revenue" value={revenue} accent="white" />
+      <StatBlock label="Total revenue" value={revenue} accent="dark.0" />
       <StatBlock label="Total COGS" value={cogsTotal} accent="dimmed" />
       <StatBlock label="Total profit" value={total} accent="teal.4" emphasized />
     </SimpleGrid>

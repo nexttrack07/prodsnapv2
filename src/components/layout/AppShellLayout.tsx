@@ -46,16 +46,19 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
       padding={0}
       styles={{
         navbar: {
-          backgroundColor: 'var(--mantine-color-dark-7)',
-          borderRight: '1px solid var(--mantine-color-dark-5)',
+          backgroundColor: 'var(--surface, #ffffff)',
+          borderRight: '1px solid var(--border, #e6e8eb)',
+          boxShadow: '4px 0 16px rgba(16, 24, 40, 0.05)',
         },
         header: {
-          backgroundColor: 'rgba(0, 0, 0, 0.85)',
-          backdropFilter: 'blur(8px)',
-          borderBottom: '1px solid var(--mantine-color-dark-5)',
+          backgroundColor: 'rgba(255, 255, 255, 0.72)',
+          backdropFilter: 'blur(22px) saturate(190%)',
+          WebkitBackdropFilter: 'blur(22px) saturate(190%)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.6)',
         },
+        // Clean, flat light-gray canvas — minimalist, no colored ambient tint.
         main: {
-          backgroundColor: 'var(--mantine-color-dark-8, #050505)',
+          backgroundColor: 'var(--canvas, #f4f6f8)',
           minHeight: '100vh',
         },
       }}

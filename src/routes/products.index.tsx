@@ -92,7 +92,7 @@ function ProductsPage() {
         {/* Header */}
         <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
           <Box>
-            <Title order={1} fz={28} fw={700} c="white" mb={4}>
+            <Title order={1} fz={28} fw={700} c="dark.0" mb={4}>
               Products
             </Title>
             <Text size="sm" c="dark.2">
@@ -122,8 +122,8 @@ function ProductsPage() {
             w={220}
             styles={{
               input: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
             }}
           />
@@ -154,8 +154,8 @@ function ProductsPage() {
             w={160}
             styles={{
               input: {
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderColor: 'var(--mantine-color-dark-4)',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+                borderColor: 'var(--mantine-color-dark-5)',
               },
             }}
           />
@@ -260,7 +260,7 @@ function ProductCard({
       style={{
         overflow: 'hidden',
         cursor: 'pointer',
-        backgroundColor: 'var(--mantine-color-dark-7)',
+        backgroundColor: 'var(--mantine-color-dark-8)',
         borderColor: 'var(--mantine-color-dark-5)',
         transition: 'transform 150ms ease, border-color 150ms ease',
       }}
@@ -291,7 +291,7 @@ function ProductCard({
 
       <Stack gap={4} p="sm">
         <Group gap={6} wrap="nowrap">
-          <Text size="sm" fw={600} c="white" truncate style={{ flex: 1 }}>
+          <Text size="sm" fw={600} c="dark.0" truncate style={{ flex: 1 }}>
             {capitalizeWords(product.name)}
           </Text>
           {product.status !== 'ready' && (
@@ -338,7 +338,7 @@ function EmptyState() {
         borderWidth: 2,
         borderColor: 'var(--mantine-color-dark-5)',
         background:
-          'linear-gradient(135deg, rgba(84, 116, 180, 0.05) 0%, rgba(0, 0, 0, 0) 60%)',
+          'linear-gradient(135deg, rgba(16, 24, 40, 0.05) 0%, rgba(255, 255, 255, 0) 60%)',
       }}
     >
       <IconLayoutGrid
@@ -348,7 +348,7 @@ function EmptyState() {
           marginBottom: 16,
         }}
       />
-      <Title order={3} fz="lg" fw={600} c="white" mb={8}>
+      <Title order={3} fz="lg" fw={600} c="dark.0" mb={8}>
         No products yet
       </Title>
       <Text c="dark.2" mb="xl" maw={400} mx="auto">

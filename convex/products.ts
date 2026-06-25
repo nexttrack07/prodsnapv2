@@ -996,45 +996,7 @@ export const deleteGeneration = mutation({
       }
     }
 
-    const adTestId = generation.adTestId
     await ctx.db.delete(generationId)
-
-    // If this creative belonged to an Ad Test, keep the test's planned counter,
-    // completed/failed/winner counters and status consistent with the remaining
-    // children (mirrors updateCountersForGeneration + setStatusFromChildren).
-    if (adTestId) {
-      const adTest = await ctx.db.get(adTestId)
-      if (adTest) {
-        const children = await ctx.db
-          .query('templateGenerations')
-          .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
-          .take(500)
-        let completed = 0
-        let failed = 0
-        let winners = 0
-        let inFlight = 0
-        for (const g of children) {
-          if (g.status === 'complete') completed++
-          else if (g.status === 'failed') failed++
-          else inFlight++
-          if (g.isWinner) winners++
-        }
-        let status: typeof adTest.status = adTest.status
-        if (children.length === 0) status = 'draft'
-        else if (inFlight > 0) status = 'generating'
-        else if (failed === 0) status = 'ready'
-        else if (completed === 0) status = 'failed'
-        else status = 'partially_failed'
-        await ctx.db.patch(adTestId, {
-          plannedImageCount: Math.max(0, adTest.plannedImageCount - 1),
-          completedImageCount: completed,
-          failedImageCount: failed,
-          winnerCount: winners,
-          status,
-          updatedAt: Date.now(),
-        })
-      }
-    }
   },
 })
 
@@ -1045,19 +1007,6 @@ export const deleteGeneration = mutation({
  * This is the product-centric equivalent of studio.submitRun.
  * Requires authentication and product ownership.
  */
-// Map a generated creative's aspect ratio to its Meta placement, so Ad Test
-// creatives produced by the template wizard carry the same placement metadata
-// as angle-based ones (used for grouping + export filenames).
-export const PLACEMENT_FOR_ASPECT: Record<
-  string,
-  'feed_square' | 'feed_vertical' | 'story_reel' | 'landscape'
-> = {
-  '1:1': 'feed_square',
-  '4:5': 'feed_vertical',
-  '9:16': 'story_reel',
-  '16:9': 'landscape',
-}
-
 export const generateFromProduct = mutation({
   args: {
     productId: v.id('products'),
@@ -1076,14 +1025,6 @@ export const generateFromProduct = mutation({
     /** Optional strategy context carried from Recommended Angles. */
     angleSeed: v.optional(generationAngleSeed),
     creativeConcept: v.optional(creativeConcept),
-    /**
-     * Optional: attach these creatives to an Ad Test. The test becomes the
-     * container that groups creatives + copy. When set, each generated row is
-     * tagged with adTestId (+ placement/adUnitIndex) and the test's planned
-     * counter and status are advanced; completion bumps the test's counters via
-     * the generation workflow. When absent, this is a standalone generation.
-     */
-    adTestId: v.optional(v.id('adTests')),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx)
@@ -1113,34 +1054,8 @@ export const generateFromProduct = mutation({
       ? applyCreativeConceptToAngle(args.angleSeed, args.creativeConcept)
       : undefined
 
-    // When attaching to an Ad Test, verify it's owned and belongs to this
-    // product. We compute the next adUnitIndex so creatives added across
-    // multiple generate passes keep a stable, gapless order (used for export
-    // filenames and grid ordering).
-    let adTestBaseUnitIndex = 0
-    if (args.adTestId) {
-      const adTest = await ctx.db.get(args.adTestId)
-      if (!adTest || adTest.userId !== userId) throw new Error('Ad Test not found')
-      if (adTest.productId !== args.productId) {
-        throw new Error('Ad Test does not belong to this product')
-      }
-      if (adTest.archivedAt) throw new Error('Cannot add to an archived Ad Test')
-      const existing = await ctx.db
-        .query('templateGenerations')
-        .withIndex('by_adTestId', (q) => q.eq('adTestId', args.adTestId))
-        .collect()
-      adTestBaseUnitIndex = existing.reduce(
-        (max, g) => Math.max(max, (g.adUnitIndex ?? -1) + 1),
-        0,
-      )
-    }
-
-    // Billing: capability enforcement. Standalone generation keeps the legacy
-    // paid-feature gate. In-test generation (adTestId set) is the primary,
-    // credit-metered flow — free users have 100 starter credits and must be
-    // able to generate within them — so it's gated by requireCredits below
-    // only, mirroring the starter activation path.
-    if (!args.adTestId) {
+    // Billing: capability enforcement (paid-feature gate + batch guard).
+    {
       await requireCapability(
         ctx,
         CAPABILITIES.GENERATE_VARIATIONS,
@@ -1243,14 +1158,6 @@ export const generateFromProduct = mutation({
           variationIndex: variationCounter,
           status: 'queued',
           model: args.model ?? 'nano-banana-2',
-          // Ad Test linkage (only when generating into a test).
-          adTestId: args.adTestId,
-          placement: args.adTestId
-            ? PLACEMENT_FOR_ASPECT[args.aspectRatio]
-            : undefined,
-          adUnitIndex: args.adTestId
-            ? adTestBaseUnitIndex + variationCounter
-            : undefined,
         })
         variationCounter++
         generationIds.push(genId)
@@ -1259,20 +1166,6 @@ export const generateFromProduct = mutation({
         await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
           generationId: genId,
         }, { startAsync: true })
-      }
-    }
-
-    // Advance the Ad Test: bump its planned counter and flip to generating.
-    // (Completion bumps completed/failed/winner via the generation workflow;
-    // plannedImageCount is owned at fan-out time, here.)
-    if (args.adTestId) {
-      const adTest = await ctx.db.get(args.adTestId)
-      if (adTest) {
-        await ctx.db.patch(args.adTestId, {
-          plannedImageCount: adTest.plannedImageCount + generationIds.length,
-          status: 'generating',
-          updatedAt: Date.now(),
-        })
       }
     }
 

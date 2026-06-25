@@ -441,7 +441,7 @@ function ImportProgressRow({
         </ThemeIcon>
       )}
       {isActive && <Loader size="xs" color="brand" />}
-      <Text size="sm" c={isFailed ? 'dark.3' : 'white'} fw={isActive ? 500 : 400}>
+      <Text size="sm" c={isFailed ? 'dark.3' : 'dark.0'} fw={isActive ? 500 : 400}>
         {isActive
           ? (importStatus?.currentStep ?? `Reading ${displayUrl}...`)
           : isDone
@@ -480,7 +480,7 @@ function BrandPreviewCard({
           <ThemeIcon size="sm" radius="xl" color="teal" variant="light">
             <IconCheck size={14} />
           </ThemeIcon>
-          <Text fw={600} c="white">
+          <Text fw={600} c="dark.0">
             {brandKit?.name ?? "Here's what we found"}
           </Text>
         </Group>
@@ -519,7 +519,7 @@ function BrandPreviewCard({
             )}
             <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
               {brandKit?.tagline && (
-                <Text size="sm" c="white" fw={500}>
+                <Text size="sm" c="dark.0" fw={500}>
                   {brandKit.tagline}
                 </Text>
               )}

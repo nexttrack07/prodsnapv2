@@ -39,7 +39,7 @@ export function BlogMarkdown({ markdown }: { markdown: string }) {
               <a
                 href={href}
                 {...(external ? { target: '_blank', rel: 'noopener noreferrer nofollow' } : {})}
-                style={{ color: 'var(--mantine-color-brand-4)' }}
+                style={{ color: 'var(--mantine-color-brand-6)' }}
               >
                 {children}
               </a>

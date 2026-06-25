@@ -162,8 +162,8 @@ export function TemplateBrowser({
         p="md"
         mb="lg"
         style={{
-          border: '1px solid var(--mantine-color-dark-6)',
-          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid var(--mantine-color-dark-5)',
+          background: 'var(--mantine-color-dark-8)',
         }}
       >
         <Group gap="sm" wrap="wrap" align="flex-end">

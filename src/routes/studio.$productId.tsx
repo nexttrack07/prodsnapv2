@@ -86,16 +86,15 @@ import { OutOfCreditsModal } from '../components/billing/OutOfCreditsModal'
 import { ConvexError } from 'convex/values'
 import { fetchDownloadAsset } from '../utils/downloads'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
-import { AdTestReviewView } from '../components/ads/AdTestReviewView'
-import { AdTestsSection } from '../components/ads/AdTestsSection'
 import { SavedAdsSection } from '../components/ads/SavedAdsSection'
+import { CopyBankPanel } from '../components/ads/CopyBankPanel'
 import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
 import { BrandPicker } from '../components/brand/BrandPicker'
 import { useCustomTemplateUpload } from '../utils/customTemplateUpload'
 import { MAX_TEMPLATE_IMAGE_SIZE } from '../utils/constants'
 
-type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string; concept?: string; editAd?: string; adTestId?: string }
+type ProductSearch = { compose?: string; ad?: string; template?: string; angle?: string; concept?: string; editAd?: string }
 
 export const Route = createFileRoute('/studio/$productId')({
   validateSearch: (search: Record<string, unknown>): ProductSearch => {
@@ -117,9 +116,6 @@ export const Route = createFileRoute('/studio/$productId')({
     }
     if (typeof search.editAd === 'string' && search.editAd.length > 0) {
       out.editAd = search.editAd
-    }
-    if (typeof search.adTestId === 'string' && search.adTestId.length > 0) {
-      out.adTestId = search.adTestId
     }
     return out
   },
@@ -188,40 +184,12 @@ function ProductWorkspacePage() {
   const { productId } = Route.useParams()
   const search = Route.useSearch()
   const navigate = useNavigate()
-  const createAdTest = useConvexMutation(api.adTests.createDraft)
-
-  // "New ad test": create an empty (template-based) draft and drop the user
-  // straight into the generate wizard scoped to it. Creatives + copy are added
-  // inside the test.
-  const handleNewAdTest = async () => {
-    try {
-      const id = await createAdTest({
-        productId: productId as Id<'products'>,
-        name: `Ad test ${new Date().toLocaleDateString()}`,
-        source: 'custom',
-        angles: [],
-        placements: ['feed_square', 'feed_vertical', 'story_reel'],
-      })
-      navigate({
-        to: '/studio/$productId',
-        params: { productId },
-        search: { ...search, adTestId: id as string, compose: 'true' },
-      })
-    } catch (err) {
-      notifications.show({
-        color: 'red',
-        message:
-          err instanceof Error ? err.message : 'Could not create ad test',
-      })
-    }
-  }
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // Nested routes (e.g. /studio/$productId/strategy) take over the page —
   // render only the child Outlet and skip the workspace content.
   const isChildActive = pathname !== `/studio/${productId}`
-  const isAdTestReview = !!search.adTestId
   const [view, setView] = useState<View>(search.compose || search.template || search.angle || search.editAd ? 'generate' : 'gallery')
-  const [initialFilters, setInitialFilters] = useState<TemplateFilters>({})
+  const [initialFilters] = useState<TemplateFilters>({})
 
   // When the URL gets ?compose=:adId / ?template=:id / ?angle=:i, open the
   // generate wizard. `view` is intentionally NOT in deps — including it
@@ -324,7 +292,7 @@ function ProductWorkspacePage() {
     return (
       <Container fluid p="lg">
         <Box py={80} ta="center">
-          <Title order={2} fz="xl" fw={500} c="white" mb="xs">Product not found</Title>
+          <Title order={2} fz="xl" fw={500} c="dark.0" mb="xs">Product not found</Title>
           <Anchor component={Link} to="/studio" c="brand.5">
             Back to products
           </Anchor>
@@ -351,108 +319,22 @@ function ProductWorkspacePage() {
         </Alert>
       )}
 
-      {/* Rich product card — hidden in generate mode and ad test review mode */}
-      {view !== 'generate' && !isAdTestReview && (
-        <ProductHeader
-          product={product}
-          productId={productId as Id<'products'>}
-          primaryImageUrl={primaryImageUrl}
-          anglesCount={anglesCount}
-          brandKitId={product.brandKitId}
-          onNewAd={() => setView('generate')}
-          creditsExhausted={creditsExhausted}
-        />
-      )}
-
-      {/* Ad Test review mode — takes over the whole content area. With
-          ?compose=true it shows the generate wizard scoped to the test
-          (creatives attach to the test); otherwise the review screen. */}
-      {isAdTestReview && (search.compose || search.editAd) && (
-        <GenerateWizard
-          productId={productId as Id<'products'>}
-          product={product}
-          primaryImageUrl={primaryImageUrl}
-          creditsExhausted={creditsExhausted}
-          initialFilters={initialFilters}
-          adTestId={search.adTestId as Id<'adTests'>}
-          // "Generate similar" prefills from the source creative (compose=<adId>);
-          // compose='true' is the fresh "generate more" sentinel (no prefill).
-          prefillFromAdId={
-            (search.compose && search.compose !== 'true' ? search.compose : null) as Id<'templateGenerations'> | null
-          }
-          // "Edit with custom prompt" edits the specific creative in place.
-          prefillEditAdId={
-            (search.editAd ?? null) as Id<'templateGenerations'> | null
-          }
-          prefillAngleIndex={
-            search.angle != null ? Number(search.angle) : null
-          }
-          prefillConceptIndex={
-            search.concept != null ? Number(search.concept) : null
-          }
-          onBack={() => {
-            // Strip the wizard params but KEEP adTestId so we land back on the
-            // ad test review, not the product detail page.
-            const { compose: _c, editAd: _e, angle: _a, concept: _cc, ...rest } = search
-            navigate({
-              to: '/studio/$productId',
-              params: { productId },
-              search: rest,
-              replace: true,
-            })
-          }}
-          onComplete={() => {
-            const { compose: _c, editAd: _e, angle: _a, concept: _cc, ...rest } = search
-            navigate({
-              to: '/studio/$productId',
-              params: { productId },
-              search: rest,
-              replace: true,
-            })
-          }}
-        />
-      )}
-
-      {isAdTestReview && !search.compose && !search.editAd && (
+      {/* Full-page tabbed product workspace. Hidden while the generate wizard
+          is open (it takes over the content area). */}
+      {view !== 'generate' && (
         <>
-          <AdTestReviewView
-            adTestId={search.adTestId as Id<'adTests'>}
-            productName={product.name}
-            // `free_user` is a real (truthy) plan slug, so `!!plan` would treat
-            // starter users as paid. Export is a paid-only feature: exclude it.
-            hasPaidPlan={
-              billingStatus?.plan != null && billingStatus.plan !== 'free_user'
-            }
-            onBack={() => {
-              // Reset view: entering the in-test wizard flips view→'generate'
-              // (via the compose effect); without resetting, backing out of the
-              // review would land on the standalone wizard instead of gallery.
-              setView('gallery')
-              const { adTestId: _omit, ad: _omit2, compose: _omit3, ...rest } =
-                search
-              navigate({
-                to: '/studio/$productId',
-                params: { productId },
-                search: rest,
-                replace: true,
-              })
-            }}
-            onGenerate={() =>
-              navigate({
-                to: '/studio/$productId',
-                params: { productId },
-                search: { ...search, compose: 'true' },
-              })
-            }
-            onOpenAd={(id) =>
-              navigate({
-                to: '/studio/$productId',
-                params: { productId },
-                search: { ...search, ad: id as string },
-              })
-            }
+          <ProductHeader
+            product={product}
+            productId={productId as Id<'products'>}
+            primaryImageUrl={primaryImageUrl}
+            anglesCount={anglesCount}
+            brandKitId={product.brandKitId}
+            onNewAd={() => setView('generate')}
+            creditsExhausted={creditsExhausted}
           />
-          {/* Reuse the existing AdDetailPanel for full ad detail view */}
+
+          {/* Per-creative detail panel — opens via ?ad=<id> from the Overview
+              grid (and Saved ads). */}
           <AdDetailPanel
             opened={!!search.ad}
             onClose={() => {
@@ -470,39 +352,7 @@ function ProductWorkspacePage() {
         </>
       )}
 
-      {!isAdTestReview && view === 'gallery' && (
-        <>
-          <AdTestsSection
-            productId={productId as Id<'products'>}
-            onOpenTest={(id) =>
-              navigate({
-                to: '/studio/$productId',
-                params: { productId },
-                search: { ...search, adTestId: id as string },
-              })
-            }
-            onNewTest={handleNewAdTest}
-            creditsExhausted={creditsExhausted}
-          />
-          <SavedAdsSection
-            productId={productId as Id<'products'>}
-            productName={product.name}
-            onOpenTest={(id) =>
-              navigate({
-                to: '/studio/$productId',
-                params: { productId },
-                search: { ...search, adTestId: id as string },
-              })
-            }
-          />
-        </>
-      )}
-
-      {/* The flat "all generations" grid was removed: creatives now live inside
-          their ad test (each test card on the product page shows its own photo
-          mosaic). Past standalone generations remain browsable in /library. */}
-
-      {!isAdTestReview && view === 'generate' && (
+      {view === 'generate' && (
         <GenerateWizard
           productId={productId as Id<'products'>}
           product={product}
@@ -529,6 +379,155 @@ function ProductWorkspacePage() {
         />
       )}
     </Container>
+  )
+}
+
+const OVERVIEW_RATIO: Record<string, number> = {
+  '1:1': 1,
+  '4:5': 4 / 5,
+  '9:16': 9 / 16,
+  '16:9': 16 / 9,
+}
+
+// Flat per-product creatives grid (Overview tab). Each row is a
+// templateGenerations doc: non-complete rows show progress, complete rows show
+// the image; clicking a complete creative opens the AdDetailPanel via ?ad=<id>.
+function CreativesOverview({
+  productId,
+  productName,
+  creditsExhausted,
+  onGenerate,
+  onOpenAd,
+}: {
+  productId: Id<'products'>
+  productName: string
+  creditsExhausted: boolean
+  onGenerate: () => void
+  onOpenAd: (id: Id<'templateGenerations'>) => void
+}) {
+  const creatives = useConvexQuery(api.creatives.listForProduct, { productId })
+
+  if (creatives === undefined) {
+    return (
+      <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing="md">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} h={200} radius="md" />
+        ))}
+      </SimpleGrid>
+    )
+  }
+
+  if (creatives.length === 0) {
+    return (
+      <Paper
+        radius="lg"
+        p="xl"
+        withBorder
+        ta="center"
+        style={{
+          borderStyle: 'dashed',
+          borderWidth: 2,
+          borderColor: 'var(--mantine-color-dark-5)',
+        }}
+      >
+        <Stack align="center" gap="sm">
+          <Text fw={500} c="dark.0">
+            No creatives yet
+          </Text>
+          <Text size="sm" c="dark.3" maw={460}>
+            Generate ad creatives from your template library or a custom prompt.
+            They appear here as they finish.
+          </Text>
+          <Button
+            color="brand"
+            leftSection={<IconSparkles size={16} />}
+            onClick={onGenerate}
+            disabled={creditsExhausted}
+          >
+            Generate creatives
+          </Button>
+        </Stack>
+      </Paper>
+    )
+  }
+
+  return (
+    <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing="md">
+      {creatives.map((gen) => (
+        <CreativeTile
+          key={gen._id}
+          gen={gen}
+          productName={productName}
+          onOpen={() => onOpenAd(gen._id)}
+        />
+      ))}
+    </SimpleGrid>
+  )
+}
+
+function CreativeTile({
+  gen,
+  productName,
+  onOpen,
+}: {
+  gen: {
+    _id: Id<'templateGenerations'>
+    status: string
+    outputUrl?: string
+    aspectRatio?: string
+    isWinner?: boolean
+    currentStep?: string
+  }
+  productName: string
+  onOpen: () => void
+}) {
+  const ratio = OVERVIEW_RATIO[gen.aspectRatio ?? '1:1'] ?? 1
+  const isComplete = gen.status === 'complete' && !!gen.outputUrl
+  const isFailed = gen.status === 'failed'
+
+  return (
+    <Paper
+      radius="md"
+      withBorder
+      onClick={isComplete ? onOpen : undefined}
+      style={{
+        overflow: 'hidden',
+        cursor: isComplete ? 'pointer' : 'default',
+        borderColor: 'var(--mantine-color-dark-5)',
+        background: 'var(--surface, #ffffff)',
+        position: 'relative',
+      }}
+    >
+      <AspectRatio ratio={ratio} style={{ background: 'var(--mantine-color-dark-7)' }}>
+        {isComplete ? (
+          <Image src={gen.outputUrl} alt={`${productName} creative`} style={{ objectFit: 'cover' }} />
+        ) : isFailed ? (
+          <Center>
+            <Text size="xs" c="red.4">Failed</Text>
+          </Center>
+        ) : (
+          <Center>
+            <Stack align="center" gap={6}>
+              <Loader size="sm" color="brand" />
+              <Text size="10px" c="dark.3" ta="center" px="xs" lineClamp={2}>
+                {gen.currentStep ?? (gen.status === 'queued' ? 'Queued' : 'Generating…')}
+              </Text>
+            </Stack>
+          </Center>
+        )}
+      </AspectRatio>
+      {gen.isWinner && (
+        <Badge
+          size="xs"
+          variant="filled"
+          color="yellow"
+          leftSection={<IconStarFilled size={9} />}
+          style={{ position: 'absolute', top: 6, left: 6 }}
+        >
+          Winner
+        </Badge>
+      )}
+    </Paper>
   )
 }
 
@@ -741,11 +740,174 @@ function ProductHeader({
         </Tooltip>
       </PageHeaderActions>
 
-      {/* Tabs sit ABOVE the product card. Each tab swaps the Paper's
-          content; mih keeps the panel height stable so transitions don't
-          jolt the page. Overview holds the product hero (image + title +
-          badges + Strategy + description + brand). */}
-      <Tabs defaultValue="overview" variant="default" keepMounted={false}>
+      {/* ── Persistent product hero ───────────────────────────────────────
+          Image + name + badges + brand + a "Generate creatives" CTA stay on
+          top across all tabs (the CTA opens the generate wizard). */}
+      <Paper
+        radius="lg"
+        p={isMobile ? 'md' : 'xl'}
+        mb="lg"
+        style={{
+          background: 'var(--surface, #ffffff)',
+          border: '1px solid var(--mantine-color-dark-5)',
+          boxShadow: '0 6px 24px rgba(16, 24, 40, 0.06)',
+        }}
+      >
+        <Group
+          align="flex-start"
+          gap={isMobile ? 'md' : 'xl'}
+          wrap={isMobile ? 'wrap' : 'nowrap'}
+        >
+          {/* Primary image */}
+          <Box
+            w={isMobile ? '100%' : 200}
+            h={isMobile ? 220 : 200}
+            style={{
+              borderRadius: 'var(--mantine-radius-lg)',
+              overflow: 'hidden',
+              flexShrink: 0,
+              border: '1px solid var(--mantine-color-dark-5)',
+              boxShadow: '0 8px 32px rgba(16, 24, 40, 0.10)',
+            }}
+            bg="dark.7"
+          >
+            {primaryImageUrl ? (
+              <Image src={primaryImageUrl} alt={product.name} fit="cover" h="100%" w="100%" />
+            ) : (
+              <Center h="100%">
+                <IconPhoto size={36} color="var(--mantine-color-dark-3)" />
+              </Center>
+            )}
+          </Box>
+
+          {/* Right column */}
+          <Stack gap="md" style={{ flex: 1, minWidth: 0 }}>
+            <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                {isEditingName ? (
+                  <Group gap="xs">
+                    <TextInput
+                      value={editedName}
+                      onChange={(e) => setEditedName(e.target.value)}
+                      size="lg"
+                      variant="unstyled"
+                      styles={{
+                        input: {
+                          fontSize: '1.5rem',
+                          fontWeight: 700,
+                          borderBottom: '2px solid var(--mantine-color-brand-6)',
+                          color: 'var(--mantine-color-dark-0)',
+                        },
+                      }}
+                      autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+                    />
+                    <Button size="xs" variant="light" color="brand" onClick={handleSaveName}>
+                      Save
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => setIsEditingName(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </Group>
+                ) : (
+                  <Title
+                    order={1}
+                    fz={isMobile ? 22 : 28}
+                    fw={700}
+                    c="dark.0"
+                    mb={4}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Edit product name: ${product.name}`}
+                    style={{ cursor: 'pointer', letterSpacing: '-0.02em' }}
+                    onClick={() => {
+                      setEditedName(product.name)
+                      setIsEditingName(true)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setEditedName(product.name)
+                        setIsEditingName(true)
+                      }
+                    }}
+                    title="Click to edit"
+                  >
+                    {capitalizeWords(product.name)}
+                  </Title>
+                )}
+                <Group gap={6} mt={6}>
+                  {product.category && (
+                    <Badge size="sm" variant="light" color="brand" radius="sm">
+                      {product.category}
+                    </Badge>
+                  )}
+                  <Badge size="sm" variant="outline" color="gray" radius="sm">
+                    {product.generationCount}{' '}
+                    {product.generationCount === 1 ? 'ad' : 'ads'}
+                  </Badge>
+                  <StatusBadge status={product.status} />
+                </Group>
+              </Box>
+
+              <Button
+                color="brand"
+                leftSection={<IconSparkles size={16} />}
+                onClick={onNewAd}
+                disabled={creditsExhausted || product.status === 'failed'}
+              >
+                Generate creatives
+              </Button>
+            </Group>
+
+            {product.productDescription && (
+              <Text size="sm" c="dark.1" lh={1.6} maw={680}>
+                {product.productDescription}
+              </Text>
+            )}
+
+            <BrandPicker productId={productId} brandKitId={brandKitId} />
+
+            {product.status === 'failed' && (
+              <Alert
+                color="red"
+                variant="light"
+                title="Product analysis failed"
+                icon={<IconAlertTriangle size={16} />}
+              >
+                <Stack gap="sm">
+                  <Text size="sm">Retry analysis to unlock generation for this product.</Text>
+                  <Button
+                    w="fit-content"
+                    size="xs"
+                    color="red"
+                    variant="light"
+                    leftSection={<IconRefresh size={13} />}
+                    loading={reanalyzeMutation.isPending}
+                    onClick={handleRetryAnalysis}
+                  >
+                    Retry analysis
+                  </Button>
+                </Stack>
+              </Alert>
+            )}
+          </Stack>
+        </Group>
+      </Paper>
+
+      {/* ── Tabbed workspace ──────────────────────────────────────────────── */}
+      <Tabs
+        defaultValue="overview"
+        variant="default"
+        color="brand"
+        keepMounted={false}
+        styles={{ tab: { color: 'var(--mantine-color-dark-1)', fontWeight: 600 } }}
+      >
         <Tabs.List>
           <Tabs.Tab
             value="overview"
@@ -767,6 +929,12 @@ function ProductHeader({
             Source images
           </Tabs.Tab>
           <Tabs.Tab
+            value="copy"
+            leftSection={<Box visibleFrom="sm"><IconBlockquote size={14} /></Box>}
+          >
+            Ad copy
+          </Tabs.Tab>
+          <Tabs.Tab
             value="angles"
             leftSection={<Box visibleFrom="sm"><IconTarget size={14} /></Box>}
             rightSection={
@@ -777,168 +945,38 @@ function ProductHeader({
               ) : null
             }
           >
-            Recommended angles
+            Marketing angles
           </Tabs.Tab>
         </Tabs.List>
 
-        <Paper
-          radius="lg"
-          p={isMobile ? 'md' : 'xl'}
-          mt="md"
-          mih={isMobile ? 280 : 280}
-          style={{
-            // Solid elevated surface (lighter than the page) + a visible border
-            // + soft shadow so the hero clearly reads as a raised card instead of
-            // dissolving into the background. Brand tint kept as a subtle overlay.
-            background:
-              'linear-gradient(135deg, rgba(84, 116, 180, 0.12) 0%, rgba(84, 116, 180, 0) 55%), var(--mantine-color-dark-6)',
-            border: '1px solid var(--mantine-color-dark-4)',
-            borderTopLeftRadius: 0,
-            boxShadow: '0 6px 24px rgba(0, 0, 0, 0.35)',
-          }}
-        >
-          {/* ── Overview ─────────────────────────────────────────────── */}
-          <Tabs.Panel value="overview">
-            <Group
-              align="flex-start"
-              gap={isMobile ? 'md' : 'xl'}
-              wrap={isMobile ? 'wrap' : 'nowrap'}
-            >
-              {/* Primary image */}
-              <Box
-                w={isMobile ? '100%' : 240}
-                h={isMobile ? 220 : 240}
-                style={{
-                  borderRadius: 'var(--mantine-radius-lg)',
-                  overflow: 'hidden',
-                  flexShrink: 0,
-                  border: '1px solid var(--mantine-color-dark-5)',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-                }}
-                bg="dark.7"
-              >
-                {primaryImageUrl ? (
-                  <Image src={primaryImageUrl} alt={product.name} fit="cover" h="100%" w="100%" />
-                ) : (
-                  <Center h="100%">
-                    <IconPhoto size={36} color="var(--mantine-color-dark-3)" />
-                  </Center>
-                )}
-              </Box>
+        {/* ── Overview: flat creatives grid + saved ads ─────────────────── */}
+        <Tabs.Panel value="overview" pt="lg">
+          <CreativesOverview
+            productId={productId}
+            productName={product.name}
+            creditsExhausted={creditsExhausted}
+            onGenerate={onNewAd}
+            onOpenAd={(id) =>
+              navigate({
+                to: '/studio/$productId',
+                params: { productId },
+                search: { ad: id as string },
+              })
+            }
+          />
+          <SavedAdsSection productId={productId} productName={product.name} />
+        </Tabs.Panel>
 
-              {/* Right column */}
-              <Stack gap="md" style={{ flex: 1, minWidth: 0 }}>
-                <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
-                  <Box style={{ flex: 1, minWidth: 0 }}>
-                    {isEditingName ? (
-                      <Group gap="xs">
-                        <TextInput
-                          value={editedName}
-                          onChange={(e) => setEditedName(e.target.value)}
-                          size="lg"
-                          variant="unstyled"
-                          styles={{
-                            input: {
-                              fontSize: '1.5rem',
-                              fontWeight: 700,
-                              borderBottom: '2px solid var(--mantine-color-brand-6)',
-                              color: 'white',
-                            },
-                          }}
-                          autoFocus
-                          onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
-                        />
-                        <Button size="xs" variant="light" color="brand" onClick={handleSaveName}>
-                          Save
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          color="gray"
-                          onClick={() => setIsEditingName(false)}
-                        >
-                          Cancel
-                        </Button>
-                      </Group>
-                    ) : (
-                      <Title
-                        order={1}
-                        fz={isMobile ? 22 : 28}
-                        fw={700}
-                        c="white"
-                        mb={4}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`Edit product name: ${product.name}`}
-                        style={{ cursor: 'pointer', letterSpacing: '-0.02em' }}
-                        onClick={() => {
-                          setEditedName(product.name)
-                          setIsEditingName(true)
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            setEditedName(product.name)
-                            setIsEditingName(true)
-                          }
-                        }}
-                        title="Click to edit"
-                      >
-                        {capitalizeWords(product.name)}
-                      </Title>
-                    )}
-                    <Group gap={6} mt={6}>
-                      {product.category && (
-                        <Badge size="sm" variant="light" color="brand" radius="sm">
-                          {product.category}
-                        </Badge>
-                      )}
-                      <Badge size="sm" variant="outline" color="gray" radius="sm">
-                        {product.generationCount}{' '}
-                        {product.generationCount === 1 ? 'ad' : 'ads'}
-                      </Badge>
-                      <StatusBadge status={product.status} />
-                    </Group>
-                  </Box>
-                </Group>
-
-                {product.productDescription && (
-                  <Text size="sm" c="dark.1" lh={1.6} maw={680}>
-                    {product.productDescription}
-                  </Text>
-                )}
-
-                <BrandPicker productId={productId} brandKitId={brandKitId} />
-
-                {product.status === 'failed' && (
-                  <Alert
-                    color="red"
-                    variant="light"
-                    title="Product analysis failed"
-                    icon={<IconAlertTriangle size={16} />}
-                  >
-                    <Stack gap="sm">
-                      <Text size="sm">Retry analysis to unlock generation for this product.</Text>
-                      <Button
-                        w="fit-content"
-                        size="xs"
-                        color="red"
-                        variant="light"
-                        leftSection={<IconRefresh size={13} />}
-                        loading={reanalyzeMutation.isPending}
-                        onClick={handleRetryAnalysis}
-                      >
-                        Retry analysis
-                      </Button>
-                    </Stack>
-                  </Alert>
-                )}
-              </Stack>
-            </Group>
-          </Tabs.Panel>
-
-          {/* ── Source images ───────────────────────────────────────── */}
-          <Tabs.Panel value="images">
+        {/* ── Source images ─────────────────────────────────────────────── */}
+        <Tabs.Panel value="images" pt="lg">
+          <Paper
+            radius="lg"
+            p={isMobile ? 'md' : 'xl'}
+            style={{
+              background: 'var(--surface, #ffffff)',
+              border: '1px solid var(--mantine-color-dark-5)',
+            }}
+          >
             <Group gap="xs" wrap="wrap">
               {sourceImages.map((img) => {
                 const isPrimary = img._id === product.primaryImageId
@@ -968,10 +1006,24 @@ function ProductHeader({
                 loading={isUploadingImage}
               />
             </Group>
-          </Tabs.Panel>
+          </Paper>
+        </Tabs.Panel>
 
-          {/* ── Recommended angles ──────────────────────────────────── */}
-          <Tabs.Panel value="angles">
+        {/* ── Ad copy: product Copy Bank ────────────────────────────────── */}
+        <Tabs.Panel value="copy" pt="lg">
+          <CopyBankPanel productId={productId} />
+        </Tabs.Panel>
+
+        {/* ── Marketing angles ──────────────────────────────────────────── */}
+        <Tabs.Panel value="angles" pt="lg">
+          <Paper
+            radius="lg"
+            p={isMobile ? 'md' : 'xl'}
+            style={{
+              background: 'var(--surface, #ffffff)',
+              border: '1px solid var(--mantine-color-dark-5)',
+            }}
+          >
             <RecommendedAnglesPanel
               productId={productId}
               status={product.status}
@@ -979,15 +1031,9 @@ function ProductHeader({
               angles={product.marketingAngles ?? []}
               creditsExhausted={creditsExhausted}
             />
-          </Tabs.Panel>
-
-        </Paper>
+          </Paper>
+        </Tabs.Panel>
       </Tabs>
-
-      {/* Generation is ad-test-centric now: the "Ad tests" section below is the
-          single entry point ("New ad test"). The old standalone "New ad" button
-          was removed to avoid a competing "generate ad" vs "generate ad test"
-          CTA on the same page. */}
 
       <ImageEnhancerModal
         opened={activeImage !== null}
@@ -1010,7 +1056,7 @@ function ProductHeader({
       >
         <Stack gap="md">
           <Text size="sm" c="dark.1">
-            <Text component="span" fw={600} c="white">
+            <Text component="span" fw={600} c="dark.0">
               {capitalizeWords(product.name)}
             </Text>{' '}
             and all its generated ads will be removed. This can't be undone.
@@ -1103,8 +1149,6 @@ function RecommendedAnglesPanel({
   const navigate = useNavigate()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [creatingKey, setCreatingKey] = useState<string | null>(null)
-  const createAdTest = useConvexMutation(api.adTests.createDraft)
-  const createConceptTestMutation = useMutation({ mutationFn: createAdTest })
   const selectedAngle = angles[selectedIndex] ?? angles[0]
   const concepts = selectedAngle ? buildCreativeConcepts(selectedAngle) : []
 
@@ -1153,63 +1197,35 @@ function RecommendedAnglesPanel({
     if (selectedIndex >= angles.length) setSelectedIndex(0)
   }, [angles.length, selectedIndex])
 
-  async function handleChooseTemplates(
-    concept: CreativeConcept,
+  // Open the generate wizard prefilled from this angle/concept. Creatives are
+  // flat (attached to the product, no test container). An optional template id
+  // is deep-linked so the wizard preselects it.
+  function handleChooseTemplates(
+    _concept: CreativeConcept,
     conceptIndex: number,
     opts?: { templateId?: Id<'adTemplates'>; key?: string },
   ) {
     const key = opts?.key ?? `${selectedIndex}-${conceptIndex}`
     setCreatingKey(key)
-    try {
-      const adTestId = await createConceptTestMutation.mutateAsync({
-        productId,
-        name: `${selectedAngle?.title ?? 'Ad test'} - ${concept.title}`,
-        source: 'custom',
-        angles: selectedAngle
-          ? [{
-              key: `product-angle-${selectedIndex}`,
-              title: selectedAngle.title,
-              description: selectedAngle.description,
-              hook: selectedAngle.hook,
-              suggestedAdStyle: selectedAngle.suggestedAdStyle,
-              productAngleIndex: selectedIndex,
-            }]
-          : [],
-        placements: ['feed_square', 'feed_vertical', 'story_reel'],
-      })
-      navigate({
-        to: '/studio/$productId',
-        params: { productId: productId as string },
-        search: {
-          adTestId: adTestId as string,
-          compose: 'true',
-          angle: String(selectedIndex),
-          concept: String(conceptIndex),
-          // Deep-link the recommended template so GenerateView preselects it.
-          ...(opts?.templateId ? { template: opts.templateId as string } : {}),
-        },
-      })
-    } catch (err) {
-      const info = mapGenerationError(err)
-      notifications.show({
-        title: info.title,
-        message: info.action ? (
-          <>{info.message}{' '}<Anchor href={info.action.href} size="sm" fw={600}>{info.action.label} →</Anchor></>
-        ) : info.message,
-        color: 'red',
-        autoClose: 8000,
-      })
-    } finally {
-      setCreatingKey(null)
-    }
+    navigate({
+      to: '/studio/$productId',
+      params: { productId: productId as string },
+      search: {
+        compose: 'true',
+        angle: String(selectedIndex),
+        concept: String(conceptIndex),
+        // Deep-link the recommended template so the wizard preselects it.
+        ...(opts?.templateId ? { template: opts.templateId as string } : {}),
+      },
+    })
   }
 
-  // Recommended template → same compose flow, with the template deep-linked.
-  // Uses the first creative concept for the angle context carried into the test.
-  async function handleChooseRecommendedTemplate(templateId: Id<'adTemplates'>) {
+  // Recommended template → same wizard flow, with the template deep-linked.
+  // Uses the first creative concept for the angle context.
+  function handleChooseRecommendedTemplate(templateId: Id<'adTemplates'>) {
     const concept = concepts[0]
     if (!concept) return
-    await handleChooseTemplates(concept, 0, {
+    handleChooseTemplates(concept, 0, {
       templateId,
       key: `rec-${templateId}`,
     })
@@ -1280,8 +1296,8 @@ function RecommendedAnglesPanel({
                 h="100%"
                 style={{
                   background: selected
-                    ? 'rgba(84, 116, 180, 0.16)'
-                    : 'rgba(255, 255, 255, 0.025)',
+                    ? 'rgba(16, 24, 40, 0.16)'
+                    : 'rgba(16, 24, 40, 0.025)',
                   borderColor: selected
                     ? 'var(--mantine-color-brand-5)'
                     : 'var(--mantine-color-dark-5)',
@@ -1306,7 +1322,7 @@ function RecommendedAnglesPanel({
                     <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
                       Angle
                     </Text>
-                    <Text size="sm" fw={800} c="white" lh={1.35}>
+                    <Text size="sm" fw={800} c="dark.0" lh={1.35}>
                       {angle.title}
                     </Text>
                   </Box>
@@ -1332,7 +1348,7 @@ function RecommendedAnglesPanel({
           radius="md"
           p={isMobile ? 'md' : 'lg'}
           style={{
-            background: 'rgba(0, 0, 0, 0.16)',
+            background: 'var(--surface-muted, #f7f8fa)',
             borderColor: 'var(--mantine-color-dark-5)',
           }}
         >
@@ -1342,7 +1358,7 @@ function RecommendedAnglesPanel({
                 <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={4}>
                   Creative concepts for this angle
                 </Text>
-                <Title order={3} fz={isMobile ? 18 : 22} c="white">
+                <Title order={3} fz={isMobile ? 18 : 22} c="dark.0">
                   {selectedAngle.title}
                 </Title>
               </Box>
@@ -1356,7 +1372,7 @@ function RecommendedAnglesPanel({
                 p="sm"
                 style={{
                   borderRadius: 8,
-                  background: 'rgba(255, 255, 255, 0.03)',
+                  background: 'var(--surface, #ffffff)',
                   border: '1px solid var(--mantine-color-dark-6)',
                 }}
               >
@@ -1377,7 +1393,7 @@ function RecommendedAnglesPanel({
                   radius="md"
                   p="md"
                   style={{
-                    background: 'rgba(255, 255, 255, 0.025)',
+                    background: 'var(--surface, #ffffff)',
                     borderColor: 'var(--mantine-color-dark-6)',
                   }}
                 >
@@ -1385,7 +1401,7 @@ function RecommendedAnglesPanel({
                     <Badge size="xs" variant="light" color="dark" radius="sm" w="fit-content">
                       Concept {index + 1}
                     </Badge>
-                    <Text size="sm" fw={800} c="white">
+                    <Text size="sm" fw={800} c="dark.0">
                       {concept.title}
                     </Text>
                     <Text size="xs" c="brand.2" fw={700}>
@@ -1478,7 +1494,7 @@ function RecommendedAnglesPanel({
                   radius="md"
                   p="md"
                   style={{
-                    background: 'rgba(255, 255, 255, 0.02)',
+                    background: 'var(--surface, #ffffff)',
                     borderColor: 'var(--mantine-color-dark-6)',
                   }}
                 >
@@ -1503,7 +1519,7 @@ function RecommendedAnglesPanel({
                         h="100%"
                         style={{
                           overflow: 'hidden',
-                          background: 'rgba(255, 255, 255, 0.025)',
+                          background: 'var(--surface, #ffffff)',
                           borderColor: 'var(--mantine-color-dark-6)',
                           opacity:
                             creatingKey && creatingKey !== `rec-${rec.templateId}`
@@ -1709,7 +1725,7 @@ function CustomerVoiceSection({
           p="sm"
           style={{
             borderRadius: 'var(--mantine-radius-md)',
-            background: 'rgba(255, 255, 255, 0.02)',
+            background: 'rgba(16, 24, 40, 0.02)',
             border: '1px solid var(--mantine-color-dark-6)',
           }}
         >
@@ -1752,7 +1768,7 @@ function CustomerVoiceSection({
                   style={{
                     borderRadius: 'var(--mantine-radius-sm)',
                     border: '1px solid var(--mantine-color-dark-6)',
-                    background: 'rgba(255, 255, 255, 0.015)',
+                    background: 'rgba(16, 24, 40, 0.015)',
                     cursor: editingIdx === idx ? 'text' : 'pointer',
                   }}
                 >
@@ -2270,7 +2286,7 @@ function ImageGallerySection({
       <Box mb="xl">
         <Group justify="space-between" mb="md">
           <Box>
-            <Title order={2} fz="xl" fw={600} c="white" mb={4}>Product Images</Title>
+            <Title order={2} fz="xl" fw={600} c="dark.0" mb={4}>Product Images</Title>
             <Text size="sm" c="dark.2">Select primary image for ad generation</Text>
           </Box>
         </Group>
@@ -2287,7 +2303,7 @@ function ImageGallerySection({
     <Box mb="xl">
       <Group justify="space-between" mb="md">
         <Box>
-          <Title order={2} fz="xl" fw={600} c="white" mb={4}>Product Images</Title>
+          <Title order={2} fz="xl" fw={600} c="dark.0" mb={4}>Product Images</Title>
           <Text size="sm" c="dark.2">Select primary image for ad generation</Text>
         </Box>
       </Group>
@@ -2657,7 +2673,6 @@ function GenerateWizard({
   prefillAngleIndex,
   prefillConceptIndex,
   prefillEditAdId,
-  adTestId,
 }: {
   productId: Id<'products'>
   product: {
@@ -2688,8 +2703,6 @@ function GenerateWizard({
   prefillAngleIndex?: number | null
   prefillConceptIndex?: number | null
   prefillEditAdId?: Id<'templateGenerations'> | null
-  /** When set, generated creatives attach to this Ad Test (template path). */
-  adTestId?: Id<'adTests'> | null
 }) {
   // ── Segment state ──────────────────────────────────────────────────────────
   // Default to Template — picking from the curated library is the recommended
@@ -3193,7 +3206,6 @@ function GenerateWizard({
           productImageId: sourceImageId ?? undefined,
           applyBrand,
           applyVoice,
-          adTestId: adTestId ?? undefined,
           angleSeed: selectedAngle
             ? {
                 title: selectedAngle.title,
@@ -3206,9 +3218,7 @@ function GenerateWizard({
         })
         notifications.show({
           title: 'Success',
-          message: adTestId
-            ? 'Generating creatives for your ad test!'
-            : 'Generation started!',
+          message: 'Generation started!',
           color: 'green',
         })
       } else if (usePromptPath) {
@@ -3223,14 +3233,10 @@ function GenerateWizard({
           useSourceImage: includeSourceImage,
           applyBrand,
           applyVoice,
-          // Attach prompt-edited creatives to the test so they don't orphan.
-          adTestId: adTestId ?? undefined,
         })
         notifications.show({
           title: 'Generating',
-          message: adTestId
-            ? `${variationsCount} image${variationsCount === 1 ? '' : 's'} from your prompt — added to your ad test.`
-            : `${variationsCount} image${variationsCount === 1 ? '' : 's'} from your prompt. Watch the gallery.`,
+          message: `${variationsCount} image${variationsCount === 1 ? '' : 's'} from your prompt. Watch the gallery.`,
           color: 'green',
         })
       } else if (useAnglePath) {
@@ -3315,8 +3321,8 @@ function GenerateWizard({
               Back
             </Group>
           </Anchor>
-          <Text fw={600} size="lg" c="white">
-            {adTestId ? 'Generate creatives' : 'Create ad'}
+          <Text fw={600} size="lg" c="dark.0">
+            Create ad
           </Text>
         </Group>
         <Group gap="xs" wrap="wrap">
@@ -3355,7 +3361,7 @@ function GenerateWizard({
                   <Text size="xs" fw={700} c="brand.3" tt="uppercase">
                     Using recommended strategy
                   </Text>
-                  <Text size="sm" fw={700} c="white" lineClamp={1}>
+                  <Text size="sm" fw={700} c="dark.0" lineClamp={1}>
                     {selectedAngle.title}
                   </Text>
                   {selectedConcept && (
@@ -3381,9 +3387,8 @@ function GenerateWizard({
         </Box>
       )}
 
-      {/* Segmented control — hidden when editing an existing ad, and when
-          generating into an ad test (template-only path). */}
-      {!prefillEditAdId && !adTestId && (
+      {/* Segmented control — hidden when editing an existing ad. */}
+      {!prefillEditAdId && (
         <Box px="md" mb="lg">
           <SegmentedControl
             value={activeSegment}
@@ -3444,7 +3449,7 @@ function GenerateWizard({
               )}
               {/* Textarea — shared destination for all prompt paths */}
               <Box>
-                <Text size="sm" fw={600} c="white" mb="xs">Describe your ad</Text>
+                <Text size="sm" fw={600} c="dark.0" mb="xs">Describe your ad</Text>
                 <Textarea
                   placeholder="e.g. Product on a marble countertop with soft morning light, lifestyle feel..."
                   value={prompt}
@@ -3493,7 +3498,7 @@ function GenerateWizard({
               {!prefillEditAdId && suggestionsOpen && (
                 <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
                   <Group justify="space-between" mb="xs">
-                    <Text size="xs" fw={600} c="white">AI suggestions</Text>
+                    <Text size="xs" fw={600} c="dark.0">AI suggestions</Text>
                     <Group gap="xs">
                       <Button
                         size="xs"
@@ -3545,7 +3550,7 @@ function GenerateWizard({
               {/* ─── Structured chip builder ─── */}
               {!prefillEditAdId && builderOpen && (
                 <Paper p="sm" radius="md" bg="dark.7" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
-                  <Text size="xs" fw={600} c="white" mb="sm">Build a prompt</Text>
+                  <Text size="xs" fw={600} c="dark.0" mb="sm">Build a prompt</Text>
                   {([
                     ['Setting', PROMPT_SETTINGS, chipSetting, setChipSetting],
                     ['Mood', PROMPT_MOODS, chipMood, setChipMood],
@@ -3784,7 +3789,7 @@ function GenerateWizard({
                           borderRadius: 'var(--mantine-radius-sm)',
                           overflow: 'hidden',
                           boxShadow: picked
-                            ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(84, 116, 180, 0.35)'
+                            ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(16, 24, 40, 0.35)'
                             : 'none',
                           position: 'relative',
                           display: 'block',
@@ -3825,7 +3830,7 @@ function GenerateWizard({
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              boxShadow: '0 2px 8px rgba(84, 116, 180, 0.4)',
+                              boxShadow: '0 2px 8px rgba(16, 24, 40, 0.4)',
                             }}
                           >
                             <IconCheck size={14} color="white" strokeWidth={3} />
@@ -4010,7 +4015,7 @@ function GenerateWizard({
                             borderRadius: 'var(--mantine-radius-sm)',
                             overflow: 'hidden',
                             boxShadow: picked
-                              ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(84, 116, 180, 0.35)'
+                              ? 'inset 0 0 0 3px var(--mantine-color-brand-5), 0 0 0 2px rgba(16, 24, 40, 0.35)'
                               : 'none',
                             position: 'relative',
                             display: 'block',
@@ -4047,7 +4052,7 @@ function GenerateWizard({
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                boxShadow: '0 2px 8px rgba(84, 116, 180, 0.4)',
+                                boxShadow: '0 2px 8px rgba(16, 24, 40, 0.4)',
                               }}
                             >
                               <IconCheck size={14} color="white" strokeWidth={3} />
@@ -4080,8 +4085,9 @@ function GenerateWizard({
           p="md"
           radius="lg"
           style={{
-            border: '1px solid var(--mantine-color-dark-6)',
-            background: 'rgba(26, 26, 26, 0.5)',
+            border: '1px solid var(--mantine-color-dark-5)',
+            background: 'var(--surface, #ffffff)',
+            boxShadow: '0 6px 24px rgba(16, 24, 40, 0.07)',
             alignSelf: 'flex-start',
             position: isMobile ? 'relative' : 'fixed',
             top: isMobile ? undefined : 'var(--mantine-spacing-sm)',
@@ -4140,7 +4146,7 @@ function GenerateWizard({
                     />
                   </Box>
                   <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Text size="sm" fw={600} c="white" lineClamp={1}>
+                    <Text size="sm" fw={600} c="dark.0" lineClamp={1}>
                       Editing from ad
                     </Text>
                     <Text size="xs" c="dark.2">
@@ -4171,7 +4177,7 @@ function GenerateWizard({
                       />
                     </Box>
                     <Box style={{ flex: 1, minWidth: 0 }}>
-                      <Text size="sm" fw={600} c="white" lineClamp={1}>
+                      <Text size="sm" fw={600} c="dark.0" lineClamp={1}>
                         {capitalizeWords(product.name)}
                       </Text>
                       <Text size="xs" c="dark.2">
@@ -4315,7 +4321,7 @@ function GenerateWizard({
                 <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
                   <Box style={{ flex: 1, minWidth: 0 }}>
                     <Text size="xs" c="dark.2">Angle</Text>
-                    <Text size="sm" fw={600} c="white" lineClamp={2}>
+                    <Text size="sm" fw={600} c="dark.0" lineClamp={2}>
                       {product.marketingAngles[selectedAngleIndex].title}
                     </Text>
                   </Box>
@@ -4354,7 +4360,7 @@ function GenerateWizard({
 
             {/* Output Aspect Ratio */}
             <Box mb="md">
-            <Text size="sm" fw={600} c="white" mb="xs">Output size</Text>
+            <Text size="sm" fw={600} c="dark.0" mb="xs">Output size</Text>
             <SegmentedControl
               value={aspectRatio}
               onChange={(val) => setAspectRatio(val as AspectRatio)}
@@ -4367,7 +4373,7 @@ function GenerateWizard({
             {/* Mode — only relevant for template path */}
             {activeSegment === 'template' && hasTemplates && (
               <Box mb="md">
-              <Text size="sm" fw={500} c="white" mb="xs">Mode</Text>
+              <Text size="sm" fw={500} c="dark.0" mb="xs">Mode</Text>
               <Radio.Group value={mode} onChange={(val) => setMode(val as Mode)}>
                 <Stack gap="xs">
                   <Radio
@@ -4436,7 +4442,7 @@ function GenerateWizard({
                       alt=""
                     />
                   ) : null}
-                  <Text size="sm" fw={600} c="white" truncate>
+                  <Text size="sm" fw={600} c="dark.0" truncate>
                     {activeBrandKit.name || 'Your brand'}
                   </Text>
                 </Group>
@@ -4504,7 +4510,7 @@ function GenerateWizard({
 
             {/* Variations */}
             <Box mb="md">
-            <Text size="sm" fw={500} c="white" mb="xs">
+            <Text size="sm" fw={500} c="dark.0" mb="xs">
               Variations
               {activeSegment === 'template' && hasTemplates ? ' per template' : ''}
             </Text>
@@ -4541,7 +4547,7 @@ function GenerateWizard({
               <Paper p="sm" mb="md" radius="md" bg="dark.7">
                 <Group justify="space-between">
                   <Text size="sm" c="dark.2">Total images</Text>
-                  <Text size="lg" fw={700} c="white">{totalCount}</Text>
+                  <Text size="lg" fw={700} c="dark.0">{totalCount}</Text>
                 </Group>
                 <Text size="xs" c="dark.2" mt={4}>
                   {useTemplatePath
@@ -4567,7 +4573,7 @@ function GenerateWizard({
               loading={isSubmitting}
               styles={{
                 root: {
-                  boxShadow: canGenerate && !creditsExhausted ? '0 4px 14px rgba(84, 116, 180, 0.3)' : 'none',
+                  boxShadow: canGenerate && !creditsExhausted ? '0 4px 14px rgba(16, 24, 40, 0.3)' : 'none',
                 },
               }}
             >
@@ -4682,7 +4688,7 @@ function InspirationRow({
             p="md"
             style={{
               border: '1px dashed var(--mantine-color-dark-4)',
-              background: 'rgba(84, 116, 180, 0.03)',
+              background: 'rgba(16, 24, 40, 0.03)',
             }}
           >
             <Text size="sm" c="dark.2" mb="xs">
@@ -5300,7 +5306,7 @@ function AddInspirationModal({
                         <Badge
                           size="xs"
                           variant="filled"
-                          color="dark"
+                          color="dark.0"
                           pos="absolute"
                           bottom={6}
                           left={6}
@@ -5330,7 +5336,7 @@ function AddInspirationModal({
         <Tabs.Panel value="url">
           <Stack gap="md">
             <Box>
-              <Text size="sm" fw={500} c="white" mb="xs">
+              <Text size="sm" fw={500} c="dark.0" mb="xs">
                 Paste a URL (FB Ad Library, Pinterest, any page with an image)
               </Text>
               <Group gap="sm" align="flex-end">
@@ -5356,7 +5362,7 @@ function AddInspirationModal({
             </Box>
 
             <Box>
-              <Text size="sm" fw={500} c="white" mb="xs">
+              <Text size="sm" fw={500} c="dark.0" mb="xs">
                 Or upload an image directly
               </Text>
               <Dropzone

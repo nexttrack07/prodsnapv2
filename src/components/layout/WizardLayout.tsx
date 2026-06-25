@@ -17,7 +17,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     <Box
       mih="100vh"
       style={{
-        backgroundColor: 'var(--mantine-color-dark-8, #050505)',
+        backgroundColor: 'var(--mantine-color-dark-8, #F7F8FA)',
       }}
     >
       <Group px="lg" py="md" justify="space-between">

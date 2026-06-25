@@ -11,16 +11,19 @@ type Variant = 'light' | 'dark'
  */
 export function LogoMark({
   size = 'md',
-  variant = 'dark',
+  variant = 'light',
 }: {
   size?: Size
   variant?: Variant
 }) {
   const styles = sizeStyles[size]
-  const borderColor = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
-  const solidBg = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
-  const solidText = variant === 'light' ? 'white' : 'var(--mantine-color-dark-9)'
-  const outlineText = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
+  // Default to the light-surface treatment (dark mark) since the app and
+  // marketing chrome now render on light backgrounds. Pass variant="dark"
+  // to invert the mark for use over a dark image/surface.
+  const borderColor = variant === 'light' ? 'var(--mantine-color-dark-0)' : 'white'
+  const solidBg = variant === 'light' ? 'var(--mantine-color-dark-0)' : 'white'
+  const solidText = variant === 'light' ? 'white' : 'var(--mantine-color-dark-0)'
+  const outlineText = variant === 'light' ? 'var(--mantine-color-dark-0)' : 'white'
 
   return (
     <Group
@@ -70,16 +73,19 @@ const sizeStyles: Record<Size, { fontSize: string; padding: string; borderWidth:
 
 export function Logo({
   size = 'md',
-  variant = 'dark',
+  variant = 'light',
 }: {
   size?: Size
   variant?: Variant
 }) {
   const styles = sizeStyles[size]
-  const borderColor = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
-  const solidBg = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
-  const solidText = variant === 'light' ? 'white' : 'var(--mantine-color-dark-9)'
-  const outlineText = variant === 'light' ? 'var(--mantine-color-dark-9)' : 'white'
+  // Default to the light-surface treatment (dark mark) since the app and
+  // marketing chrome now render on light backgrounds. Pass variant="dark"
+  // to invert the mark for use over a dark image/surface.
+  const borderColor = variant === 'light' ? 'var(--mantine-color-dark-0)' : 'white'
+  const solidBg = variant === 'light' ? 'var(--mantine-color-dark-0)' : 'white'
+  const solidText = variant === 'light' ? 'white' : 'var(--mantine-color-dark-0)'
+  const outlineText = variant === 'light' ? 'var(--mantine-color-dark-0)' : 'white'
 
   return (
     <Group

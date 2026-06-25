@@ -14,11 +14,11 @@ function AdminIndex() {
         p="xl"
         mb={40}
         style={{
-          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.12) 0%, rgba(84, 116, 180, 0.04) 100%)',
+          background: 'linear-gradient(135deg, rgba(16, 24, 40, 0.12) 0%, rgba(16, 24, 40, 0.04) 100%)',
           border: '1px solid var(--mantine-color-dark-5)',
         }}
       >
-        <Title order={1} fz={36} fw={600} c="white">
+        <Title order={1} fz={36} fw={600} c="dark.0">
           Admin
         </Title>
         <Text size="lg" c="dark.2" mt={8}>
@@ -90,7 +90,7 @@ function AdminCard({
         root: {
           '&:hover': {
             transform: 'translateY(-4px)',
-            boxShadow: '0 12px 40px rgba(84, 116, 180, 0.2)',
+            boxShadow: '0 12px 40px rgba(16, 24, 40, 0.2)',
             borderColor: 'var(--mantine-color-brand-6)',
           },
           '&:hover .admin-card-arrow': {
@@ -105,11 +105,11 @@ function AdminCard({
         variant="gradient"
         gradient={{ from: 'brand.7', to: 'brand.5', deg: 135 }}
         mb="lg"
-        style={{ boxShadow: '0 4px 16px rgba(84, 116, 180, 0.25)' }}
+        style={{ boxShadow: '0 4px 16px rgba(16, 24, 40, 0.25)' }}
       >
         {icon}
       </ThemeIcon>
-      <Text fw={600} size="xl" c="white">
+      <Text fw={600} size="xl" c="dark.0">
         {title}
       </Text>
       <Text size="sm" c="dark.2" mt={6} mb="lg">

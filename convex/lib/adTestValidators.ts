@@ -1,9 +1,9 @@
 /**
- * Shared Ad Test validators.
+ * Shared creative/copy validators.
  *
- * These are imported by both `convex/schema.ts` (table definitions) and
- * `convex/adTests.ts` (function argument validators) so the API contract can
- * never drift from the stored shape. See docs/specs/ad-test-ux-overhaul.md.
+ * These are imported by `convex/schema.ts` (table definitions) plus the copy
+ * bank / AI / recommendation modules (function argument validators) so the API
+ * contract can never drift from the stored shape.
  */
 import { type Infer, v } from 'convex/values'
 
@@ -12,23 +12,6 @@ export const aspectRatio = v.union(
   v.literal('4:5'),
   v.literal('9:16'),
   v.literal('16:9'),
-)
-
-// `status` describes generation readiness ONLY. Exported/archived are derived
-// from the `exportedAt` / `archivedAt` timestamps, never from `status`.
-export const adTestStatus = v.union(
-  v.literal('draft'),
-  v.literal('generating'),
-  v.literal('ready'),
-  v.literal('partially_failed'),
-  v.literal('failed'),
-)
-
-export const adTestSource = v.union(
-  v.literal('starter'),
-  v.literal('recommendation'),
-  v.literal('winner_iteration'),
-  v.literal('custom'),
 )
 
 // Placement → aspect ratio mapping:

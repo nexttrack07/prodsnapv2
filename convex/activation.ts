@@ -92,7 +92,7 @@ function isDisposableEmail(email: string | undefined): boolean {
 
 export const activateStarterFlow = action({
   args: {},
-  handler: async (ctx): Promise<{ adTestId: string; productId: string }> => {
+  handler: async (ctx): Promise<{ productId: string }> => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
 
@@ -138,27 +138,19 @@ export const activateStarterFlow = action({
     //    write the creditBalances row. Throws if already granted.
     await ctx.runMutation(internal.activation._claimStarterGrant, {})
 
-    // 4. Create the starter Ad Test draft (1 concept × 3 placements).
-    const adTestId = await ctx.runMutation(api.adTests.createDraft, {
+    // 4. Fan out flat angle-based starter creatives on the product.
+    await ctx.runMutation(internal.activation._startStarterAngleGenerations, {
+      userId: (await ctx.auth.getUserIdentity())!.tokenIdentifier,
       productId,
-      name: 'Starter Ad Test',
-      source: 'starter',
-      angles: [
-        {
-          key: 'starter_concept',
-          title: angle.title,
-          description: angle.description,
-          hook: angle.hook,
-          suggestedAdStyle: angle.suggestedAdStyle,
-        },
-      ],
-      placements: [...STARTER_PLACEMENTS],
+      angle: {
+        title: angle.title,
+        description: angle.description,
+        hook: angle.hook,
+        suggestedAdStyle: angle.suggestedAdStyle,
+      },
     })
 
-    // 5. Fan out generation rows and kick off workflows.
-    await ctx.runMutation(api.adTests.startGeneration, { adTestId })
-
-    return { adTestId: adTestId as string, productId: productId as string }
+    return { productId: productId as string }
   },
 })
 
@@ -268,7 +260,7 @@ export const activateStarterForProduct = action({
   handler: async (
     ctx,
     { productId },
-  ): Promise<{ adTestId: string; productId: string }> => {
+  ): Promise<{ productId: string }> => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     if (isDisposableEmail(identity.email)) {
@@ -299,25 +291,18 @@ export const activateStarterForProduct = action({
       await ctx.runMutation(internal.activation._claimStarterGrant, {})
     }
 
-    const adTestId = await ctx.runMutation(api.adTests.createDraft, {
+    await ctx.runMutation(internal.activation._startStarterAngleGenerations, {
+      userId: identity.tokenIdentifier,
       productId,
-      name: 'Starter Ad Test',
-      source: 'starter',
-      angles: [
-        {
-          key: 'starter_concept',
-          title: angle.title,
-          description: angle.description,
-          hook: angle.hook,
-          suggestedAdStyle: angle.suggestedAdStyle,
-        },
-      ],
-      placements: [...STARTER_PLACEMENTS],
+      angle: {
+        title: angle.title,
+        description: angle.description,
+        hook: angle.hook,
+        suggestedAdStyle: angle.suggestedAdStyle,
+      },
     })
 
-    await ctx.runMutation(api.adTests.startGeneration, { adTestId })
-
-    return { adTestId: adTestId as string, productId: productId as string }
+    return { productId: productId as string }
   },
 })
 
@@ -335,11 +320,8 @@ export const _startStarterTemplateGenerations = internalMutation({
     userId: v.string(),
     productId: v.id('products'),
     templateIds: v.array(v.id('adTemplates')),
-    // The starter Ad Test these creatives belong to, so they show up in Studio
-    // (which renders ad tests, not loose generations) and can be reviewed.
-    adTestId: v.id('adTests'),
   },
-  handler: async (ctx, { userId, productId, templateIds, adTestId }) => {
+  handler: async (ctx, { userId, productId, templateIds }) => {
     const ids = templateIds.slice(0, 3)
     if (ids.length === 0) throw new Error('Pick at least one template')
 
@@ -391,10 +373,6 @@ export const _startStarterTemplateGenerations = internalMutation({
         variationIndex: variationIndex,
         status: 'queued',
         model: 'nano-banana-2',
-        // Ad Test linkage so the creatives surface in Studio.
-        adTestId,
-        placement: PLACEMENT_FOR_ASPECT[tpl.aspectRatio],
-        adUnitIndex: variationIndex,
       })
       variationIndex++
       await ctx.scheduler.runAfter(
@@ -402,17 +380,6 @@ export const _startStarterTemplateGenerations = internalMutation({
         internal.activation._kickoffTemplateWorkflow,
         { generationId: genId },
       )
-    }
-
-    // Advance the starter Ad Test: planned = creatives actually queued, status
-    // generating. Completion bumps completed/failed/winner via the workflow.
-    const adTest = await ctx.db.get(adTestId)
-    if (adTest) {
-      await ctx.db.patch(adTestId, {
-        plannedImageCount: adTest.plannedImageCount + variationIndex,
-        status: variationIndex > 0 ? 'generating' : adTest.status,
-        updatedAt: Date.now(),
-      })
     }
     return null
   },
@@ -425,6 +392,85 @@ export const _kickoffTemplateWorkflow = internalMutation({
     await workflow.start(ctx, internal.studio.generateFromTemplateWorkflow, {
       generationId,
     }, { startAsync: true })
+  },
+})
+
+/** Starts the angle generation workflow for one row (scheduled from above). */
+export const _kickoffAngleWorkflow = internalMutation({
+  args: { generationId: v.id('templateGenerations') },
+  handler: async (ctx, { generationId }) => {
+    await workflow.start(ctx, internal.studio.generateFromAngleWorkflow, {
+      generationId,
+    }, { startAsync: true })
+  },
+})
+
+/**
+ * Fans out angle-based starter creatives (one per starter aspect ratio) as FLAT
+ * generations on the product — no ad-test container. Free for capability-less
+ * starter accounts, but still credit-metered.
+ */
+export const _startStarterAngleGenerations = internalMutation({
+  args: {
+    userId: v.string(),
+    productId: v.id('products'),
+    angle: v.object({
+      title: v.string(),
+      description: v.optional(v.string()),
+      hook: v.optional(v.string()),
+      suggestedAdStyle: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, { userId, productId, angle }) => {
+    const product = await ctx.db.get(productId)
+    if (!product || product.userId !== userId) throw new Error('Product not found')
+
+    let productImageUrl: string
+    let productImageId: Id<'productImages'> | undefined
+    if (product.primaryImageId) {
+      const primary = await ctx.db.get(product.primaryImageId)
+      if (!primary) throw new Error('Primary image not found')
+      productImageUrl = primary.imageUrl
+      productImageId = primary._id
+    } else if (product.imageUrl) {
+      productImageUrl = product.imageUrl
+    } else {
+      throw new Error('Product has no image')
+    }
+
+    const aspectRatios = ['1:1', '4:5', '9:16'] as const
+    await requireCredits(ctx, 'nano-banana-2', aspectRatios.length)
+    await recordGenerationUsage(ctx, userId, 'activateStarter', aspectRatios.length)
+
+    const seed = {
+      title: angle.title,
+      description: angle.description ?? '',
+      hook: angle.hook ?? '',
+      suggestedAdStyle: angle.suggestedAdStyle ?? '',
+    }
+    let variationIndex = 0
+    for (const ar of aspectRatios) {
+      const genId = await ctx.db.insert('templateGenerations', {
+        productId,
+        productImageId,
+        userId,
+        productImageUrl,
+        aspectRatio: ar,
+        mode: 'angle',
+        colorAdapt: false,
+        applyBrand: true,
+        applyVoice: true,
+        angleSeed: seed,
+        variationIndex,
+        status: 'queued',
+        model: 'nano-banana-2',
+      })
+      variationIndex++
+      await ctx.scheduler.runAfter(0, internal.activation._kickoffAngleWorkflow, {
+        generationId: genId,
+      })
+    }
+    return null
   },
 })
 
@@ -458,7 +504,7 @@ export const activateStarterWithTemplates = action({
   handler: async (
     ctx,
     { imageUrls, importId, name, templateIds },
-  ): Promise<{ productId: string; adTestId: string }> => {
+  ): Promise<{ productId: string }> => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     if (isDisposableEmail(identity.email)) {
@@ -489,24 +535,14 @@ export const activateStarterWithTemplates = action({
       { imageUrls, importId, name },
     )
 
-    // Create the starter Ad Test (template-based: no angles) and attach the
-    // generated creatives to it so they appear in Studio.
-    const adTestId = await ctx.runMutation(api.adTests.createDraft, {
-      productId,
-      name: 'Starter Ad Test',
-      source: 'starter',
-      angles: [],
-      placements: [...STARTER_PLACEMENTS],
-    })
-
+    // Generate the chosen templates as flat creatives on the product.
     await ctx.runMutation(internal.activation._startStarterTemplateGenerations, {
       userId: identity.tokenIdentifier,
       productId,
       templateIds,
-      adTestId,
     })
 
-    return { productId: productId as string, adTestId: adTestId as string }
+    return { productId: productId as string }
   },
 })
 
@@ -547,23 +583,11 @@ export const resetMyActivation = mutation({
         .collect()
       for (const i of imgs) await ctx.db.delete(i._id)
 
-      const tests = await ctx.db
-        .query('adTests')
+      const copySets = await ctx.db
+        .query('copySets')
         .withIndex('by_productId', (q) => q.eq('productId', p._id))
         .collect()
-      for (const t of tests) {
-        const copySets = await ctx.db
-          .query('adTestCopySets')
-          .withIndex('by_adTestId', (q) => q.eq('adTestId', t._id))
-          .collect()
-        for (const c of copySets) await ctx.db.delete(c._id)
-        const notes = await ctx.db
-          .query('adTestPerformanceNotes')
-          .withIndex('by_adTestId', (q) => q.eq('adTestId', t._id))
-          .collect()
-        for (const n of notes) await ctx.db.delete(n._id)
-        await ctx.db.delete(t._id)
-      }
+      for (const c of copySets) await ctx.db.delete(c._id)
 
       const recs = await ctx.db
         .query('adTestRecommendations')

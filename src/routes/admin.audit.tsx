@@ -17,11 +17,11 @@ function AdminAudit() {
         p="xl"
         mb={40}
         style={{
-          background: 'linear-gradient(135deg, rgba(84, 116, 180, 0.12) 0%, rgba(84, 116, 180, 0.04) 100%)',
+          background: 'linear-gradient(135deg, rgba(16, 24, 40, 0.12) 0%, rgba(16, 24, 40, 0.04) 100%)',
           border: '1px solid var(--mantine-color-dark-5)',
         }}
       >
-        <Title order={1} fz={36} fw={600} c="white">
+        <Title order={1} fz={36} fw={600} c="dark.0">
           Audit Log
         </Title>
         <Text size="lg" c="dark.2" mt={8}>

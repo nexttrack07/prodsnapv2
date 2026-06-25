@@ -1,9 +1,9 @@
 /**
- * Test-level Copy Bank panel (issue #37) — rendered inside the Ad Test review
- * screen. The buyer picks which fields they want (headlines / primary texts /
- * descriptions) and how many of each, generates a set, then edits, copies,
- * deletes, or sets a platform CTA button. Copy is generated at the Ad Test
- * level (stored in adTestCopySets), never auto-attached per image.
+ * Product-level Copy Bank panel — the buyer picks which fields they want
+ * (headlines / primary texts / descriptions) and how many of each, generates a
+ * set, then edits, copies, deletes, or sets a platform CTA button. Copy is
+ * generated at the PRODUCT level (stored in copySets), never auto-attached per
+ * image.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -39,7 +39,7 @@ import {
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 
-type CopySet = Doc<'adTestCopySets'>
+type CopySet = Doc<'copySets'>
 type CopyField = 'headlines' | 'primaryTexts' | 'descriptions'
 
 const FIELD_LABEL: Record<CopyField, string> = {
@@ -55,9 +55,9 @@ const CTA_OPTIONS = META_CTA_BUTTONS.map((value) => ({
 
 // ─── Main panel ────────────────────────────────────────────────────────────────
 
-export function CopyBankPanel({ adTestId }: { adTestId: Id<'adTests'> }) {
+export function CopyBankPanel({ productId }: { productId: Id<'products'> }) {
   const { data: copySets, isLoading } = useQuery(
-    convexQuery(api.adTests.listCopySets, { adTestId }),
+    convexQuery(api.copyBank.listCopySets, { productId }),
   )
 
   // Request controls — sensible defaults so a first-time buyer can just hit go.
@@ -69,7 +69,7 @@ export function CopyBankPanel({ adTestId }: { adTestId: Id<'adTests'> }) {
   const [descriptionCount, setDescriptionCount] = useState(2)
   const [generating, setGenerating] = useState(false)
 
-  const generateCopySet = useAction(api.adTests.generateCopySet)
+  const generateCopySet = useAction(api.copyBank.generateCopySet)
 
   const nothingSelected =
     !includeHeadlines && !includePrimaryTexts && !includeDescriptions
@@ -82,7 +82,7 @@ export function CopyBankPanel({ adTestId }: { adTestId: Id<'adTests'> }) {
     setGenerating(true)
     try {
       await generateCopySet({
-        adTestId,
+        productId,
         request: {
           includeHeadlines,
           headlineCount,
@@ -117,11 +117,12 @@ export function CopyBankPanel({ adTestId }: { adTestId: Id<'adTests'> }) {
     >
       <Group gap="xs" mb="xs">
         <IconSparkles size={16} color="var(--mantine-color-blue-4)" />
-        <Text fw={600} c="white" size="sm">Copy Bank</Text>
+        <Text fw={600} c="dark.0" size="sm">Copy Bank</Text>
       </Group>
       <Text size="xs" c="dark.3" mb="md">
-        Generate platform-ready copy for this test. Pick the fields and counts —
-        suggestions are stored with the test, never auto-attached to an image.
+        Generate platform-ready copy for this product. Pick the fields and
+        counts — suggestions are stored with the product, never auto-attached to
+        an image.
       </Text>
 
       {/* ── Request controls ──────────────────────────────────────────────── */}
@@ -162,7 +163,7 @@ export function CopyBankPanel({ adTestId }: { adTestId: Id<'adTests'> }) {
       {/* ── Generated sets ────────────────────────────────────────────────── */}
       {isLoading ? (
         <Box py="md" ta="center">
-          <Loader size="xs" color="blue" />
+          <Loader size="xs" color="gray" />
         </Box>
       ) : copySets && copySets.length > 0 ? (
         <Stack gap="md" mt="lg">
@@ -217,8 +218,8 @@ function FieldRow({
 // ─── One generated copy set ──────────────────────────────────────────────────────
 
 function CopySetView({ set }: { set: CopySet }) {
-  const deleteCopySet = useConvexMutation(api.adTests.deleteCopySet)
-  const setCopySetCta = useConvexMutation(api.adTests.setCopySetCta)
+  const deleteCopySet = useConvexMutation(api.copyBank.deleteCopySet)
+  const setCopySetCta = useConvexMutation(api.copyBank.setCopySetCta)
 
   const fields: CopyField[] = ['headlines', 'primaryTexts', 'descriptions']
   const created = new Date(set.createdAt).toLocaleString()
@@ -293,7 +294,7 @@ function CopySetView({ set }: { set: CopySet }) {
           aria-label="CTA button"
         />
         {set.recommendedCtaButton && (
-          <Badge size="sm" variant="light" color="blue">
+          <Badge size="sm" variant="light" color="gray">
             {set.recommendedCtaButton}
           </Badge>
         )}
@@ -310,12 +311,12 @@ function SuggestionRow({
   variantIndex,
   text,
 }: {
-  copySetId: Id<'adTestCopySets'>
+  copySetId: Id<'copySets'>
   field: CopyField
   variantIndex: number
   text: string
 }) {
-  const updateSuggestion = useConvexMutation(api.adTests.updateCopySuggestion)
+  const updateSuggestion = useConvexMutation(api.copyBank.updateCopySuggestion)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(text)
   const [saving, setSaving] = useState(false)

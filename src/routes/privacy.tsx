@@ -19,7 +19,7 @@ function PrivacyPolicy() {
     <Container size="md" py={64}>
       <Stack gap="xl">
         <div>
-          <Title order={1} c="white" mb="xs">
+          <Title order={1} c="dark.0" mb="xs">
             Privacy Policy
           </Title>
           <Text size="sm" c="dark.2">
@@ -34,7 +34,7 @@ function PrivacyPolicy() {
         <Divider color="dark.5" />
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             What we collect
           </Title>
           <List spacing="xs" c="dark.1">
@@ -46,7 +46,7 @@ function PrivacyPolicy() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             How we use it
           </Title>
           <List spacing="xs" c="dark.1">
@@ -57,7 +57,7 @@ function PrivacyPolicy() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Who we share it with
           </Title>
           <Text c="dark.1" mb="sm">
@@ -96,7 +96,7 @@ function PrivacyPolicy() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Retention
           </Title>
           <Text c="dark.1">
@@ -107,7 +107,7 @@ function PrivacyPolicy() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Your rights
           </Title>
           <Text c="dark.1">
@@ -118,7 +118,7 @@ function PrivacyPolicy() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Contact
           </Title>
           <Text c="dark.1">

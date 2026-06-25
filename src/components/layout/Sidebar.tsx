@@ -22,7 +22,6 @@ import {
   IconBrush,
   IconLibrary,
   IconSparkles,
-  IconFlask2,
   IconReceipt,
   IconCoins,
   IconShield,
@@ -42,7 +41,6 @@ const PRIMARY_NAV: ReadonlyArray<NavItem> = [
   { to: '/home', icon: IconHome2, label: 'Home' },
   { to: '/products', icon: IconLayoutGrid, label: 'Products' },
   { to: '/templates', icon: IconSparkles, label: 'Templates' },
-  { to: '/ad-tests', icon: IconFlask2, label: 'Ad tests' },
   { to: '/library', icon: IconLibrary, label: 'Library' },
 ]
 
@@ -138,11 +136,11 @@ function NavIcon({
     gap: isMobile ? 10 : 0,
     paddingLeft: isMobile ? 8 : 0,
     transition: 'background-color 120ms ease, color 120ms ease',
-    backgroundColor: isActive ? 'var(--mantine-color-dark-6)' : 'transparent',
+    backgroundColor: isActive ? 'rgba(16, 24, 40, 0.08)' : 'transparent',
     color: item.disabled
       ? 'var(--mantine-color-dark-3)'
       : isActive
-      ? 'white'
+      ? 'var(--mantine-color-brand-7)'
       : 'var(--mantine-color-dark-1)',
     cursor: item.disabled ? 'not-allowed' : 'pointer',
     opacity: item.disabled ? 0.55 : 1,
@@ -221,8 +219,8 @@ function NavIcon({
             '&:hover > div': isActive
               ? undefined
               : {
-                  backgroundColor: 'var(--mantine-color-dark-6)',
-                  color: 'white',
+                  backgroundColor: 'rgba(16, 24, 40, 0.06)',
+                  color: 'var(--mantine-color-dark-0)',
                 },
           },
         }}
@@ -295,7 +293,7 @@ function CreditsIcon({
           gap: isMobile ? 10 : 0,
           paddingLeft: isMobile ? 8 : 0,
           color: 'var(--mantine-color-brand-5)',
-          backgroundColor: 'rgba(84, 116, 180, 0.10)',
+          backgroundColor: 'rgba(16, 24, 40, 0.10)',
         }}
       >
         <IconCoins size={18} stroke={1.6} />

@@ -19,7 +19,7 @@ function TermsOfService() {
     <Container size="md" py={64}>
       <Stack gap="xl">
         <div>
-          <Title order={1} c="white" mb="xs">
+          <Title order={1} c="dark.0" mb="xs">
             Terms of Service
           </Title>
           <Text size="sm" c="dark.2">
@@ -30,7 +30,7 @@ function TermsOfService() {
         <Divider color="dark.5" />
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Service description
           </Title>
           <Text c="dark.1">
@@ -41,7 +41,7 @@ function TermsOfService() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             User obligations
           </Title>
           <List spacing="xs" c="dark.1">
@@ -57,7 +57,7 @@ function TermsOfService() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Subscription &amp; billing
           </Title>
           <List spacing="xs" c="dark.1">
@@ -79,7 +79,7 @@ function TermsOfService() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Acceptable use
           </Title>
           <Text c="dark.1" mb="sm">
@@ -93,7 +93,7 @@ function TermsOfService() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Liability disclaimer
           </Title>
           <Text c="dark.1">
@@ -104,7 +104,7 @@ function TermsOfService() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Termination
           </Title>
           <Text c="dark.1">
@@ -115,7 +115,7 @@ function TermsOfService() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Governing law
           </Title>
           <Text c="dark.1">
@@ -125,7 +125,7 @@ function TermsOfService() {
         </div>
 
         <div>
-          <Title order={2} c="white" mb="sm" fz="lg">
+          <Title order={2} c="dark.0" mb="sm" fz="lg">
             Contact
           </Title>
           <Text c="dark.1">

@@ -5,7 +5,7 @@
  * `<AdDetailContent />`  — the body (image, copy, actions, metadata). Reused by
  *   the full-page `/ads/:adId` route for shared-link access.
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -17,6 +17,7 @@ import {
   Badge,
   Box,
   Button,
+  Center,
   CloseButton,
   Divider,
   Drawer,
@@ -26,6 +27,7 @@ import {
   Menu,
   Modal,
   Paper,
+  SimpleGrid,
   Stack,
   Text,
   Title,
@@ -34,6 +36,8 @@ import {
 import {
   IconArrowLeft,
   IconArrowRight,
+  IconBrandFacebook,
+  IconCheck,
   IconChevronLeft,
   IconChevronRight,
   IconDownload,
@@ -47,7 +51,7 @@ import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { downloadGeneratedImage, DOWNLOAD_FORMATS, type DownloadFormat } from '../../utils/downloadImage'
 import { mapGenerationError } from '../../lib/billing/mapBillingError'
-import { WinnerNudge } from './WinnerNudge'
+import { FacebookAdPreview } from './FacebookAdPreview'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -163,30 +167,27 @@ export function AdDetailContent({
   }, [ad, deleteMutation, navigate, showBackLink])
 
   // "Generate similar" — open the generate wizard prefilled from this creative
-  // (same template/style) so the user can tweak and generate more like it.
-  // Carries adTestId so the new creatives attach to the same ad test and the
-  // back button returns there.
+  // (same template/style) so the user can tweak and generate more like it. The
+  // new creatives are flat (attached to the product, no test container).
   const handleGenerateSimilar = useCallback(() => {
     if (!ad?.productId) return
     navigate({
       to: '/studio/$productId',
       params: { productId: ad.productId },
       search: {
-        ...(ad.adTestId ? { adTestId: ad.adTestId as string } : {}),
         compose: ad._id as string,
       },
     })
   }, [ad, navigate])
 
-  // "Edit with custom prompt" — feed THIS image into a prompt-based edit. Carries
-  // adTestId so the edited creative lands in the same ad test (not orphaned).
+  // "Edit with custom prompt" — feed THIS image into a prompt-based edit. The
+  // edited creative is flat (attached to the product, no test container).
   const handleEditWithCustomPrompt = useCallback(() => {
     if (!ad?.productId) return
     navigate({
       to: '/studio/$productId',
       params: { productId: ad.productId },
       search: {
-        ...(ad.adTestId ? { adTestId: ad.adTestId as string } : {}),
         editAd: ad._id as string,
       },
     })
@@ -354,11 +355,23 @@ export function AdDetailContent({
         </Tooltip>
       </Group>
 
-      {/* Winner loop — turn a win into the next unit of work. */}
-      {ad.isWinner && (
-        <WinnerNudge
-          ad={{ _id: ad._id, productId: ad.productId, adTestId: ad.adTestId }}
-        />
+      {/* Facebook preview + copy pairing — pick copy from the product's Copy
+          Bank, preview the ad, and save the pairing (→ a "saved ad"). */}
+      {ad.productId && ad.outputUrl && (
+        <>
+          <Divider color="dark.5" />
+          <CopyPairingSection
+            generationId={ad._id}
+            productId={ad.productId}
+            productName={ad.productName ?? 'Product'}
+            outputUrl={ad.outputUrl}
+            aspectRatio={ad.aspectRatio ?? '1:1'}
+            selectedCopySetId={ad.selectedCopySetId}
+            selectedHeadlineIndex={ad.selectedHeadlineIndex}
+            selectedPrimaryTextIndex={ad.selectedPrimaryTextIndex}
+            selectedDescriptionIndex={ad.selectedDescriptionIndex}
+          />
+        </>
       )}
 
       <Divider color="dark.5" />
@@ -383,13 +396,13 @@ export function AdDetailContent({
         {ad.angleSeed && (
           <Group gap="xs" align="flex-start">
             <Text size="sm" c="dark.2" w={100}>Angle</Text>
-            <Text size="sm" c="white" style={{ flex: 1 }}>{ad.angleSeed.title}</Text>
+            <Text size="sm" c="dark.0" style={{ flex: 1 }}>{ad.angleSeed.title}</Text>
           </Group>
         )}
         {ad.templateSnapshot?.name && (
           <Group gap="xs">
             <Text size="sm" c="dark.2" w={100}>Template</Text>
-            <Text size="sm" c="white">{ad.templateSnapshot.name}</Text>
+            <Text size="sm" c="dark.0">{ad.templateSnapshot.name}</Text>
           </Group>
         )}
         {ad.dynamicPrompt && (
@@ -433,6 +446,272 @@ export function AdDetailContent({
         </Group>
       </Modal>
     </Stack>
+  )
+}
+
+// ─── Copy pairing (Facebook preview + Copy Bank) ─────────────────────────────
+
+type CopyPick = { setId: Id<'copySets'>; index: number; text: string }
+
+/**
+ * Pairs this creative with copy from the product's Copy Bank. The user picks a
+ * headline / primary text / description, sees the live Facebook preview, and
+ * saves the pairing (→ a "saved ad"). All three picks must come from the same
+ * copy set (the backend pairing is single-set).
+ */
+function CopyPairingSection({
+  generationId,
+  productId,
+  productName,
+  outputUrl,
+  aspectRatio,
+  selectedCopySetId,
+  selectedHeadlineIndex,
+  selectedPrimaryTextIndex,
+  selectedDescriptionIndex,
+}: {
+  generationId: Id<'templateGenerations'>
+  productId: Id<'products'>
+  productName: string
+  outputUrl: string
+  aspectRatio: string
+  selectedCopySetId?: Id<'copySets'>
+  selectedHeadlineIndex?: number
+  selectedPrimaryTextIndex?: number
+  selectedDescriptionIndex?: number
+}) {
+  const { data: copySets, isLoading } = useQuery(
+    convexQuery(api.copyBank.listCopySets, { productId }),
+  )
+
+  const pairMutation = useConvexMutation(api.copyBank.pairCopyWithGeneration)
+  const { mutateAsync: pairCopy, isPending: saving } = useMutation({
+    mutationFn: pairMutation,
+  })
+
+  const [headline, setHeadline] = useState<CopyPick | null>(null)
+  const [primary, setPrimary] = useState<CopyPick | null>(null)
+  const [description, setDescription] = useState<CopyPick | null>(null)
+
+  // Load the creative's saved pairing into the picker once copy sets arrive.
+  useEffect(() => {
+    if (!copySets || !selectedCopySetId) return
+    const set = copySets.find((s) => s._id === selectedCopySetId)
+    if (!set) return
+    const pick = (
+      list: Array<{ variantIndex: number; text: string }>,
+      idx?: number,
+    ): CopyPick | null => {
+      if (idx === undefined) return null
+      const m = list.find((x) => x.variantIndex === idx)
+      return m ? { setId: set._id, index: m.variantIndex, text: m.text } : null
+    }
+    setHeadline(pick(set.headlines, selectedHeadlineIndex))
+    setPrimary(pick(set.primaryTexts, selectedPrimaryTextIndex))
+    setDescription(pick(set.descriptions, selectedDescriptionIndex))
+  }, [
+    copySets,
+    selectedCopySetId,
+    selectedHeadlineIndex,
+    selectedPrimaryTextIndex,
+    selectedDescriptionIndex,
+  ])
+
+  // Picks must all share one copy set. Selecting from a different set clears the
+  // others so the resulting pairing is internally consistent.
+  const choose = (field: 'headline' | 'primary' | 'description', c: CopyPick) => {
+    const cur =
+      field === 'headline' ? headline : field === 'primary' ? primary : description
+    const isSame = cur && cur.setId === c.setId && cur.index === c.index
+    const setter =
+      field === 'headline'
+        ? setHeadline
+        : field === 'primary'
+          ? setPrimary
+          : setDescription
+    if (isSame) {
+      setter(null)
+      return
+    }
+    setter(c)
+    // Clear other-field picks that belong to a different copy set.
+    if (field !== 'headline' && headline && headline.setId !== c.setId) setHeadline(null)
+    if (field !== 'primary' && primary && primary.setId !== c.setId) setPrimary(null)
+    if (field !== 'description' && description && description.setId !== c.setId) {
+      setDescription(null)
+    }
+  }
+
+  const chosenSetId =
+    headline?.setId ?? primary?.setId ?? description?.setId
+  const chosenSet = copySets?.find((s) => s._id === chosenSetId)
+  const cta = chosenSet?.recommendedCtaButton
+
+  const handleSave = async () => {
+    const setId = headline?.setId ?? primary?.setId ?? description?.setId
+    try {
+      await pairCopy({
+        generationId,
+        copySetId: setId,
+        headlineIndex:
+          headline && headline.setId === setId ? headline.index : undefined,
+        primaryTextIndex:
+          primary && primary.setId === setId ? primary.index : undefined,
+        descriptionIndex:
+          description && description.setId === setId ? description.index : undefined,
+      })
+      notifications.show({
+        color: 'green',
+        message: 'Ad saved — creative paired with copy.',
+      })
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : 'Could not save pairing.',
+      })
+    }
+  }
+
+  const headlines = (copySets ?? []).flatMap((s) =>
+    s.headlines.map((h) => ({ setId: s._id, index: h.variantIndex, text: h.text })),
+  )
+  const primaries = (copySets ?? []).flatMap((s) =>
+    s.primaryTexts.map((p) => ({ setId: s._id, index: p.variantIndex, text: p.text })),
+  )
+  const descriptions = (copySets ?? []).flatMap((s) =>
+    s.descriptions.map((d) => ({ setId: s._id, index: d.variantIndex, text: d.text })),
+  )
+
+  const hasAnyCopy =
+    headlines.length > 0 || primaries.length > 0 || descriptions.length > 0
+
+  return (
+    <Stack gap="md">
+      <Group gap={6} align="center">
+        <IconBrandFacebook size={16} color="var(--mantine-color-blue-5)" />
+        <Text size="sm" fw={600} c="dark.0">
+          Facebook preview
+        </Text>
+      </Group>
+
+      <Center>
+        <FacebookAdPreview
+          imageUrl={outputUrl}
+          aspectRatio={aspectRatio}
+          pageName={productName}
+          headline={headline?.text}
+          primaryText={primary?.text}
+          description={description?.text}
+          cta={cta}
+          width={360}
+          headlinePlaceholder="Choose a headline"
+          primaryTextPlaceholder="Choose primary text"
+        />
+      </Center>
+
+      {isLoading ? (
+        <Box py="md" ta="center">
+          <Loader size="sm" color="gray" />
+        </Box>
+      ) : !hasAnyCopy ? (
+        <Text size="xs" c="dark.3">
+          No copy yet. Generate copy from the product's Ad copy tab, then pair it
+          with this creative here.
+        </Text>
+      ) : (
+        <Stack gap="sm">
+          {headlines.length > 0 && (
+            <CopyPickGroup
+              label="Headline"
+              picks={headlines}
+              selected={headline}
+              onPick={(c) => choose('headline', c)}
+            />
+          )}
+          {primaries.length > 0 && (
+            <CopyPickGroup
+              label="Primary text"
+              picks={primaries}
+              selected={primary}
+              onPick={(c) => choose('primary', c)}
+            />
+          )}
+          {descriptions.length > 0 && (
+            <CopyPickGroup
+              label="Description"
+              picks={descriptions}
+              selected={description}
+              onPick={(c) => choose('description', c)}
+            />
+          )}
+        </Stack>
+      )}
+
+      <Button
+        color="brand"
+        leftSection={<IconCheck size={16} />}
+        loading={saving}
+        disabled={!headline && !primary && !description}
+        onClick={handleSave}
+      >
+        Save this ad
+      </Button>
+    </Stack>
+  )
+}
+
+function CopyPickGroup({
+  label,
+  picks,
+  selected,
+  onPick,
+}: {
+  label: string
+  picks: CopyPick[]
+  selected: CopyPick | null
+  onPick: (c: CopyPick) => void
+}) {
+  return (
+    <Box>
+      <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
+        {label}
+      </Text>
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+        {picks.map((c) => {
+          const isSelected =
+            !!selected && selected.setId === c.setId && selected.index === c.index
+          return (
+            <Paper
+              key={`${c.setId}:${c.index}`}
+              radius="sm"
+              p="xs"
+              withBorder
+              onClick={() => onPick(c)}
+              style={{
+                cursor: 'pointer',
+                borderColor: isSelected
+                  ? 'var(--mantine-color-brand-5)'
+                  : 'var(--mantine-color-dark-5)',
+                borderWidth: isSelected ? 2 : 1,
+                background: isSelected
+                  ? 'var(--canvas, #f4f6f8)'
+                  : 'var(--surface, #ffffff)',
+                transition: 'border-color 120ms ease, background-color 120ms ease',
+              }}
+            >
+              <Group gap={4} wrap="nowrap" align="flex-start">
+                <Text size="xs" c="dark.0" style={{ flex: 1, whiteSpace: 'pre-wrap' }} lineClamp={3}>
+                  {c.text}
+                </Text>
+                {isSelected && (
+                  <IconCheck size={14} color="var(--mantine-color-brand-5)" style={{ flexShrink: 0 }} />
+                )}
+              </Group>
+            </Paper>
+          )
+        })}
+      </SimpleGrid>
+    </Box>
   )
 }
 
