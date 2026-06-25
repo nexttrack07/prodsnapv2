@@ -218,6 +218,68 @@ export const listForProduct = query({
  * `adUnitIndex` (falling back to creation time). Verifies ownership through
  * `adTests.userId`. Returns null if missing or not owned.
  */
+/**
+ * "Saved ads" for a product: every creative the user has paired with copy
+ * (via "Save this ad"), across all of the product's ad tests. Each row is
+ * resolved into a flat, render-ready ad — image + headline/primary/description
+ * text + CTA — so the product page can show finished Facebook ads directly.
+ */
+export const listSavedAds = query({
+  args: { productId: v.id('products') },
+  handler: async (ctx, { productId }) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return []
+
+    const product = await ctx.db.get(productId)
+    if (!product) return []
+    if (product.userId && product.userId !== userId) return []
+
+    const gens = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_product', (q) => q.eq('productId', productId))
+      .collect()
+
+    const saved = gens.filter(
+      (g) => g.status === 'complete' && !!g.outputUrl && !!g.selectedCopySetId,
+    )
+    if (saved.length === 0) return []
+
+    // Batch-load the copy sets referenced by the saved pairings.
+    const setIds = [...new Set(saved.map((g) => g.selectedCopySetId!))]
+    const setDocs = await Promise.all(setIds.map((id) => ctx.db.get(id)))
+    const setsById = new Map(
+      setDocs.filter((s): s is NonNullable<typeof s> => !!s).map((s) => [s._id, s]),
+    )
+
+    const variantText = (
+      list: Array<{ variantIndex: number; text: string }>,
+      idx: number | undefined,
+    ): string | undefined =>
+      idx === undefined ? undefined : list.find((x) => x.variantIndex === idx)?.text
+
+    return saved
+      .sort((a, b) => b._creationTime - a._creationTime)
+      .map((g) => {
+        const set = g.selectedCopySetId ? setsById.get(g.selectedCopySetId) : undefined
+        return {
+          generationId: g._id,
+          adTestId: g.adTestId ?? null,
+          outputUrl: g.outputUrl as string,
+          aspectRatio: g.aspectRatio ?? '1:1',
+          isWinner: g.isWinner ?? false,
+          headline: set ? variantText(set.headlines, g.selectedHeadlineIndex) : undefined,
+          primaryText: set
+            ? variantText(set.primaryTexts, g.selectedPrimaryTextIndex)
+            : undefined,
+          description: set
+            ? variantText(set.descriptions, g.selectedDescriptionIndex)
+            : undefined,
+          cta: set?.recommendedCtaButton,
+        }
+      })
+  },
+})
+
 export const getById = query({
   args: { adTestId: v.id('adTests') },
   handler: async (ctx, { adTestId }) => {

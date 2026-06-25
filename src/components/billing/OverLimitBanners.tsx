@@ -19,8 +19,13 @@ export function OverLimitBanners() {
     billingStatus.creditsTotal > 0 &&
     billingStatus.creditsUsed >= billingStatus.creditsTotal
 
+  // Only surface the product-count cap when the plan actually has a positive
+  // limit. The free tier resolves to productLimit 0 but is credit-gated, not
+  // product-count gated — showing "0 products but your plan allows 0" there is
+  // a leftover from the old trial-gate model and just confuses free users.
   const atProductLimit =
     billingStatus.productLimit !== null &&
+    billingStatus.productLimit > 0 &&
     billingStatus.productCount >= billingStatus.productLimit
 
   const resetDate = billingStatus.resetsOn

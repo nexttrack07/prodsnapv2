@@ -21,10 +21,10 @@ import {
   Button,
   Center,
   Checkbox,
+  Flex,
   Group,
   Image,
   Loader,
-  Modal,
   NumberInput,
   Paper,
   Popover,
@@ -41,7 +41,6 @@ import {
   IconArrowLeft,
   IconStar,
   IconStarFilled,
-  IconMaximize,
   IconPlus,
   IconBrandFacebook,
   IconCheck,
@@ -104,6 +103,7 @@ export function AdTestReviewView({
   onOpenAd,
 }: {
   adTestId: Id<'adTests'>
+  /** Brand/page name shown in the live Facebook preview. */
   productName: string
   /** When false, the export button shows an upgrade prompt instead of being simply disabled. */
   hasPaidPlan: boolean
@@ -138,13 +138,14 @@ export function AdTestReviewView({
   const [exporting, setExporting] = useState(false)
   const [generatingCopy, setGeneratingCopy] = useState(false)
 
-  // ── Ad-builder selection state ───────────────────────────────────────────
+  // ── Live-preview selection: a creative + (optional) copy feed the always-on
+  // Facebook preview in the right column. Single-select; one creative is always
+  // chosen once any has completed (defaulted below) so the preview is never empty.
   const [selectedCreativeId, setSelectedCreativeId] =
     useState<Id<'templateGenerations'> | null>(null)
   const [selectedHeadline, setSelectedHeadline] = useState<CopyPick | null>(null)
   const [selectedPrimary, setSelectedPrimary] = useState<CopyPick | null>(null)
   const [selectedDescription, setSelectedDescription] = useState<CopyPick | null>(null)
-  const [previewOpen, setPreviewOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // Flatten every copy set's suggestions into individual cards.
@@ -214,12 +215,6 @@ export function AdTestReviewView({
     field: 'headlines' | 'primaryTexts' | 'descriptions',
     c: CopyPick,
   ) => {
-    // Drop the local selection if the deleted card was selected.
-    const isSame = (p: CopyPick | null) =>
-      p?.setId === c.setId && p.index === c.index
-    if (field === 'headlines' && isSame(selectedHeadline)) setSelectedHeadline(null)
-    if (field === 'primaryTexts' && isSame(selectedPrimary)) setSelectedPrimary(null)
-    if (field === 'descriptions' && isSame(selectedDescription)) setSelectedDescription(null)
     try {
       await deleteCopy({ copySetId: c.setId, field, variantIndex: c.index })
     } catch (err) {
@@ -242,6 +237,8 @@ export function AdTestReviewView({
       labels: { confirm: 'Delete', cancel: 'Cancel' },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
+        // Clear the preview selection if it pointed at the deleted creative, so
+        // the default-select effect re-fills with the first remaining one.
         if (selectedCreativeId === genId) setSelectedCreativeId(null)
         try {
           await deleteGeneration({ generationId: genId })
@@ -254,6 +251,17 @@ export function AdTestReviewView({
       },
     })
   }
+
+  // Default the live preview to the first completed creative so it's never empty
+  // ("the preview should always just show up"). Only fills when nothing is
+  // selected yet — it never fights a user's explicit pick.
+  useEffect(() => {
+    if (selectedCreativeId != null) return
+    const first = data?.generations.find(
+      (g) => g.status === 'complete' && !!g.outputUrl,
+    )
+    if (first) setSelectedCreativeId(first._id)
+  }, [data, selectedCreativeId])
 
   if (isLoading) {
     return (
@@ -281,11 +289,37 @@ export function AdTestReviewView({
 
   // Resolve the CTA from whichever copy set the chosen copy belongs to.
   const chosenSetId =
-    selectedHeadline?.setId ?? selectedPrimary?.setId ?? selectedDescription?.setId ?? undefined
+    selectedHeadline?.setId ?? selectedPrimary?.setId ?? selectedDescription?.setId
   const chosenSet = (copySets ?? []).find((s) => s._id === chosenSetId)
   const cta = chosenSet?.recommendedCtaButton
 
-  const canPreview = !!selectedCreative
+  // Selecting a creative loads its saved copy pairing into the preview (so a
+  // previously-saved ad shows its copy); unpaired creatives keep the current pick.
+  const selectCreative = (gen: (typeof generations)[number]) => {
+    if (gen._id === selectedCreativeId) return
+    setSelectedCreativeId(gen._id)
+    if (!gen.selectedCopySetId) return
+    const set = (copySets ?? []).find((s) => s._id === gen.selectedCopySetId)
+    if (!set) return
+    const find = (
+      list: Array<{ variantIndex: number; text: string }>,
+      idx?: number,
+    ): CopyPick | null => {
+      if (idx === undefined) return null
+      const m = list.find((x) => x.variantIndex === idx)
+      return m ? { setId: set._id, index: m.variantIndex, text: m.text } : null
+    }
+    setSelectedHeadline(find(set.headlines, gen.selectedHeadlineIndex))
+    setSelectedPrimary(find(set.primaryTexts, gen.selectedPrimaryTextIndex))
+    setSelectedDescription(find(set.descriptions, gen.selectedDescriptionIndex))
+  }
+
+  // Toggle a copy card in/out of the live preview.
+  const toggleCopy = (
+    cur: CopyPick | null,
+    set: (v: CopyPick | null) => void,
+    c: CopyPick,
+  ) => set(cur && cur.setId === c.setId && cur.index === c.index ? null : c)
 
   const handleSavePairing = async () => {
     if (!selectedCreative) return
@@ -310,7 +344,6 @@ export function AdTestReviewView({
             : undefined,
       })
       notifications.show({ color: 'green', message: 'Ad saved — creative paired with copy.' })
-      setPreviewOpen(false)
     } catch (err) {
       notifications.show({
         color: 'red',
@@ -322,7 +355,9 @@ export function AdTestReviewView({
   }
 
   return (
-    <Stack gap="xl">
+    <Flex gap="xl" align="flex-start" direction={{ base: 'column', lg: 'row' }}>
+      {/* ── Left column: creatives, copy, notes + their CTAs ─────────────────── */}
+      <Stack gap="xl" style={{ flex: 1, minWidth: 0, width: '100%' }}>
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
         <Group gap="sm" align="flex-start">
@@ -384,56 +419,6 @@ export function AdTestReviewView({
         </Group>
       </Group>
 
-      {/* ── Ad builder bar ──────────────────────────────────────────────────── */}
-      <Paper
-        radius="md"
-        p="md"
-        withBorder
-        style={{
-          borderColor: 'var(--mantine-color-dark-5)',
-          background:
-            'linear-gradient(135deg, rgba(24,119,242,0.10), rgba(255,255,255,0.02))',
-          position: 'sticky',
-          top: 8,
-          zIndex: 3,
-          backdropFilter: 'blur(6px)',
-        }}
-      >
-        <Group justify="space-between" wrap="wrap" gap="md">
-          <Group gap="lg" wrap="wrap">
-            <PickSummary label="Creative" value={selectedCreative ? '1 selected' : null} />
-            <PickSummary label="Headline" value={selectedHeadline?.text ?? null} />
-            <PickSummary label="Primary text" value={selectedPrimary?.text ?? null} />
-          </Group>
-          <Button
-            color="blue"
-            leftSection={<IconBrandFacebook size={18} />}
-            disabled={!canPreview}
-            onClick={() => {
-              // Default to the first headline/primary text so the preview is
-              // never empty when copy exists — the user can still swap cards.
-              if (!selectedHeadline && headlineCards.length > 0) {
-                setSelectedHeadline(headlineCards[0])
-              }
-              if (!selectedPrimary && primaryCards.length > 0) {
-                setSelectedPrimary(primaryCards[0])
-              }
-              if (!selectedDescription && descriptionCards.length > 0) {
-                setSelectedDescription(descriptionCards[0])
-              }
-              setPreviewOpen(true)
-            }}
-          >
-            Preview as Facebook ad
-          </Button>
-        </Group>
-        {!canPreview && (
-          <Text size="xs" c="dark.3" mt="xs">
-            Select a creative (and optionally a headline + primary text) to build your ad.
-          </Text>
-        )}
-      </Paper>
-
       {/* ── Creatives ───────────────────────────────────────────────────────── */}
       <Section
         title="Creatives"
@@ -454,19 +439,14 @@ export function AdTestReviewView({
           // CSS-columns masonry: creatives have mixed aspect ratios (1:1, 4:5,
           // 9:16), so a fixed grid would stretch every card to the tallest.
           // Columns let each card keep its natural height. break-inside avoids
-          // splitting a card across columns. (Plain CSS, so selection-state
-          // re-renders work — unlike masonic's cached cells.)
+          // splitting a card across columns.
           <Box style={{ columnWidth: 210, columnGap: 12 }}>
             {generations.map((gen) => (
               <Box key={gen._id} mb={12} style={{ breakInside: 'avoid' }}>
                 <CreativeCard
                   gen={gen}
                   selected={selectedCreativeId === gen._id}
-                  onSelect={() => {
-                    setSelectedCreativeId((cur) => (cur === gen._id ? null : gen._id))
-                    // Pre-load this creative's saved copy pairing into the builder.
-                    if (selectedCreativeId !== gen._id) preloadPairing(gen)
-                  }}
+                  onSelect={() => selectCreative(gen)}
                   onExpand={() => onOpenAd(gen._id)}
                   onDelete={() => handleDeleteCreative(gen._id)}
                   onToggleWinner={() =>
@@ -514,11 +494,7 @@ export function AdTestReviewView({
                 key={`${c.setId}:${c.index}`}
                 text={c.text}
                 selected={selectedHeadline?.setId === c.setId && selectedHeadline.index === c.index}
-                onSelect={() =>
-                  setSelectedHeadline((cur) =>
-                    cur && cur.setId === c.setId && cur.index === c.index ? null : c,
-                  )
-                }
+                onSelect={() => toggleCopy(selectedHeadline, setSelectedHeadline, c)}
                 onSave={(text) =>
                   updateCopy({ copySetId: c.setId, field: 'headlines', variantIndex: c.index, text })
                 }
@@ -539,11 +515,7 @@ export function AdTestReviewView({
                 lines={4}
                 emoji
                 selected={selectedPrimary?.setId === c.setId && selectedPrimary.index === c.index}
-                onSelect={() =>
-                  setSelectedPrimary((cur) =>
-                    cur && cur.setId === c.setId && cur.index === c.index ? null : c,
-                  )
-                }
+                onSelect={() => toggleCopy(selectedPrimary, setSelectedPrimary, c)}
                 onSave={(text) =>
                   updateCopy({ copySetId: c.setId, field: 'primaryTexts', variantIndex: c.index, text })
                 }
@@ -564,11 +536,7 @@ export function AdTestReviewView({
                 lines={3}
                 emoji
                 selected={selectedDescription?.setId === c.setId && selectedDescription.index === c.index}
-                onSelect={() =>
-                  setSelectedDescription((cur) =>
-                    cur && cur.setId === c.setId && cur.index === c.index ? null : c,
-                  )
-                }
+                onSelect={() => toggleCopy(selectedDescription, setSelectedDescription, c)}
                 onSave={(text) =>
                   updateCopy({ copySetId: c.setId, field: 'descriptions', variantIndex: c.index, text })
                 }
@@ -579,75 +547,72 @@ export function AdTestReviewView({
         </Section>
       )}
 
-      {/* ── Performance notes ───────────────────────────────────────────────── */}
-      <PerformanceNotesPanel adTestId={adTestId} />
+        {/* ── Performance notes ─────────────────────────────────────────────── */}
+        <PerformanceNotesPanel adTestId={adTestId} />
+      </Stack>
 
-      {/* ── Facebook preview modal ──────────────────────────────────────────── */}
-      <Modal
-        opened={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        title="Facebook ad preview"
-        centered
-        size="auto"
+      {/* ── Right column: always-on live Facebook preview ───────────────────── */}
+      <Box
+        w={{ base: '100%', lg: 392 }}
+        style={{ flexShrink: 0, position: 'sticky', top: 16 }}
       >
-        <Stack align="center" gap="lg">
-          <FacebookAdPreview
-            imageUrl={selectedCreative?.outputUrl}
-            aspectRatio={selectedCreative?.aspectRatio ?? '1:1'}
-            pageName={productName}
-            headline={selectedHeadline?.text}
-            primaryText={selectedPrimary?.text}
-            description={selectedDescription?.text}
-            cta={cta}
-          />
-          <Group justify="center" w="100%">
-            <Button variant="default" onClick={() => setPreviewOpen(false)}>
-              Close
-            </Button>
+        <Paper
+          radius="md"
+          withBorder
+          style={{
+            borderColor: 'var(--mantine-color-dark-5)',
+            background: 'var(--mantine-color-dark-7)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Header strip */}
+          <Group
+            gap={6}
+            align="center"
+            px="md"
+            py="sm"
+            style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}
+          >
+            <IconBrandFacebook size={16} color="var(--mantine-color-blue-5)" />
+            <Text size="sm" fw={600} c="white">Facebook preview</Text>
+          </Group>
+
+          <Stack gap="sm" p="md">
+            <Center>
+              <FacebookAdPreview
+                imageUrl={selectedCreative?.outputUrl}
+                aspectRatio={selectedCreative?.aspectRatio ?? '1:1'}
+                pageName={productName}
+                headline={selectedHeadline?.text}
+                primaryText={selectedPrimary?.text}
+                description={selectedDescription?.text}
+                cta={cta}
+                width={360}
+                headlinePlaceholder="Choose a headline"
+                primaryTextPlaceholder="Choose primary text"
+              />
+            </Center>
             <Button
               color="brand"
               leftSection={<IconCheck size={16} />}
               loading={saving}
+              disabled={!selectedCreative || !selectedHeadline || !selectedPrimary}
               onClick={handleSavePairing}
             >
               Save this ad
             </Button>
-          </Group>
-        </Stack>
-      </Modal>
-    </Stack>
+            <Text size="xs" c="dark.3">
+              {!selectedCreative
+                ? 'Generate a creative to start building your ad.'
+                : !selectedHeadline || !selectedPrimary
+                  ? 'Choose a headline and primary text on the left to save this ad.'
+                  : 'Looks good — save to lock in this image + copy.'}
+            </Text>
+          </Stack>
+        </Paper>
+      </Box>
+    </Flex>
   )
-
-  // Pre-fill the builder from a creative's persisted pairing when it's selected.
-  // If the creative isn't paired yet, KEEP whatever copy the user has already
-  // picked — don't clear it (that wiped the headline/primary text right before
-  // previewing).
-  function preloadPairing(gen: (typeof generations)[number]) {
-    if (!gen.selectedCopySetId) return
-    const set = (copySets ?? []).find((s) => s._id === gen.selectedCopySetId)
-    if (!set) return
-    const hl =
-      gen.selectedHeadlineIndex !== undefined
-        ? set.headlines.find((h) => h.variantIndex === gen.selectedHeadlineIndex)
-        : undefined
-    const pt =
-      gen.selectedPrimaryTextIndex !== undefined
-        ? set.primaryTexts.find((p) => p.variantIndex === gen.selectedPrimaryTextIndex)
-        : undefined
-    const ds =
-      gen.selectedDescriptionIndex !== undefined
-        ? set.descriptions.find((d) => d.variantIndex === gen.selectedDescriptionIndex)
-        : undefined
-    setSelectedHeadline(
-      hl ? { setId: set._id, index: hl.variantIndex, text: hl.text } : null,
-    )
-    setSelectedPrimary(
-      pt ? { setId: set._id, index: pt.variantIndex, text: pt.text } : null,
-    )
-    setSelectedDescription(
-      ds ? { setId: set._id, index: ds.variantIndex, text: ds.text } : null,
-    )
-  }
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
@@ -676,19 +641,6 @@ function Section({
       </Group>
       {children}
     </Stack>
-  )
-}
-
-function PickSummary({ label, value }: { label: string; value: string | null }) {
-  return (
-    <Box style={{ minWidth: 0, maxWidth: 240 }}>
-      <Text size="10px" tt="uppercase" fw={600} c="dark.3" style={{ letterSpacing: 0.4 }}>
-        {label}
-      </Text>
-      <Text size="sm" c={value ? 'white' : 'dark.4'} lineClamp={1}>
-        {value ?? 'None'}
-      </Text>
-    </Box>
   )
 }
 
@@ -741,7 +693,9 @@ function CreativeCard({
     selectedCopySetId?: Id<'adTestCopySets'>
   }
   selected: boolean
+  /** Click the card to feed this creative into the live Facebook preview. */
   onSelect: () => void
+  /** The pencil opens the detail panel (big view + edit). */
   onExpand: () => void
   onToggleWinner: () => void
   onDelete: () => void
@@ -803,7 +757,7 @@ function CreativeCard({
         )}
         {selected && (
           <Badge size="xs" variant="filled" color="brand" leftSection={<IconCheck size={9} />}>
-            Selected
+            In preview
           </Badge>
         )}
       </Group>
@@ -835,18 +789,20 @@ function CreativeCard({
               <IconStar size={14} />
             )}
           </ActionIcon>
-          <ActionIcon
-            size="sm"
-            variant="filled"
-            color="dark"
-            onClick={(e) => {
-              e.stopPropagation()
-              onExpand()
-            }}
-            aria-label="Open details"
-          >
-            <IconMaximize size={14} />
-          </ActionIcon>
+          <Tooltip label="Open & edit" withArrow>
+            <ActionIcon
+              size="sm"
+              variant="filled"
+              color="dark"
+              onClick={(e) => {
+                e.stopPropagation()
+                onExpand()
+              }}
+              aria-label="Open & edit"
+            >
+              <IconPencil size={14} />
+            </ActionIcon>
+          </Tooltip>
           <ActionIcon
             size="sm"
             variant="filled"
@@ -1041,8 +997,9 @@ function CopyCard({
   emoji = false,
 }: {
   text: string
-  selected: boolean
-  onSelect: () => void
+  /** Optional select-to-highlight; omitted when the card is a plain library item. */
+  selected?: boolean
+  onSelect?: () => void
   onSave: (text: string) => Promise<unknown>
   onDelete: () => void
   lines?: number
@@ -1140,7 +1097,7 @@ function CopyCard({
       withBorder
       onClick={onSelect}
       style={{
-        cursor: 'pointer',
+        cursor: onSelect ? 'pointer' : 'default',
         borderColor: selected ? 'var(--mantine-color-brand-5)' : 'var(--mantine-color-dark-6)',
         borderWidth: selected ? 2 : 1,
         background: selected ? 'rgba(84,116,180,0.10)' : 'rgba(255,255,255,0.02)',

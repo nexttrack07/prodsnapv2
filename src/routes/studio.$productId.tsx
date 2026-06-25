@@ -88,6 +88,7 @@ import { fetchDownloadAsset } from '../utils/downloads'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
 import { AdTestReviewView } from '../components/ads/AdTestReviewView'
 import { AdTestsSection } from '../components/ads/AdTestsSection'
+import { SavedAdsSection } from '../components/ads/SavedAdsSection'
 import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
 import { BrandPicker } from '../components/brand/BrandPicker'
@@ -366,7 +367,7 @@ function ProductWorkspacePage() {
       {/* Ad Test review mode — takes over the whole content area. With
           ?compose=true it shows the generate wizard scoped to the test
           (creatives attach to the test); otherwise the review screen. */}
-      {isAdTestReview && search.compose === 'true' && (
+      {isAdTestReview && (search.compose || search.editAd) && (
         <GenerateWizard
           productId={productId as Id<'products'>}
           product={product}
@@ -374,6 +375,15 @@ function ProductWorkspacePage() {
           creditsExhausted={creditsExhausted}
           initialFilters={initialFilters}
           adTestId={search.adTestId as Id<'adTests'>}
+          // "Generate similar" prefills from the source creative (compose=<adId>);
+          // compose='true' is the fresh "generate more" sentinel (no prefill).
+          prefillFromAdId={
+            (search.compose && search.compose !== 'true' ? search.compose : null) as Id<'templateGenerations'> | null
+          }
+          // "Edit with custom prompt" edits the specific creative in place.
+          prefillEditAdId={
+            (search.editAd ?? null) as Id<'templateGenerations'> | null
+          }
           prefillAngleIndex={
             search.angle != null ? Number(search.angle) : null
           }
@@ -381,7 +391,9 @@ function ProductWorkspacePage() {
             search.concept != null ? Number(search.concept) : null
           }
           onBack={() => {
-            const { compose: _omit, angle: _angle, concept: _concept, ...rest } = search
+            // Strip the wizard params but KEEP adTestId so we land back on the
+            // ad test review, not the product detail page.
+            const { compose: _c, editAd: _e, angle: _a, concept: _cc, ...rest } = search
             navigate({
               to: '/studio/$productId',
               params: { productId },
@@ -390,7 +402,7 @@ function ProductWorkspacePage() {
             })
           }}
           onComplete={() => {
-            const { compose: _omit, angle: _angle, concept: _concept, ...rest } = search
+            const { compose: _c, editAd: _e, angle: _a, concept: _cc, ...rest } = search
             navigate({
               to: '/studio/$productId',
               params: { productId },
@@ -401,7 +413,7 @@ function ProductWorkspacePage() {
         />
       )}
 
-      {isAdTestReview && search.compose !== 'true' && (
+      {isAdTestReview && !search.compose && !search.editAd && (
         <>
           <AdTestReviewView
             adTestId={search.adTestId as Id<'adTests'>}
@@ -459,18 +471,31 @@ function ProductWorkspacePage() {
       )}
 
       {!isAdTestReview && view === 'gallery' && (
-        <AdTestsSection
-          productId={productId as Id<'products'>}
-          onOpenTest={(id) =>
-            navigate({
-              to: '/studio/$productId',
-              params: { productId },
-              search: { ...search, adTestId: id as string },
-            })
-          }
-          onNewTest={handleNewAdTest}
-          creditsExhausted={creditsExhausted}
-        />
+        <>
+          <AdTestsSection
+            productId={productId as Id<'products'>}
+            onOpenTest={(id) =>
+              navigate({
+                to: '/studio/$productId',
+                params: { productId },
+                search: { ...search, adTestId: id as string },
+              })
+            }
+            onNewTest={handleNewAdTest}
+            creditsExhausted={creditsExhausted}
+          />
+          <SavedAdsSection
+            productId={productId as Id<'products'>}
+            productName={product.name}
+            onOpenTest={(id) =>
+              navigate({
+                to: '/studio/$productId',
+                params: { productId },
+                search: { ...search, adTestId: id as string },
+              })
+            }
+          />
+        </>
       )}
 
       {/* The flat "all generations" grid was removed: creatives now live inside
@@ -3198,10 +3223,14 @@ function GenerateWizard({
           useSourceImage: includeSourceImage,
           applyBrand,
           applyVoice,
+          // Attach prompt-edited creatives to the test so they don't orphan.
+          adTestId: adTestId ?? undefined,
         })
         notifications.show({
           title: 'Generating',
-          message: `${variationsCount} image${variationsCount === 1 ? '' : 's'} from your prompt. Watch the gallery.`,
+          message: adTestId
+            ? `${variationsCount} image${variationsCount === 1 ? '' : 's'} from your prompt — added to your ad test.`
+            : `${variationsCount} image${variationsCount === 1 ? '' : 's'} from your prompt. Watch the gallery.`,
           color: 'green',
         })
       } else if (useAnglePath) {

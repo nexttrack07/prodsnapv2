@@ -10,25 +10,10 @@ import { useQuery } from 'convex/react'
 import { notifications } from '@mantine/notifications'
 import { IconCheck, IconAlertTriangle } from '@tabler/icons-react'
 import { api } from '../../../convex/_generated/api'
+import { scrapeStatusLabel } from './scrapeStatusLabel'
 
 const NID = 'url-import-progress'
 const IN_PROGRESS = ['pending', 'scraping', 'extracting', 'uploading']
-
-function stepLabel(status: string, currentStep: string | null): string {
-  if (currentStep) return currentStep
-  switch (status) {
-    case 'pending':
-      return 'Starting up…'
-    case 'scraping':
-      return 'Reading your product page…'
-    case 'extracting':
-      return 'Pulling product details…'
-    case 'uploading':
-      return 'Saving your product photos…'
-    default:
-      return 'Working…'
-  }
-}
 
 export function ScrapeProgressWatcher() {
   const active = useQuery(api.urlImports.getActiveImport, {})
@@ -47,7 +32,7 @@ export function ScrapeProgressWatcher() {
         withCloseButton: false,
         color: 'brand',
         title: 'Importing your product',
-        message: stepLabel(active.status, active.currentStep),
+        message: scrapeStatusLabel(active.status),
       }
       if (shownRef.current) notifications.update(payload)
       else notifications.show(payload)

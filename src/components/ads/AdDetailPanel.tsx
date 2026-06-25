@@ -8,7 +8,6 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useConvexMutation, convexQuery } from '@convex-dev/react-query'
-import { useAction } from 'convex/react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
@@ -37,13 +36,11 @@ import {
   IconArrowRight,
   IconChevronLeft,
   IconChevronRight,
-  IconCopy,
   IconDownload,
   IconStar,
   IconStarFilled,
   IconTrash,
   IconSparkles,
-  IconExternalLink,
   IconWand,
 } from '@tabler/icons-react'
 import { api } from '../../../convex/_generated/api'
@@ -92,64 +89,6 @@ function formatTimestamp(ts: number): string {
   })
 }
 
-function copyToClipboard(value: string, label: string) {
-  navigator.clipboard
-    .writeText(value)
-    .then(() =>
-      notifications.show({ title: 'Copied', message: label, color: 'green', autoClose: 1500 }),
-    )
-    .catch(() =>
-      notifications.show({ title: 'Copy failed', message: 'Try selecting manually.', color: 'red' }),
-    )
-}
-
-// ─── CopySection (lifted from studio page) ──────────────────────────────────
-
-function CopySection({
-  label,
-  items,
-  inline,
-}: {
-  label: string
-  items: string[]
-  inline?: boolean
-}) {
-  return (
-    <Box>
-      <Text size="xs" tt="uppercase" fw={700} c="dark.2" mb={6}>
-        {label}
-      </Text>
-      <Stack gap="xs">
-        {items.map((item, idx) => (
-          <Group
-            key={`${label}-${idx}`}
-            gap="sm"
-            justify="space-between"
-            align="center"
-            wrap="nowrap"
-            style={{
-              padding: '8px 12px',
-              background: 'rgba(255,255,255,0.04)',
-              borderRadius: 6,
-            }}
-          >
-            <Text size={inline ? 'sm' : 'sm'} c="white" style={{ flex: 1, minWidth: 0 }}>
-              {item}
-            </Text>
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              onClick={() => copyToClipboard(item, `${label.toLowerCase()} copied`)}
-            >
-              Copy
-            </Button>
-          </Group>
-        ))}
-      </Stack>
-    </Box>
-  )
-}
-
 // ─── AdDetailContent (shared body) ──────────────────────────────────────────
 
 export function AdDetailContent({
@@ -176,24 +115,6 @@ export function AdDetailContent({
 
   const deleteGeneration = useConvexMutation(api.products.deleteGeneration)
   const deleteMutation = useMutation({ mutationFn: deleteGeneration })
-
-  const writeAdCopy = useAction(api.adCopy.generateAdCopyForGeneration)
-  const [writingCopy, setWritingCopy] = useState(false)
-  const handleWriteCopy = useCallback(async () => {
-    if (!adId) return
-    setWritingCopy(true)
-    try {
-      await writeAdCopy({ generationId: adId })
-    } catch (err) {
-      notifications.show({
-        title: 'Could not write copy',
-        message: err instanceof Error ? err.message : 'Try again',
-        color: 'red',
-      })
-    } finally {
-      setWritingCopy(false)
-    }
-  }, [adId, writeAdCopy])
 
   // Sibling navigation
   const currentIdx = siblings?.indexOf(adId) ?? -1
@@ -241,33 +162,33 @@ export function AdDetailContent({
     }
   }, [ad, deleteMutation, navigate, showBackLink])
 
-  const handleGenerateSimilar = useCallback(async () => {
-    if (!ad?.productId) return
-    // Navigate to the product page to use the GenerateWizard there
-    notifications.show({
-      title: 'Navigate to generate',
-      message: 'Opening product studio to create similar ads.',
-      color: 'blue',
-      autoClose: 2000,
-    })
-    navigate({ to: '/studio/$productId', params: { productId: ad.productId } })
-  }, [ad, navigate])
-
-  const handleEditInCompose = useCallback(() => {
+  // "Generate similar" — open the generate wizard prefilled from this creative
+  // (same template/style) so the user can tweak and generate more like it.
+  // Carries adTestId so the new creatives attach to the same ad test and the
+  // back button returns there.
+  const handleGenerateSimilar = useCallback(() => {
     if (!ad?.productId) return
     navigate({
       to: '/studio/$productId',
       params: { productId: ad.productId },
-      search: { compose: ad._id as string },
+      search: {
+        ...(ad.adTestId ? { adTestId: ad.adTestId as string } : {}),
+        compose: ad._id as string,
+      },
     })
   }, [ad, navigate])
 
+  // "Edit with custom prompt" — feed THIS image into a prompt-based edit. Carries
+  // adTestId so the edited creative lands in the same ad test (not orphaned).
   const handleEditWithCustomPrompt = useCallback(() => {
     if (!ad?.productId) return
     navigate({
       to: '/studio/$productId',
       params: { productId: ad.productId },
-      search: { editAd: ad._id as string },
+      search: {
+        ...(ad.adTestId ? { adTestId: ad.adTestId as string } : {}),
+        editAd: ad._id as string,
+      },
     })
   }, [ad, navigate])
 
@@ -359,67 +280,6 @@ export function AdDetailContent({
         </Group>
       )}
 
-      {/* Ad copy — opt-in. User clicks to generate, then can edit/regenerate. */}
-      <Box>
-        <Group justify="space-between" align="center" mb="xs">
-          <Text size="sm" fw={600} c="white">
-            Ad copy
-          </Text>
-          {ad.adCopy && (
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              color="gray"
-              leftSection={<IconSparkles size={12} />}
-              loading={writingCopy}
-              onClick={handleWriteCopy}
-            >
-              Regenerate
-            </Button>
-          )}
-        </Group>
-        {ad.adCopy ? (
-          <Stack gap="md">
-            {ad.adCopy.headlines.length > 0 && (
-              <CopySection label="Headlines" items={ad.adCopy.headlines} />
-            )}
-            {ad.adCopy.primaryTexts.length > 0 && (
-              <CopySection label="Primary text" items={ad.adCopy.primaryTexts} />
-            )}
-            {ad.adCopy.ctas.length > 0 && (
-              <CopySection label="CTAs" items={ad.adCopy.ctas} inline />
-            )}
-          </Stack>
-        ) : (
-          <Paper
-            p="md"
-            radius="md"
-            withBorder
-            style={{
-              borderStyle: 'dashed',
-              borderColor: 'var(--mantine-color-dark-5)',
-              backgroundColor: 'var(--mantine-color-dark-7)',
-            }}
-          >
-            <Stack gap="xs" align="center" ta="center">
-              <Text size="sm" c="dark.2">
-                No copy yet. Generate Facebook headlines, primary text, and CTAs
-                tailored to this ad.
-              </Text>
-              <Button
-                color="brand"
-                size="sm"
-                leftSection={<IconSparkles size={14} />}
-                loading={writingCopy}
-                onClick={handleWriteCopy}
-              >
-                Write ad copy
-              </Button>
-            </Stack>
-          </Paper>
-        )}
-      </Box>
-
       <Divider color="dark.5" />
 
       {/* Primary actions */}
@@ -434,23 +294,14 @@ export function AdDetailContent({
         </Button>
         <Button
           variant="light"
-          color="gray"
-          leftSection={<IconExternalLink size={16} />}
-          onClick={handleEditInCompose}
+          color="violet"
+          leftSection={<IconWand size={16} />}
+          onClick={handleEditWithCustomPrompt}
+          disabled={!ad.outputUrl}
         >
-          Edit in compose
+          Edit with custom prompt
         </Button>
       </Group>
-      <Button
-        variant="light"
-        color="violet"
-        leftSection={<IconWand size={16} />}
-        onClick={handleEditWithCustomPrompt}
-        disabled={!ad.outputUrl}
-        fullWidth
-      >
-        Edit with custom prompt
-      </Button>
 
       {/* Secondary actions */}
       <Group gap="xs">
