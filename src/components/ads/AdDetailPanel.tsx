@@ -355,24 +355,8 @@ export function AdDetailContent({
         </Tooltip>
       </Group>
 
-      {/* Facebook preview + copy pairing — pick copy from the product's Copy
-          Bank, preview the ad, and save the pairing (→ a "saved ad"). */}
-      {ad.productId && ad.outputUrl && (
-        <>
-          <Divider color="dark.5" />
-          <CopyPairingSection
-            generationId={ad._id}
-            productId={ad.productId}
-            productName={ad.productName ?? 'Product'}
-            outputUrl={ad.outputUrl}
-            aspectRatio={ad.aspectRatio ?? '1:1'}
-            selectedCopySetId={ad.selectedCopySetId}
-            selectedHeadlineIndex={ad.selectedHeadlineIndex}
-            selectedPrimaryTextIndex={ad.selectedPrimaryTextIndex}
-            selectedDescriptionIndex={ad.selectedDescriptionIndex}
-          />
-        </>
-      )}
+      {/* Facebook preview + copy pairing removed for now — the CopyPairingSection
+          component below is intact and just needs re-wiring to bring it back. */}
 
       <Divider color="dark.5" />
 

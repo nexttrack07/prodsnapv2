@@ -17,6 +17,7 @@ import {
   Loader,
   Paper,
   ScrollArea,
+  Select,
   SimpleGrid,
   Skeleton,
   Stack,
@@ -58,7 +59,16 @@ export const Route = createFileRoute('/home')({
 
 function HomePage() {
   const isMobile = useMediaQuery('(max-width: 768px)')
-  const dashboard = useQuery(api.products.getFocusProduct, {})
+  // Which product the dashboard targets. `null` → backend uses the most recent
+  // product; picking one from the header switcher drives the hero AND both
+  // make-an-ad sections so they never silently act on the wrong product.
+  const [activeProductId, setActiveProductId] = useState<Id<'products'> | null>(
+    null,
+  )
+  const dashboard = useQuery(
+    api.products.getFocusProduct,
+    activeProductId ? { productId: activeProductId } : {},
+  )
   const products = useQuery(api.products.listProducts, {})
   const templates = useQuery(api.templates.listPublished, {})
   const search = Route.useSearch()
@@ -87,14 +97,38 @@ function HomePage() {
     <Container fluid p="lg">
       {hasProducts && (
         <PageHeaderActions>
-          <Button
-            size="sm"
-            color="brand"
-            leftSection={<IconPlus size={14} />}
-            onClick={goToNewProduct}
-          >
-            New product
-          </Button>
+          <Group gap="sm" wrap="nowrap">
+            {products && products.length > 1 && (
+              <Select
+                size="sm"
+                w={220}
+                data={products.map((p) => ({
+                  value: p._id as string,
+                  label: p.name,
+                }))}
+                value={
+                  (activeProductId ??
+                    dashboard?.focusProduct?._id ??
+                    null) as string | null
+                }
+                onChange={(v) =>
+                  setActiveProductId((v as Id<'products'>) ?? null)
+                }
+                allowDeselect={false}
+                checkIconPosition="right"
+                comboboxProps={{ withinPortal: true }}
+                aria-label="Active product"
+              />
+            )}
+            <Button
+              size="sm"
+              color="brand"
+              leftSection={<IconPlus size={14} />}
+              onClick={goToNewProduct}
+            >
+              New product
+            </Button>
+          </Group>
         </PageHeaderActions>
       )}
 
@@ -822,18 +856,20 @@ type HomeSurface = NonNullable<
   ReturnType<typeof useQuery<typeof api.recommendations.getHomeSurface>>
 >
 type Recommendation = HomeSurface['recommendations'][number]
-type RecentWinner = HomeSurface['recentWinners'][number]
+type WinnerProduct = HomeSurface['winnerProducts'][number]
 
 function NextTestsSection() {
   const navigate = useNavigate()
+  // Cross-product feed: suggestions from ALL products, NOT the header-selected
+  // one. Each card is self-describing and consuming routes to its own product.
   const surface = useQuery(api.recommendations.getHomeSurface, {})
   const consume = useMutation(api.recommendations.consumeRecommendation)
   const dismiss = useMutation(api.recommendations.dismissRecommendation)
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  if (!surface || !surface.focusProductId) return null
-  const { focusProductId, productName, recommendations, recentWinners } = surface
-  if (recommendations.length === 0 && recentWinners.length === 0) return null
+  if (!surface) return null
+  const { recommendations, winnerProducts } = surface
+  if (recommendations.length === 0 && winnerProducts.length === 0) return null
 
   const handleGenerate = async (rec: Recommendation) => {
     setBusyId(rec._id)
@@ -864,8 +900,6 @@ function NextTestsSection() {
     }
   }
 
-  const topWinner = recentWinners[0]
-
   return (
     <Stack gap="sm">
       <Group gap="xs" align="baseline">
@@ -875,14 +909,9 @@ function NextTestsSection() {
         </Title>
       </Group>
 
-      {recentWinners.length > 0 && topWinner && (
-        <WinnerIterationCard
-          winner={topWinner}
-          productId={focusProductId as Id<'products'>}
-          productName={productName ?? 'this product'}
-          winnerCount={recentWinners.length}
-        />
-      )}
+      {winnerProducts.map((w) => (
+        <WinnerIterationCard key={w.productId} winnerProduct={w} />
+      ))}
 
       {recommendations.length > 0 && (
         <ScrollArea offsetScrollbars scrollbarSize={6} type="hover">
@@ -904,16 +933,12 @@ function NextTestsSection() {
 }
 
 function WinnerIterationCard({
-  winner,
-  productId,
-  productName,
-  winnerCount,
+  winnerProduct,
 }: {
-  winner: RecentWinner
-  productId: Id<'products'>
-  productName: string
-  winnerCount: number
+  winnerProduct: WinnerProduct
 }) {
+  const { outputUrl, productName, winnerCount } = winnerProduct
+  const productId = winnerProduct.productId as Id<'products'>
   const navigate = useNavigate()
   const openTarget = () =>
     navigate({ to: '/studio/$productId', params: { productId } })
@@ -944,7 +969,7 @@ function WinnerIterationCard({
             backgroundColor: 'var(--mantine-color-dark-6)',
           }}
         >
-          <Image src={winner.outputUrl} alt="" fit="cover" w="100%" h="100%" />
+          <Image src={outputUrl} alt="" fit="cover" w="100%" h="100%" />
         </Box>
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Group gap={6} align="center">
@@ -1022,7 +1047,10 @@ function RecommendationCard({
         </Tooltip>
       </Group>
 
-      <Text size="sm" fw={600} c="dark.0" lineClamp={2}>
+      <Text size="xs" tt="uppercase" fw={700} c="dark.3" lineClamp={1}>
+        {capitalizeWords(rec.productName)}
+      </Text>
+      <Text size="sm" fw={600} c="dark.0" lineClamp={2} mt={2}>
         {rec.title}
       </Text>
       <Text size="xs" c="dark.2" mt={4} lineClamp={2} style={{ flex: 1 }}>

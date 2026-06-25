@@ -696,8 +696,10 @@ export const listProducts = query({
  * Returns null fields gracefully so the empty state can render.
  */
 export const getFocusProduct = query({
-  args: {},
-  handler: async (ctx) => {
+  // `productId` lets the home dashboard target a specific product the user
+  // picked. When absent (or not owned/archived), fall back to the most recent.
+  args: { productId: v.optional(v.id('products')) },
+  handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx)
     if (!userId) {
       return {
@@ -717,7 +719,12 @@ export const getFocusProduct = query({
       .order('desc')
       .take(50)
 
-    const focusProduct = products[0] ?? null
+    const focusProduct =
+      (args.productId
+        ? products.find((p) => p._id === args.productId)
+        : undefined) ??
+      products[0] ??
+      null
 
     let recentAds: Array<{
       _id: string

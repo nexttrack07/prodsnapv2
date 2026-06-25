@@ -22,7 +22,7 @@ export const Route = createFileRoute('/')({
       ...seo({
         title: 'ProdSnap — performance creative co-pilot for media buyers',
         description:
-          'Save winning ads to a swipe file. Generate 12 Meta-ready variants per batch — using those exact references.',
+          'Turn a product photo into a batch of on-brand, Meta-ready creatives — every ratio, from a template, a marketing angle, or your own prompt.',
         image: '/og-prodsnap.png',
       }),
     ],
@@ -231,40 +231,41 @@ function Hero() {
         pointerEvents: 'none',
       }} />
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '32px 16px 24px' : '56px 32px 48px', position: 'relative', textAlign: 'center' }}>
-        <Pill style={{ marginBottom: 20 }}>
+        <Pill style={{ marginBottom: 22 }}>
           <span style={{ width: 6, height: 6, borderRadius: 3, background: T.teal }} />
           performance creative co-pilot · for media buyers
         </Pill>
         <h1 style={{
           fontFamily: fontDisplay,
-          fontSize: isMobile ? 42 : 72,
-          lineHeight: 1.05,
-          letterSpacing: '-0.035em',
+          fontSize: isMobile ? 44 : 78,
+          lineHeight: 1.04,
+          letterSpacing: '-0.038em',
           fontWeight: 600,
           margin: '0 auto',
           color: T.text,
           maxWidth: 1100,
           paddingBottom: '0.15em',
         }} id="hero-title">
-          From product page<br />
-          <span style={{ color: T.textMuted, fontWeight: 400 }}>to a</span>{' '}
+          One product photo.<br />
           <span style={{
-            background: `linear-gradient(180deg, ${T.brandSoft}, ${T.brand})`,
+            background: `linear-gradient(120deg, ${T.brand}, ${T.teal})`,
             WebkitBackgroundClip: 'text',
             backgroundClip: 'text',
             color: 'transparent',
-          }}>tested ad.</span>
+          }}>A batch of on-brand ads.</span>
         </h1>
         <p style={{
           fontFamily: fontBody,
-          fontSize: isMobile ? 15 : 17,
-          lineHeight: 1.5,
+          fontSize: isMobile ? 15 : 18,
+          lineHeight: 1.55,
           color: T.textMuted,
-          margin: '20px auto 0',
-          maxWidth: 'none',
+          margin: '22px auto 0',
+          maxWidth: 660,
           fontWeight: 400,
         }}>
-          Angles, creative, and copy — generated. Paste your product URL and ProdSnap turns it into Meta-ready ads.
+          Paste your product URL — ProdSnap turns it into a batch of Meta-ready
+          creatives. Every ratio, on-brand, from a template, a marketing angle,
+          or your own prompt.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 24 }}>
           <form
@@ -411,11 +412,11 @@ function Hero() {
               </div>
               <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: `1px dashed ${T.border}`, gap: 8 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Pill color={T.teal} bg={T.tealTint}>★ 4 starred</Pill>
+                  <Pill color={T.teal} bg={T.tealTint}>12 variants</Pill>
                   <Pill>angle: comparison</Pill>
                   {!isMobile && <Pill>brand: harry's</Pill>}
                 </div>
-                <MonoLabel>→ download / iterate</MonoLabel>
+                <MonoLabel>→ download all</MonoLabel>
               </div>
             </div>
           </div>
@@ -496,7 +497,7 @@ function WorkflowSection() {
             <span style={{ color: T.textOnCreamMuted, fontWeight: 400 }}>Angle first. Then the creative.</span>
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 18, lineHeight: 1.55, color: T.textOnCreamMuted, margin: '24px auto 0', maxWidth: 720 }}>
-            Paste a product URL. ProdSnap reverse-engineers the strategy — the angles worth testing, the concepts for each, and the templates that fit — then generates the creatives.
+            Paste a product URL. ProdSnap reads the product — the marketing angles, the concepts for each, and the templates that fit — then generates a full batch of on-brand creatives.
           </p>
         </div>
 
@@ -513,7 +514,7 @@ function WorkflowSection() {
             {/* STEP 01 — ANGLES */}
             <LoopCard
               tag="step 01 · angles"
-              title="Angles worth testing"
+              title="Marketing angles, ready to use"
               sub="Auto-extracted from your product page and reviews."
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -636,7 +637,7 @@ function WorkflowSection() {
 
           {/* Footer note */}
           <div style={{ marginTop: 32, textAlign: 'center' }}>
-            <MonoLabel color={T.brand}>→ then iterate on the winners</MonoLabel>
+            <MonoLabel color={T.brand}>→ then download the batch, every Meta ratio</MonoLabel>
           </div>
         </div>
       </div>
@@ -756,7 +757,7 @@ function SplitSection() {
             Strategy and generation belong in the same tool.
           </h2>
           <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, maxWidth: 'none', margin: '0 auto', lineHeight: 1.55 }}>
-            Generic AI tools make a picture from a prompt. Swipe tools just store screenshots. Neither tells you what to test.
+            Generic AI tools make one picture from a prompt. Swipe tools just store screenshots. Neither turns your product into a batch of on-brand, Meta-ready creatives.
           </p>
         </div>
 
@@ -764,27 +765,27 @@ function SplitSection() {
           <CompareCard
             tier="option a"
             title="Generic AI ad gen"
-            desc="Type a prompt, get an image. No angle, no strategy, no idea what to test next."
+            desc="Type a prompt, get one image. No angle, no brand, no batch — just a single off-brand picture."
             rows={[
               { label: 'Marketing angles', status: false },
               { label: 'Creative concepts', status: false },
               { label: 'Batched ad creatives', status: false },
               { label: 'Brand-aware copy', status: 'limited' },
               { label: 'Multi-brand', status: false },
-              { label: 'Iterate on winners', status: false },
+              { label: 'On-brand, every Meta ratio', status: false },
             ]}
           />
           <CompareCard
             tier="option b"
             title="Swipe-file tools"
-            desc="Browse and save winning ads. Useful research — but it can't generate anything."
+            desc="Browse and save reference ads. Useful research — but it can't generate anything."
             rows={[
               { label: 'Marketing angles', status: 'limited' },
               { label: 'Creative concepts', status: false },
               { label: 'Batched ad creatives', status: false },
               { label: 'Brand-aware copy', status: false },
               { label: 'Multi-brand', status: 'limited' },
-              { label: 'Iterate on winners', status: false },
+              { label: 'On-brand, every Meta ratio', status: false },
             ]}
           />
           <CompareCard
@@ -797,7 +798,7 @@ function SplitSection() {
               { label: 'Batched ad creatives', status: true },
               { label: 'Brand-aware copy', status: true },
               { label: 'Multi-brand', status: true },
-              { label: 'Iterate on winners', status: true },
+              { label: 'On-brand, every Meta ratio', status: true },
             ]}
             primary
           />
@@ -1444,199 +1445,16 @@ function SurgicalExample({
 }
 
 // ============================================================
-// AD TEST SECTION
-// ============================================================
-
-function AdTestSection() {
-  const isMobile = useIsMobile()
-  return (
-    <section aria-labelledby="adtest-title" style={{ background: T.bg, color: T.text }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
-        <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow style={{ justifyContent: 'center' }}>the ad batch · 06</Eyebrow>
-          <h2 style={{
-            fontFamily: fontDisplay,
-            fontSize: isMobile ? 36 : 56,
-            lineHeight: 1.05,
-            letterSpacing: '-0.03em',
-            fontWeight: 600,
-            margin: '20px auto 0',
-            maxWidth: 900,
-            paddingBottom: '0.18em',
-          }} id="adtest-title">
-            Every batch is ready to ship.
-          </h2>
-          <p style={{ fontFamily: fontBody, fontSize: 17, color: T.textMuted, lineHeight: 1.55, margin: '24px auto 0', maxWidth: 700 }}>
-            Not loose images — a Facebook-style preview, every variant in one place, and copy written for the angle.
-          </p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 24 : 32, alignItems: 'start' }}>
-
-          {/* LEFT — Facebook-style ad preview */}
-          <div style={{
-            background: T.bgElev,
-            border: `1px solid ${T.border}`,
-            borderRadius: 14,
-            overflow: 'hidden',
-          }}>
-            {/* FB header */}
-            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 18,
-                background: `linear-gradient(135deg, ${T.brand}, ${T.teal})`,
-                flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: fontDisplay, fontSize: 14, fontWeight: 700, color: '#fff',
-              }}>H</div>
-              <div>
-                <div style={{ fontFamily: fontBody, fontSize: 14, fontWeight: 700, color: T.text }}>Harry's</div>
-                <div style={{ fontFamily: fontMono, fontSize: 10, color: T.textDim, marginTop: 1 }}>Sponsored · <span style={{ color: T.textDim }}>🌐</span></div>
-              </div>
-            </div>
-
-            {/* Primary text */}
-            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.border}` }}>
-              <div style={{ fontFamily: fontBody, fontSize: 14, color: T.text, lineHeight: 1.5 }}>
-                Stop blaming your sleep. It's your night routine.
-              </div>
-            </div>
-
-            {/* Ad image */}
-            <div>
-              <img
-                src="/landing/shots/harrys-1-exact.png"
-                alt="Ad preview"
-                loading="lazy"
-                decoding="async"
-                style={{ width: '100%', display: 'block' }}
-              />
-            </div>
-
-            {/* Link card footer */}
-            <div style={{
-              padding: '12px 16px',
-              background: T.bgElev2,
-              borderTop: `1px solid ${T.border}`,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-            }}>
-              <div>
-                <div style={{ fontFamily: fontMono, fontSize: 10, color: T.textDim, marginBottom: 3 }}>harrys.com</div>
-                <div style={{ fontFamily: fontDisplay, fontSize: 15, fontWeight: 700, color: T.text, letterSpacing: '-0.01em' }}>Wake up to calmer skin</div>
-              </div>
-              <div style={{
-                padding: '8px 16px',
-                background: T.bgElev,
-                border: `1px solid ${T.border}`,
-                borderRadius: 6,
-                fontFamily: fontBody,
-                fontSize: 13,
-                fontWeight: 600,
-                color: T.text,
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-              }}>Shop Now</div>
-            </div>
-
-            {/* Like / comment / share */}
-            <div style={{ padding: '10px 16px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 20 }}>
-              {['Like', 'Comment', 'Share'].map(a => (
-                <span key={a} style={{ fontFamily: fontBody, fontSize: 13, color: T.textDim }}>{a}</span>
-              ))}
-            </div>
-          </div>
-
-          {/* RIGHT — inside the batch */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-            {/* Variant grid */}
-            <div style={{
-              background: T.bgElev,
-              border: `1px solid ${T.border}`,
-              borderRadius: 14,
-              overflow: 'hidden',
-            }}>
-              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <MonoLabel color={T.text}>generated</MonoLabel>
-                <MonoLabel color={T.textDim}>6 variants</MonoLabel>
-              </div>
-              <div style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                {[
-                  '/landing/shots/harrys-2-exact.png',
-                  '/landing/shots/harrys-3-exact.png',
-                  '/landing/shots/harrys-4-exact.png',
-                  '/landing/shots/harrys-5-exact.png',
-                  '/landing/shots/harrys-6-exact.png',
-                  '/landing/shots/toiletry-1.png',
-                ].map((src, i) => (
-                  <img
-                    key={i}
-                    src={src}
-                    alt={`Variant ${i + 2}`}
-                    loading="lazy"
-                    decoding="async"
-                    style={{
-                      width: '100%',
-                      aspectRatio: '1',
-                      objectFit: 'cover',
-                      borderRadius: 6,
-                      border: `1px solid ${T.border}`,
-                      display: 'block',
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Copy bank */}
-            <div style={{
-              background: T.bgElev,
-              border: `1px solid ${T.border}`,
-              borderRadius: 14,
-              overflow: 'hidden',
-            }}>
-              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: fontDisplay, fontSize: 16, fontWeight: 600, color: T.text }}>Copy Bank</span>
-                <Pill color={T.teal} bg={T.tealTint} style={{ borderColor: T.teal + '55' }}>from angle: stop waking up to tight skin</Pill>
-              </div>
-              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {[
-                  { hl: 'Wake up to calmer skin', body: 'The dry-morning spiral, broken overnight.' },
-                  { hl: 'Your lotion should absorb', body: 'Not sit on top like the drugstore tub did.' },
-                ].map(({ hl, body }, i) => (
-                  <div key={i} style={{
-                    background: T.bg,
-                    border: `1px solid ${T.border}`,
-                    borderRadius: 8,
-                    padding: '12px 14px',
-                  }}>
-                    <div style={{ fontFamily: fontDisplay, fontSize: 16, fontWeight: 600, color: T.text, letterSpacing: '-0.01em' }}>{hl}</div>
-                    <div style={{ fontFamily: fontBody, fontSize: 13, color: T.textMuted, marginTop: 4, lineHeight: 1.45 }}>{body}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ============================================================
 // FEATURE GRID
 // ============================================================
 
 function FeatureGrid() {
   const isMobile = useIsMobile()
   return (
-    <section aria-labelledby="features-title" style={{ background: T.bg, color: T.text }}>
+    <section aria-labelledby="features-title" style={{ background: T.ink, color: '#fff' }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow style={{ justifyContent: 'center' }}>everything else · 07</Eyebrow>
+          <Eyebrow color={T.teal} style={{ justifyContent: 'center' }}>everything else · 06</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
             fontSize: isMobile ? 36 : 56,
@@ -1648,23 +1466,23 @@ function FeatureGrid() {
             paddingBottom: '0.18em',
           }} id="features-title">
             The bundled details.{' '}
-            <span style={{ color: T.textMuted, fontWeight: 400 }}>Things that usually cost extra.</span>
+            <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 400 }}>Things that usually cost extra.</span>
           </h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 1, background: T.border, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 1, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 14, overflow: 'hidden' }}>
           {[
             { tag: 'BRANDS', t: 'Multi-brand kits', d: 'Per-product colors, fonts, voice. Run 10 client brands without mixing them up.' },
-            { tag: 'LIBRARY', t: 'Cross-product winners', d: '/library shows every gen, every brand. Filter by ★. Build on what works.' },
+            { tag: 'LIBRARY', t: 'Cross-product library', d: '/library shows every gen, every brand, in one place. Reopen any product and keep generating.' },
             { tag: 'MODELS', t: 'Premium image generation', d: 'A state-of-the-art AI image model tuned for product ads.' },
             { tag: 'RATIOS', t: 'Every Meta ratio', d: '1:1 / 4:5 / 9:16 in one batch. No Canva detour.' },
             { tag: 'OUTPUT', t: 'Meta-ready PNG', d: 'High-res PNG per ad, per ratio. Drops straight into Ads Manager.' },
-            { tag: 'BATCHES', t: 'Batches, not one-offs', d: 'Every batch lands in a Facebook-style preview with variants and angle-grounded copy.' },
+            { tag: 'BATCHES', t: 'Batches, not one-offs', d: 'Every batch is a set of variants in all three Meta ratios, with angle-grounded copy.' },
             { tag: 'INGEST', t: 'URL onboarding', d: 'Paste a product or competitor URL — ProdSnap scrapes the images, copy, and details.' },
             { tag: 'PHOTOS', t: 'Multi-photo per product', d: 'Front / side / lifestyle / packaging. Pick which one drives each batch.' },
           ].map((f, i) => (
-            <div key={i} style={{ background: T.bgElev, padding: 24 }}>
-              <MonoLabel color={T.brandSoft}>{f.tag}</MonoLabel>
+            <div key={i} style={{ background: 'rgba(255,255,255,0.04)', padding: 24 }}>
+              <MonoLabel color={T.teal}>{f.tag}</MonoLabel>
               <div style={{
                 fontFamily: fontDisplay,
                 fontSize: 22,
@@ -1672,7 +1490,7 @@ function FeatureGrid() {
                 letterSpacing: '-0.02em',
                 marginTop: 10,
               }}>{f.t}</div>
-              <div style={{ fontFamily: fontBody, fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginTop: 6 }}>{f.d}</div>
+              <div style={{ fontFamily: fontBody, fontSize: 13, color: 'rgba(255,255,255,0.62)', lineHeight: 1.5, marginTop: 6 }}>{f.d}</div>
             </div>
           ))}
         </div>
@@ -1748,7 +1566,7 @@ function PricingSection() {
     <section id="pricing" aria-labelledby="pricing-title" style={{ background: T.cream, color: T.ink, scrollMarginTop: 64 }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>start free · 08</Eyebrow>
+          <Eyebrow color={T.brand} style={{ justifyContent: 'center' }}>start free · 07</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
             fontSize: isMobile ? 36 : 56,
@@ -1886,9 +1704,9 @@ function FAQSection() {
   const [open, setOpen] = useState(0)
   const isMobile = useIsMobile()
   const items: FAQItem[] = [
-    { q: 'Is it really free to start — no card?', a: "Yes. Every new account gets 100 free credits (about 10 ads) with no credit card. Generate, preview, and mark winners for free. When you run out — or want to export and run bigger tests — pick a plan. No trial countdown, no surprise charge." },
-    { q: 'Is this the same as AdCreative or Glorify?', a: "Different audience, different shape. AdCreative and Glorify are mass-market generators built for ecom owners who want a fast prompt-to-output flow. ProdSnap is built for performance teams — if you're testing 5+ angles a week, this is for you. Angle testing, swipe files, voice of customer, batched creatives — the muscles you build when you ship creative every week." },
-    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file — a place to store ads you like. ProdSnap is a creative tool: it reads your product, proposes the angles worth testing, turns each into ad concepts, and generates Meta-ready creatives with copy. Swiping is one input, not the product." },
+    { q: 'Is it really free to start — no card?', a: "Yes. Every new account gets 100 free credits (about 10 ads) with no credit card. Import a product, generate full batches, and download them for free. When you run out, pick a plan. No trial countdown, no surprise charge." },
+    { q: 'Is this the same as AdCreative or Glorify?', a: "Different shape. AdCreative and Glorify make you build a creative one prompt at a time. ProdSnap reads your product, picks a marketing angle (or you bring your own prompt or a template), and generates a full batch of on-brand creatives in every Meta ratio — with angle-grounded copy — in one pass." },
+    { q: 'How is this different from Foreplay?', a: "Foreplay is a swipe file — a place to store ads you like. ProdSnap is a creative tool: it reads your product, picks a marketing angle, turns it into ad concepts, and generates on-brand, Meta-ready creatives with copy. You can feed in competitor references too, but swiping is one input, not the product." },
     { q: 'What about my brand consistency?', a: "Each brand keeps its own kit — colors, fonts, voice notes. Tag a product with the brand it belongs to, and the generator pulls that kit's colors, voice, and offer into every batch. Lite includes 2 brand kits, Pro 10, Max unlimited. Kits don't bleed into each other across products." },
     { q: 'Will the output actually run on Meta?', a: "Yes — every output is in 1:1, 4:5, or 9:16 (you pick), exported as high-res PNG, and meets Meta's Ads Manager spec. Optional ad copy generation follows Meta best practices for headlines, primary texts, and CTAs." },
     { q: 'Can I bring competitor ads as references?', a: "Yes. Paste URLs from Meta Ad Library, drag images in, or bookmark templates from our curated library. Per-product. They feed the generator on every batch for that product." },
@@ -1898,7 +1716,7 @@ function FAQSection() {
     <section aria-labelledby="faq-title" style={{ background: T.bg, color: T.text }}>
       <div style={{ maxWidth: 980, margin: '0 auto', padding: SECTION_PADDING(isMobile) }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 56 }}>
-          <Eyebrow style={{ justifyContent: 'center' }}>faq · 09</Eyebrow>
+          <Eyebrow style={{ justifyContent: 'center' }}>faq · 08</Eyebrow>
           <h2 style={{
             fontFamily: fontDisplay,
             fontSize: isMobile ? 36 : 56,
@@ -1971,18 +1789,18 @@ function FinalCTA() {
   const isMobile = useIsMobile()
   return (
     <section aria-labelledby="final-cta-title" style={{
-      background: `linear-gradient(135deg, ${T.bg} 0%, ${T.creamElev} 100%)`,
-      color: T.text,
+      background: `linear-gradient(160deg, ${T.ink} 0%, #0e1013 100%)`,
+      color: '#fff',
       position: 'relative',
       overflow: 'hidden',
     }}>
       <div style={{
         position: 'absolute', inset: 0,
-        background: `radial-gradient(800px 400px at 50% 100%, ${T.brand}33, transparent 60%)`,
+        background: `radial-gradient(820px 420px at 50% 108%, rgba(95,184,166,0.18), transparent 60%), radial-gradient(600px 320px at 50% -10%, rgba(255,255,255,0.05), transparent 55%)`,
         pointerEvents: 'none',
       }}/>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '64px 16px' : '140px 32px', textAlign: 'center', position: 'relative' }}>
-        <Eyebrow style={{ justifyContent: 'center' }}>from product to tested ad</Eyebrow>
+        <Eyebrow color={T.teal} style={{ justifyContent: 'center' }}>from product to on-brand ads</Eyebrow>
         <h2 style={{
           fontFamily: fontDisplay,
           fontSize: isMobile ? 48 : 88,
@@ -1993,22 +1811,22 @@ function FinalCTA() {
           maxWidth: 1100,
           paddingBottom: '0.12em',
         }} id="final-cta-title">
-          Stop briefing designers <br/>
-          <span style={{ color: T.textMuted, fontWeight: 400 }}>for every angle test.</span>
+          Stop waiting on ad creative. <br/>
+          <span style={{ color: 'rgba(255,255,255,0.58)', fontWeight: 400 }}>Spin up the next batch yourself.</span>
         </h2>
-        <p style={{ fontFamily: fontBody, fontSize: isMobile ? 16 : 19, color: T.textMuted, maxWidth: 600, margin: '0 auto 36px', lineHeight: 1.5 }}>
-          From a product URL to ready-to-ship ads — angles, concepts, creative, and copy.
+        <p style={{ fontFamily: fontBody, fontSize: isMobile ? 16 : 19, color: 'rgba(255,255,255,0.68)', maxWidth: 620, margin: '0 auto 36px', lineHeight: 1.5 }}>
+          From a product URL to a batch of ready-to-ship, on-brand ads — every Meta ratio, with angle-grounded copy. No designer, no Canva detour.
         </p>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
           <Link to="/onboarding" search={{ starter: true }} style={{ textDecoration: 'none' }}>
-            <Btn as="span" kind="primary" size="lg">Start free →</Btn>
+            <Btn as="span" kind="light" size="lg">Start free →</Btn>
           </Link>
           <Link to="/templates" style={{ textDecoration: 'none' }}>
-            <Btn as="span" kind="secondary" size="lg">Browse templates</Btn>
+            <Btn as="span" kind="secondary" size="lg" style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}>Browse templates</Btn>
           </Link>
         </div>
         <div style={{ marginTop: 18 }}>
-          <MonoLabel>100 free credits · no card · ~10 ads</MonoLabel>
+          <MonoLabel color="rgba(255,255,255,0.55)">100 free credits · no card · ~10 ads</MonoLabel>
         </div>
       </div>
     </section>
@@ -2078,7 +1896,6 @@ function Home() {
         <OnrampsSection />
         <VOCSection />
         <SurgicalSection />
-        <AdTestSection />
         <FeatureGrid />
         <PricingSection />
         <FAQSection />

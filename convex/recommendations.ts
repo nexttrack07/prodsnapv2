@@ -11,6 +11,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from './_generated/server'
+import type { Id } from './_generated/dataModel'
 
 async function getAuthUserId(
   ctx: QueryCtx | MutationCtx,
@@ -26,15 +27,17 @@ async function requireAuth(ctx: QueryCtx | MutationCtx): Promise<string> {
 }
 
 /**
- * Home surface: the focus product's pending recommendations + its recent
- * starred winners (flat creatives). No ad-test container anymore.
+ * Home "What to make next" surface — a CROSS-PRODUCT feed. Pending
+ * recommendations are gathered across ALL the user's products (each card is
+ * self-describing via `productName`), plus a per-product summary of recent
+ * starred winners. This is deliberately NOT scoped to a single selected product:
+ * the suggestions are persisted per product and consuming one already routes to
+ * its own product, so binding the whole section to one product would be wrong.
  */
 export const getHomeSurface = query({
   args: {},
   handler: async (ctx) => {
     const empty = {
-      focusProductId: null as null | string,
-      productName: null as null | string,
       recommendations: [] as Array<{
         _id: string
         key: string
@@ -43,39 +46,60 @@ export const getHomeSurface = query({
         source: string
         priority: number
         angleCount: number
+        productId: string
+        productName: string
       }>,
-      recentWinners: [] as Array<{
-        generationId: string
+      winnerProducts: [] as Array<{
+        productId: string
+        productName: string
         outputUrl: string
-        aspectRatio: string
+        winnerCount: number
       }>,
     }
 
     const userId = await getAuthUserId(ctx)
     if (!userId) return empty
 
-    const products = await ctx.db
-      .query('products')
-      .withIndex('by_userId_archived', (q) =>
-        q.eq('userId', userId).eq('archivedAt', undefined),
-      )
-      .order('desc')
-      .take(1)
-    const focusProduct = products[0]
-    if (!focusProduct) return empty
+    // Resolve product names once (and drop archived/missing products). Cached so
+    // both recommendations and winners reuse the same lookups.
+    const productCache = new Map<
+      string,
+      { name: string; archived: boolean } | null
+    >()
+    const resolveProduct = async (productId: string) => {
+      if (!productCache.has(productId)) {
+        const product = await ctx.db.get(productId as Id<'products'>)
+        productCache.set(
+          productId,
+          product && product.userId === userId
+            ? { name: product.name, archived: product.archivedAt !== undefined }
+            : null,
+        )
+      }
+      return productCache.get(productId) ?? null
+    }
 
+    // ── Recommendations across every product ──────────────────────────────
     const recRows = await ctx.db
       .query('adTestRecommendations')
-      .withIndex('by_productId_consumedAt', (q) =>
-        q.eq('productId', focusProduct._id).eq('consumedAt', undefined),
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('consumedAt'), undefined),
+          q.eq(q.field('dismissedAt'), undefined),
+        ),
       )
-      .filter((q) => q.eq(q.field('dismissedAt'), undefined))
-      .take(50)
-    const recommendations = recRows
-      .filter((r) => r.userId === userId)
-      .sort((a, b) => a.concept.priority - b.concept.priority)
-      .slice(0, 6)
-      .map((r) => ({
+      .take(100)
+
+    const sortedRecs = recRows.sort(
+      (a, b) => a.concept.priority - b.concept.priority,
+    )
+    const recommendations: typeof empty.recommendations = []
+    for (const r of sortedRecs) {
+      if (recommendations.length >= 8) break
+      const product = await resolveProduct(r.productId as string)
+      if (!product || product.archived) continue
+      recommendations.push({
         _id: r._id as string,
         key: r.concept.key,
         title: r.concept.title,
@@ -83,28 +107,53 @@ export const getHomeSurface = query({
         source: r.concept.source,
         priority: r.concept.priority,
         angleCount: r.concept.angles.length,
-      }))
-
-    const gens = await ctx.db
-      .query('templateGenerations')
-      .withIndex('by_product', (q) => q.eq('productId', focusProduct._id))
-      .order('desc')
-      .take(200)
-    const recentWinners = gens
-      .filter((g) => g.isWinner && g.status === 'complete' && !!g.outputUrl)
-      .slice(0, 6)
-      .map((g) => ({
-        generationId: g._id as string,
-        outputUrl: g.outputUrl as string,
-        aspectRatio: g.aspectRatio ?? '1:1',
-      }))
-
-    return {
-      focusProductId: focusProduct._id as string,
-      productName: focusProduct.name,
-      recommendations,
-      recentWinners,
+        productId: r.productId as string,
+        productName: product.name,
+      })
     }
+
+    // ── Winners summarised per product (most-recent first, capped) ─────────
+    const winnerGens = await ctx.db
+      .query('templateGenerations')
+      .withIndex('by_userId_status', (q) =>
+        q.eq('userId', userId).eq('status', 'complete'),
+      )
+      .order('desc')
+      .take(500)
+
+    const winnerByProduct = new Map<
+      string,
+      { outputUrl: string; winnerCount: number }
+    >()
+    for (const g of winnerGens) {
+      if (!g.isWinner || !g.outputUrl || !g.productId) continue
+      const pid = g.productId as string
+      const existing = winnerByProduct.get(pid)
+      if (existing) {
+        existing.winnerCount += 1
+      } else {
+        // First sighting = most-recent winner = representative thumbnail.
+        winnerByProduct.set(pid, {
+          outputUrl: g.outputUrl,
+          winnerCount: 1,
+        })
+      }
+    }
+
+    const winnerProducts: typeof empty.winnerProducts = []
+    for (const [pid, info] of winnerByProduct) {
+      if (winnerProducts.length >= 3) break
+      const product = await resolveProduct(pid)
+      if (!product || product.archived) continue
+      winnerProducts.push({
+        productId: pid,
+        productName: product.name,
+        outputUrl: info.outputUrl,
+        winnerCount: info.winnerCount,
+      })
+    }
+
+    return { recommendations, winnerProducts }
   },
 })
 

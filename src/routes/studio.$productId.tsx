@@ -42,6 +42,7 @@ import {
   Switch,
   ColorSwatch,
   SimpleGrid,
+  Grid,
 } from '@mantine/core'
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone'
 import {
@@ -86,7 +87,6 @@ import { OutOfCreditsModal } from '../components/billing/OutOfCreditsModal'
 import { ConvexError } from 'convex/values'
 import { fetchDownloadAsset } from '../utils/downloads'
 import { AdDetailPanel } from '../components/ads/AdDetailPanel'
-import { SavedAdsSection } from '../components/ads/SavedAdsSection'
 import { CopyBankPanel } from '../components/ads/CopyBankPanel'
 import type { TemplateFilters } from '../components/product/types'
 import { angleTypeLabel } from '../components/product/MarketingAnalysisPanel'
@@ -964,7 +964,6 @@ function ProductHeader({
               })
             }
           />
-          <SavedAdsSection productId={productId} productName={product.name} />
         </Tabs.Panel>
 
         {/* ── Source images ─────────────────────────────────────────────── */}
@@ -1280,69 +1279,86 @@ function RecommendedAnglesPanel({
         </Box>
       )}
 
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-        {angles.map((angle, index) => {
-          const selected = index === selectedIndex
-          return (
-            <UnstyledButton
-              key={`${angle.title}-${index}`}
-              onClick={() => setSelectedIndex(index)}
-              style={{ height: '100%' }}
-            >
-              <Paper
-                withBorder
-                radius="md"
-                p="md"
-                h="100%"
-                style={{
-                  background: selected
-                    ? 'rgba(16, 24, 40, 0.16)'
-                    : 'rgba(16, 24, 40, 0.025)',
-                  borderColor: selected
-                    ? 'var(--mantine-color-brand-5)'
-                    : 'var(--mantine-color-dark-5)',
-                  transition: 'border-color 120ms ease, background-color 120ms ease',
-                }}
-              >
-                <Stack gap="sm">
-                  <Group gap={6}>
-                    {angle.angleType && (
-                      <Badge size="xs" variant="light" color="grape" radius="sm">
-                        {angleTypeLabel(angle.angleType)}
-                      </Badge>
-                    )}
-                    {angle.suggestedAdStyle && (
-                      <Badge size="xs" variant="outline" color="gray" radius="sm">
-                        {angle.suggestedAdStyle}
-                      </Badge>
-                    )}
-                  </Group>
+      <Grid gap="lg">
+        {/* ── Left: selectable angle list ─────────────────────────────── */}
+        <Grid.Col span={{ base: 12, md: 5, lg: 4 }}>
+          <Group justify="space-between" align="center" mb="xs">
+            <Text size="xs" tt="uppercase" fw={700} c="dark.2">
+              Angles
+            </Text>
+            <Badge size="xs" variant="light" color="gray" radius="sm">
+              {angles.length}
+            </Badge>
+          </Group>
+          <Stack gap="sm">
+            {angles.map((angle, index) => {
+              const selected = index === selectedIndex
+              return (
+                <UnstyledButton
+                  key={`${angle.title}-${index}`}
+                  onClick={() => setSelectedIndex(index)}
+                  style={{ width: '100%' }}
+                >
+                  <Paper
+                    withBorder
+                    radius="md"
+                    p="md"
+                    style={{
+                      background: selected
+                        ? 'var(--surface, #ffffff)'
+                        : 'var(--surface-muted, #f7f8fa)',
+                      borderColor: selected
+                        ? 'var(--mantine-color-brand-6)'
+                        : 'var(--mantine-color-dark-5)',
+                      boxShadow: selected
+                        ? 'inset 3px 0 0 0 var(--mantine-color-brand-6)'
+                        : 'none',
+                      transition:
+                        'border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease',
+                    }}
+                  >
+                    <Stack gap="sm">
+                      <Group gap={6}>
+                        {angle.angleType && (
+                          <Badge size="xs" variant="light" color="gray" radius="sm">
+                            {angleTypeLabel(angle.angleType)}
+                          </Badge>
+                        )}
+                        {angle.suggestedAdStyle && (
+                          <Badge size="xs" variant="outline" color="gray" radius="sm">
+                            {angle.suggestedAdStyle}
+                          </Badge>
+                        )}
+                      </Group>
 
-                  <Box>
-                    <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
-                      Angle
-                    </Text>
-                    <Text size="sm" fw={800} c="dark.0" lh={1.35}>
-                      {angle.title}
-                    </Text>
-                  </Box>
+                      <Box>
+                        <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
+                          Angle
+                        </Text>
+                        <Text size="sm" fw={800} c="dark.0" lh={1.35}>
+                          {angle.title}
+                        </Text>
+                      </Box>
 
-                  <Box>
-                    <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
-                      Insight
-                    </Text>
-                    <Text size="sm" c="dark.1" lh={1.5}>
-                      {angle.description}
-                    </Text>
-                  </Box>
-                </Stack>
-              </Paper>
-            </UnstyledButton>
-          )
-        })}
-      </SimpleGrid>
+                      <Box>
+                        <Text size="xs" tt="uppercase" fw={700} c="dark.3" mb={4}>
+                          Insight
+                        </Text>
+                        <Text size="sm" c="dark.1" lh={1.5}>
+                          {angle.description}
+                        </Text>
+                      </Box>
+                    </Stack>
+                  </Paper>
+                </UnstyledButton>
+              )
+            })}
+          </Stack>
+        </Grid.Col>
 
-      {selectedAngle && (
+        {/* ── Right: concepts for the selected angle ──────────────────── */}
+        <Grid.Col span={{ base: 12, md: 7, lg: 8 }}>
+          {selectedAngle && (
         <Paper
           withBorder
           radius="md"
@@ -1385,7 +1401,7 @@ function RecommendedAnglesPanel({
               </Box>
             )}
 
-            <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="md">
               {concepts.map((concept, index) => (
                 <Paper
                   key={concept.title}
@@ -1561,7 +1577,9 @@ function RecommendedAnglesPanel({
             </Box>
           </Stack>
         </Paper>
-      )}
+          )}
+        </Grid.Col>
+      </Grid>
     </Stack>
   )
 }
