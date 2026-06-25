@@ -120,7 +120,7 @@ function OnboardingPage() {
     return (
       <Container size="sm" py="xl">
         <Stack align="center" gap="md">
-          <Title order={2}>Sign in to get started</Title>
+          <Title order={2} c="dark.0">Sign in to get started</Title>
           <Text c="dark.2" ta="center">
             Create your account to begin onboarding.
           </Text>
@@ -155,7 +155,7 @@ function OnboardingPage() {
         <Stack align="center" gap="md">
           {finalizeError ? (
             <>
-              <Title order={2} ta="center">We couldn't finish setup</Title>
+              <Title order={2} ta="center" c="dark.0">We couldn't finish setup</Title>
               <Text c="dark.2" ta="center" maw={420}>
                 {finalizeError}. If your payment completed, retry in a moment;
                 otherwise choose a plan to continue.
@@ -372,7 +372,7 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
       <Center mih="60vh">
         <Container size="xs">
           <Stack align="center" gap="md" ta="center">
-            <Title order={2}>We hit a snag</Title>
+            <Title order={2} c="dark.0">We hit a snag</Title>
             <Text c="dark.2" maw={420}>
               {errorMsg ?? 'Something went wrong.'}
             </Text>
@@ -411,7 +411,7 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
         <Container size="sm" py={40}>
           <Stack gap="lg">
             <div>
-              <Title order={2} fz={26} fw={600}>
+              <Title order={2} fz={26} fw={600} c="dark.0">
                 Pick your product photos
               </Title>
               <Group gap={6} mt={4}>
@@ -450,7 +450,7 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
             <IconSparkles size={28} />
           </ThemeIcon>
           <div>
-            <Title order={2} mb={8}>Generating your ads</Title>
+            <Title order={2} mb={8} c="dark.0">Generating your ads</Title>
             <Text c="dark.2" maw={400} mx="auto">
               Compositing your product into {templateIds.length} ad
               {templateIds.length === 1 ? '' : 's'}. Dropping you into the studio…
@@ -494,13 +494,14 @@ function StarterTemplatePicker({
             top: 0,
             zIndex: 3,
             backgroundColor: 'var(--mantine-color-dark-7)',
-            paddingTop: 8,
-            paddingBottom: 12,
+            paddingTop: 16,
+            paddingBottom: 16,
+            borderBottom: '1px solid var(--mantine-color-dark-5)',
           }}
         >
-          <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+          <Group justify="space-between" align="center" wrap="nowrap" gap="md">
             <div>
-              <Title order={2} fz={24} fw={600}>
+              <Title order={2} fz={24} fw={600} c="dark.0">
                 {importStep
                   ? "Choose up to 3 ad templates while we fetch your product info"
                   : 'Pick up to 3 ad styles'}
@@ -683,7 +684,7 @@ function StarterImagePicker({
     <Container size="sm" py={40}>
       <Stack gap="lg">
         <div>
-          <Title order={2} fz={26} fw={600}>
+          <Title order={2} fz={26} fw={600} c="dark.0">
             Pick your product photos
           </Title>
           <Text c="dark.2" mt={4}>
@@ -861,7 +862,7 @@ function StarterFromSample() {
             <IconSparkles size={28} />
           </ThemeIcon>
           <div>
-            <Title order={2} mb={8}>100 free credits — no card</Title>
+            <Title order={2} mb={8} c="dark.0">100 free credits — no card</Title>
             <Text c="dark.2" maw={380} mx="auto">
               We'll generate your first ad test — one concept across three
               placements — and you'll keep the rest of your free credits to
