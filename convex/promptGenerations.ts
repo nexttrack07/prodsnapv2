@@ -9,7 +9,11 @@ import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import { internal } from './_generated/api'
 import { workflow } from './studio'
-import { enforceGenerationRateLimit, recordGenerationUsage } from './products'
+import {
+  enforceGenerationRateLimit,
+  recordGenerationUsage,
+  PLACEMENT_FOR_ASPECT,
+} from './products'
 import {
   CAPABILITIES,
   requireCapability,
@@ -38,8 +42,14 @@ export const submitPromptGeneration = mutation({
     applyBrand: v.optional(v.boolean()),
     /** Apply customer voice (brand voice + customer phrases). Defaults to true. */
     applyVoice: v.optional(v.boolean()),
+    /**
+     * When generating/editing from inside an Ad Test, the new creatives must
+     * attach to that test (adTestId + placement + adUnitIndex) so they show up
+     * in the test grid instead of being orphaned. Mirrors generateFromProduct.
+     */
+    adTestId: v.optional(v.id('adTests')),
   },
-  handler: async (ctx, { productId, prompt, aspectRatio: ar, count, model, productImageId, sourceAdId, useSourceImage, applyBrand, applyVoice }) => {
+  handler: async (ctx, { productId, prompt, aspectRatio: ar, count, model, productImageId, sourceAdId, useSourceImage, applyBrand, applyVoice, adTestId }) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
     const userId = identity.tokenIdentifier
@@ -111,10 +121,16 @@ export const submitPromptGeneration = mutation({
       }
     }
 
-    // Billing gates: capability, batch guard.
-    await requireCapability(ctx, CAPABILITIES.GENERATE_VARIATIONS, 'submitPromptGeneration')
-    if (count > 2) {
-      await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitPromptGeneration')
+    // Billing gates: capability + batch guard for STANDALONE generation only.
+    // In-test generation (adTestId set) is the primary, credit-metered flow —
+    // free users have 100 starter credits and must be able to edit/generate
+    // within them — so it's gated by requireCredits below only, mirroring
+    // generateFromProduct's in-test path.
+    if (!adTestId) {
+      await requireCapability(ctx, CAPABILITIES.GENERATE_VARIATIONS, 'submitPromptGeneration')
+      if (count > 2) {
+        await requireCapability(ctx, CAPABILITIES.BATCH_GENERATION, 'submitPromptGeneration')
+      }
     }
 
     // Pre-flight credit check for the whole batch. Mirror generateFromAngle's
@@ -126,6 +142,28 @@ export const submitPromptGeneration = mutation({
         : 'nano-banana-2'
     await requireCredits(ctx, promptModelKey, count)
     await recordGenerationUsage(ctx, userId, 'submitPromptGeneration', count)
+
+    // When attaching to an Ad Test, verify ownership + product match and compute
+    // the next adUnitIndex so creatives added across passes keep a gapless order
+    // (mirrors generateFromProduct's linkage so prompt-edited creatives land in
+    // the test instead of being orphaned with adTestId = null).
+    let adTestBaseUnitIndex = 0
+    if (adTestId) {
+      const adTest = await ctx.db.get(adTestId)
+      if (!adTest || adTest.userId !== userId) throw new Error('Ad Test not found')
+      if (adTest.productId !== productId) {
+        throw new Error('Ad Test does not belong to this product')
+      }
+      if (adTest.archivedAt) throw new Error('Cannot add to an archived Ad Test')
+      const existing = await ctx.db
+        .query('templateGenerations')
+        .withIndex('by_adTestId', (q) => q.eq('adTestId', adTestId))
+        .collect()
+      adTestBaseUnitIndex = existing.reduce(
+        (max, g) => Math.max(max, (g.adUnitIndex ?? -1) + 1),
+        0,
+      )
+    }
 
     // Insert one row per requested variation, then start a workflow per row.
     for (let i = 0; i < count; i++) {
@@ -143,10 +181,27 @@ export const submitPromptGeneration = mutation({
         dynamicPrompt: prompt,
         status: 'queued',
         model: model ?? 'nano-banana-2',
+        // Ad Test linkage (only when generating into a test).
+        adTestId,
+        placement: adTestId ? PLACEMENT_FOR_ASPECT[ar] : undefined,
+        adUnitIndex: adTestId ? adTestBaseUnitIndex + i : undefined,
       })
       await workflow.start(ctx, internal.studio.generateFromPromptWorkflow, {
         generationId,
       }, { startAsync: true })
+    }
+
+    // Advance the Ad Test: bump its planned counter and flip to generating, so
+    // the test grid shows the in-flight creatives immediately.
+    if (adTestId) {
+      const adTest = await ctx.db.get(adTestId)
+      if (adTest) {
+        await ctx.db.patch(adTestId, {
+          plannedImageCount: adTest.plannedImageCount + count,
+          status: 'generating',
+          updatedAt: Date.now(),
+        })
+      }
     }
 
     return { ok: true, count }

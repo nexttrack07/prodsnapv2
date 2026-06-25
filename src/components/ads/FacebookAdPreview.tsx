@@ -47,6 +47,8 @@ export function FacebookAdPreview({
   description,
   cta,
   width = 360,
+  headlinePlaceholder = 'Your headline appears here',
+  primaryTextPlaceholder,
 }: {
   imageUrl?: string
   aspectRatio?: string
@@ -56,6 +58,10 @@ export function FacebookAdPreview({
   description?: string
   cta?: string
   width?: number
+  /** Muted hint shown in the headline slot when no headline is chosen. */
+  headlinePlaceholder?: string
+  /** When set, shows this muted hint in the primary-text slot when none is chosen. */
+  primaryTextPlaceholder?: string
 }) {
   const ratio = ASPECT_RATIO_VALUE[aspectRatio] ?? 1
   const initial = pageName.trim().charAt(0).toUpperCase() || 'A'
@@ -111,7 +117,7 @@ export function FacebookAdPreview({
       </Group>
 
       {/* Primary text */}
-      {primaryText && (
+      {primaryText ? (
         <Text
           px={12}
           pb={10}
@@ -120,7 +126,16 @@ export function FacebookAdPreview({
         >
           {primaryText}
         </Text>
-      )}
+      ) : primaryTextPlaceholder ? (
+        <Text
+          px={12}
+          pb={10}
+          size="sm"
+          style={{ color: '#8a8d91', fontStyle: 'italic', lineHeight: 1.35 }}
+        >
+          {primaryTextPlaceholder}
+        </Text>
+      ) : null}
 
       {/* Creative */}
       {imageUrl ? (
@@ -150,8 +165,13 @@ export function FacebookAdPreview({
           <Text size="10px" style={{ color: '#65676b', textTransform: 'uppercase', letterSpacing: 0.3 }}>
             {pageName.toLowerCase().replace(/\s+/g, '')}.com
           </Text>
-          <Text fw={700} size="sm" style={{ color: '#050505', lineHeight: 1.25 }} lineClamp={2}>
-            {headline || 'Your headline appears here'}
+          <Text
+            fw={700}
+            size="sm"
+            style={{ color: headline ? '#050505' : '#8a8d91', lineHeight: 1.25 }}
+            lineClamp={2}
+          >
+            {headline || headlinePlaceholder}
           </Text>
           {description && (
             <Text size="xs" style={{ color: '#65676b' }} lineClamp={1}>

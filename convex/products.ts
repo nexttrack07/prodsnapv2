@@ -1048,7 +1048,7 @@ export const deleteGeneration = mutation({
 // Map a generated creative's aspect ratio to its Meta placement, so Ad Test
 // creatives produced by the template wizard carry the same placement metadata
 // as angle-based ones (used for grouping + export filenames).
-const PLACEMENT_FOR_ASPECT: Record<
+export const PLACEMENT_FOR_ASPECT: Record<
   string,
   'feed_square' | 'feed_vertical' | 'story_reel' | 'landscape'
 > = {

@@ -16,6 +16,7 @@ import {
   Loader,
   Paper,
   SimpleGrid,
+  Skeleton,
   Stack,
   Text,
   Title,
@@ -35,6 +36,7 @@ import {
   TemplateBrowser,
   type BrowserTemplate,
 } from '~/components/templates/TemplateBrowser'
+import { scrapeStatusLabel } from '~/components/imports/scrapeStatusLabel'
 import { StepRole } from '~/components/onboarding/StepRole'
 import { StepBusiness } from '~/components/onboarding/StepBusiness'
 import { StepPlan } from '~/components/onboarding/StepPlan'
@@ -403,15 +405,30 @@ function StarterFromUrl({ url, onUseSample }: { url: string; onUseSample: () => 
 
   if (step === 'photos') {
     if (!importSettled) {
+      // Skeleton of the photo picker so the wait reads as "your photos are
+      // loading in", not a dead-end spinner — the real grid drops into the
+      // same layout the moment the scrape settles.
       return (
-        <Center mih="60vh">
-          <Stack align="center" gap="sm">
-            <Loader size="md" color="brand" />
-            <Text c="dark.2" size="sm">
-              {imp?.currentStep ?? 'Finishing up your product photos…'}
-            </Text>
+        <Container size="sm" py={40}>
+          <Stack gap="lg">
+            <div>
+              <Title order={2} fz={26} fw={600}>
+                Pick your product photos
+              </Title>
+              <Group gap={6} mt={4}>
+                <Loader size="xs" color="brand" />
+                <Text c="dark.2" size="sm">
+                  {scrapeStatusLabel(imp?.status ?? 'pending')}
+                </Text>
+              </Group>
+            </div>
+            <SimpleGrid cols={{ base: 3, sm: 4 }} spacing="sm">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} radius="md" style={{ aspectRatio: '1' }} />
+              ))}
+            </SimpleGrid>
           </Stack>
-        </Center>
+        </Container>
       )
     }
     return (
@@ -485,19 +502,13 @@ function StarterTemplatePicker({
           <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
             <div>
               <Title order={2} fz={24} fw={600}>
-                Pick up to 3 ad styles
+                {importStep
+                  ? "Choose up to 3 ad templates while we fetch your product info"
+                  : 'Pick up to 3 ad styles'}
               </Title>
               <Text c="dark.2" size="sm" mt={2}>
                 Your product gets composited into each one.
               </Text>
-              {importStep && (
-                <Group gap={6} mt={4}>
-                  <Loader size="xs" color="brand" />
-                  <Text size="xs" c="dark.3">
-                    {importStep} (in the background)
-                  </Text>
-                </Group>
-              )}
             </div>
             <Button
               color="brand"
@@ -608,7 +619,10 @@ function StarterImagePicker({
       const next = new Set(prev)
       if (next.has(u)) {
         next.delete(u)
-        if (hero === u) setHero(null)
+        // Always keep a hero while ≥1 photo is selected: promote the most
+        // recently selected remaining photo (Set preserves insertion order),
+        // falling back to null only when nothing is left.
+        if (hero === u) setHero([...next].at(-1) ?? null)
       } else {
         next.add(u)
         if (!hero) setHero(u)
@@ -676,7 +690,7 @@ function StarterImagePicker({
           <Text c="dark.2" mt={4}>
             {showEmptyState
               ? "We couldn't grab your photos automatically — some sites block us. Upload your product photo and we'll generate from it."
-              : 'Your hero photo generates all your ads. Any other photos you pick are saved to your product to use later.'}
+              : 'Tap the ⭐ on a photo to choose the one we turn into your ads — the rest are saved to your product for later.'}
           </Text>
           {scrapeFailed && !showEmptyState && (
             <Text c="yellow.5" size="sm" mt={6}>
